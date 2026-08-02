@@ -595,8 +595,8 @@ function pintarBoton(){
   btn.hidden = false; nota.hidden = false;
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
 
-  const esRegreso = p.id==="regreso";
-  const faltanAntes = esRegreso && estado.fotos.antes.length<3;
+  const esComida = p.id==="comida";
+  const faltanAntes = esComida && estado.fotos.antes.length<3;
 
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
@@ -606,7 +606,7 @@ function pintarBoton(){
 
   if(faltanAntes){
     nota.classList.add("alerta");
-    nota.textContent = "Antes de continuar, toma al menos 3 fotos del ANTES (sección de evidencia).";
+    nota.textContent = "Toma al menos 3 fotos del ANTES (estado inicial) para poder continuar.";
   } else if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
     nota.classList.add("alerta");
     const faltan = [];

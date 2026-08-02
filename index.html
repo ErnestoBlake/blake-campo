@@ -149,6 +149,24 @@ body{
   text-align:center;margin-top:10px;line-height:1.5;
 }
 .nota-btn.alerta{color:var(--ambar)}
+.cierre{
+  border-radius:3px;padding:24px 18px;text-align:center;
+  background:rgba(47,181,124,.10);border:1px solid var(--verde);
+}
+.cierre[hidden]{display:none}
+.cierre[data-estado="enviando"]{background:rgba(242,168,28,.10);border-color:var(--ambar)}
+.cierre-icono{
+  width:54px;height:54px;margin:0 auto 12px;border-radius:50%;
+  display:grid;place-items:center;font-size:30px;line-height:1;
+  background:var(--verde);color:#08110C;font-weight:700;
+}
+.cierre[data-estado="enviando"] .cierre-icono{background:var(--ambar);color:#1A1305}
+.cierre strong{
+  display:block;font-family:var(--display);font-size:22px;
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;color:var(--plata-alta);
+}
+.cierre p{font-size:13.5px;color:var(--plata);line-height:1.6}
+.cierre .conteo-envio{color:var(--ambar);font-family:var(--dato);font-weight:600}
 
 /* ---------- Evidencia ---------- */
 .evidencia{padding:20px 18px;border-top:1px solid var(--linea)}
@@ -256,6 +274,11 @@ body{
   <section class="accion">
     <button class="btn" id="btnPaso">Registrar llegada</button>
     <p class="nota-btn" id="notaBtn">Se capturará su hora y ubicación al presionar.</p>
+    <div class="cierre" id="cierre" hidden>
+      <div class="cierre-icono" id="cierreIcono">✓</div>
+      <strong id="cierreTitulo">Servicio completado</strong>
+      <p id="cierreTexto"></p>
+    </div>
   </section>
 
   <section class="evidencia">
@@ -268,8 +291,8 @@ body{
   </section>
 
   <div class="cola">
-    <span>Registros sin enviar</span>
-    <span><b id="pendientes" data-cero="1">0</b> en el teléfono</span>
+    <span id="colaEtiqueta">Registros sin enviar</span>
+    <span id="colaValor"><b data-cero="1">0</b> en el teléfono</span>
   </div>
 </div>
 
@@ -378,7 +401,7 @@ async function enviarCola(){
       estado.cola.shift();
       if(sobre.tipo==="foto") marcarFotoEnviada(sobre.fase);
       persistir();
-      pintarCola();
+      pintar();
     }
   }catch(e){
     // Sin señal o error temporal: se reintenta al volver la conexión.
@@ -462,10 +485,11 @@ function pintarBoton(){
   nota.classList.remove("alerta");
 
   if(!p){
-    btn.textContent="Jornada cerrada"; btn.disabled=true;
-    nota.textContent="El reporte del día quedó listo para firma del cliente.";
+    // Jornada terminada: escondemos el botón; la tarjeta de cierre toma su lugar.
+    btn.hidden = true; nota.hidden = true;
     return;
   }
+  btn.hidden = false; nota.hidden = false;
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
   const faltanFotos = p.id==="salida" && estado.fotos.despues.length<3;
   btn.disabled = estado.leyendo || faltanFotos;
@@ -481,14 +505,40 @@ function pintarBoton(){
 }
 
 function pintarCola(){
-  const b=$("#pendientes");
-  b.textContent = estado.cola.length;
-  b.dataset.cero = estado.cola.length===0 ? "1" : "0";
+  const et=$("#colaEtiqueta"), val=$("#colaValor");
+  if(estado.cola.length===0){
+    et.textContent = "Estado de envío";
+    val.innerHTML = '<b data-cero="1">✓ Todo enviado</b>';
+  } else {
+    et.textContent = "Registros sin enviar";
+    val.innerHTML = `<b data-cero="0">${estado.cola.length}</b> en el teléfono`;
+  }
+}
+
+function pintarCierre(){
+  const c=$("#cierre");
+  if(pasoPendiente()){ c.hidden = true; return; }   // aún faltan momentos
+  c.hidden = false;
+  const pend = estado.cola.length;
+  if(pend===0){
+    c.dataset.estado = "listo";
+    $("#cierreIcono").textContent = "✓";
+    $("#cierreTitulo").textContent = "Servicio completado";
+    $("#cierreTexto").innerHTML =
+      "Se registraron los 4 momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
+  } else {
+    c.dataset.estado = "enviando";
+    $("#cierreIcono").textContent = "↑";
+    $("#cierreTitulo").textContent = "Enviando evidencia…";
+    $("#cierreTexto").innerHTML =
+      `El servicio quedó registrado. Faltan <span class="conteo-envio">${pend}</span> archivo(s) por enviar. ` +
+      `Mantenga la app abierta y con señal hasta ver <b>“Servicio completado”</b>.`;
+  }
 }
 
 function pintar(){
   $("#tecnicoNombre").textContent = estado.tecnico || "—";
-  pintarPasos(); pintarEvidencia(); pintarBoton(); pintarCola();
+  pintarPasos(); pintarEvidencia(); pintarBoton(); pintarCola(); pintarCierre();
 }
 
 /* ---------- Registro de evento con GPS ---------- */

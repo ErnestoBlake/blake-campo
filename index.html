@@ -209,6 +209,7 @@ body{
 .ev-cab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
 .ev-cab .conteo{font-family:var(--dato);font-size:13px;color:var(--ambar)}
 .ev-cab .conteo[data-completo="1"]{color:var(--verde)}
+.ev-nota{font-family:var(--dato);font-size:11px;color:var(--plata);margin:-6px 0 12px;line-height:1.5}
 .rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .celda{
   aspect-ratio:1;border-radius:3px;overflow:hidden;position:relative;
@@ -330,6 +331,7 @@ body{
       <span class="etiqueta" id="evTitulo">Evidencia — antes de iniciar</span>
       <span class="conteo" id="evConteo" data-completo="0">0 / 3</span>
     </div>
+    <p class="ev-nota" id="evNota">Toma mínimo 3 fotos. Puedes agregar más con el botón +.</p>
     <div class="rejilla" id="rejilla"></div>
     <input type="file" id="camara" accept="image/*" capture="environment" hidden>
   </section>
@@ -551,20 +553,25 @@ function pintarEvidencia(){
   const fase = faseActual();
   const fotos = estado.fotos[fase];
   const bloqueado = !estado.eventos.llegada;
+  const MAX = 12;
   $("#evTitulo").textContent = fase==="antes"
-    ? "Evidencia — antes de iniciar" : "Evidencia — al terminar";
+    ? "Evidencia — ANTES de iniciar" : "Evidencia — DESPUÉS (al terminar)";
+  $("#evNota").textContent = bloqueado
+    ? "Primero registra la llegada; luego podrás tomar las fotos."
+    : "Toma mínimo 3 fotos. Puedes agregar más con el botón +.";
   const c=$("#evConteo");
-  c.textContent = `${fotos.length} / 3`;
+  c.textContent = fotos.length<3 ? `${fotos.length} / 3 mínimo` : `${fotos.length} fotos ✓`;
   c.dataset.completo = fotos.length>=3 ? "1" : "0";
 
   let html = fotos.map(f=>{
     if(f.enviada && !f.url) return `<div class="celda enviada"><span>✓</span></div>`;
     return `<div class="celda"><img src="${f.url}" alt="Evidencia ${fase}"><span class="peso">${f.kb} KB</span></div>`;
   }).join("");
-  if(fotos.length<3){
-    html += `<button class="celda add" id="btnFoto" ${bloqueado?"disabled":""} aria-label="Tomar fotografía"><span>+</span></button>`;
+  if(fotos.length < MAX){
+    html += `<button class="celda add" id="btnFoto" ${bloqueado?"disabled":""} aria-label="Agregar fotografía"><span>+</span></button>`;
   }
-  for(let i=fotos.length+(fotos.length<3?1:0); i<3; i++) html += `<div class="celda"></div>`;
+  const usadas = fotos.length + (fotos.length<MAX?1:0);
+  for(let i=usadas; i<3; i++) html += `<div class="celda"></div>`;
   $("#rejilla").innerHTML = html;
   const b=$("#btnFoto");
   if(b) b.onclick = ()=> $("#camara").click();
@@ -588,16 +595,22 @@ function pintarBoton(){
   btn.hidden = false; nota.hidden = false;
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
 
+  const esRegreso = p.id==="regreso";
+  const faltanAntes = esRegreso && estado.fotos.antes.length<3;
+
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const faltanActiv = esSalida && !estado.actividades.trim();
   const faltanFirma = esSalida && !estado.firma;
-  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma;
+  btn.disabled = estado.leyendo || faltanAntes || faltanFotos || faltanActiv || faltanFirma;
 
-  if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
+  if(faltanAntes){
+    nota.classList.add("alerta");
+    nota.textContent = "Antes de continuar, toma al menos 3 fotos del ANTES (sección de evidencia).";
+  } else if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
     nota.classList.add("alerta");
     const faltan = [];
-    if(faltanFotos) faltan.push("las 3 fotos de cierre");
+    if(faltanFotos) faltan.push("las 3 fotos del DESPUÉS");
     if(faltanActiv) faltan.push("las actividades realizadas");
     if(faltanFirma) faltan.push("la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";

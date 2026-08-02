@@ -167,6 +167,11 @@ body{
 }
 .cierre p{font-size:13.5px;color:var(--plata);line-height:1.6}
 .cierre .conteo-envio{color:var(--ambar);font-family:var(--dato);font-weight:600}
+.cierre .btn-nuevo{
+  margin-top:20px;background:transparent;border:1px solid var(--verde);color:var(--verde);
+}
+.cierre .btn-nuevo[hidden]{display:none}
+.cierre .btn-nuevo:hover:not(:disabled){filter:none;background:rgba(47,181,124,.12)}
 
 /* ---------- Evidencia ---------- */
 .evidencia{padding:20px 18px;border-top:1px solid var(--linea)}
@@ -278,6 +283,7 @@ body{
       <div class="cierre-icono" id="cierreIcono">✓</div>
       <strong id="cierreTitulo">Servicio completado</strong>
       <p id="cierreTexto"></p>
+      <button class="btn btn-nuevo" id="btnNuevo" type="button" hidden>Iniciar nuevo servicio</button>
     </div>
   </section>
 
@@ -526,6 +532,7 @@ function pintarCierre(){
     $("#cierreTitulo").textContent = "Servicio completado";
     $("#cierreTexto").innerHTML =
       "Se registraron los 4 momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
+    $("#btnNuevo").hidden = false;   // ya se envió todo: se permite iniciar otro
   } else {
     c.dataset.estado = "enviando";
     $("#cierreIcono").textContent = "↑";
@@ -533,6 +540,7 @@ function pintarCierre(){
     $("#cierreTexto").innerHTML =
       `El servicio quedó registrado. Faltan <span class="conteo-envio">${pend}</span> archivo(s) por enviar. ` +
       `Mantenga la app abierta y con señal hasta ver <b>“Servicio completado”</b>.`;
+    $("#btnNuevo").hidden = true;     // aún hay envíos pendientes: no reiniciar todavía
   }
 }
 
@@ -640,6 +648,25 @@ function entrarTecnico(){
 $("#btnEntrar").addEventListener("click", entrarTecnico);
 $("#inTecnico").addEventListener("keydown", e=>{ if(e.key==="Enter") entrarTecnico(); });
 $("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
+
+/* ---------- Iniciar un nuevo servicio ---------- */
+function reiniciarServicio(){
+  if(estado.cola.length > 0){
+    avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error");
+    return;
+  }
+  if(!confirm("¿Iniciar un nuevo servicio? El servicio actual ya quedó guardado en la hoja.")) return;
+  estado.eventos = {};
+  estado.fotos = { antes:[], despues:[] };
+  localStorage.removeItem(LS.estado);
+  persistir();
+  $("#lectura").textContent = "Ubicación sin leer";
+  const r=$("#rango"); r.textContent = "—"; r.dataset.fuera = "0";
+  pintar();
+  window.scrollTo(0,0);
+  avisar("Nuevo servicio","Listo para registrar la llegada del siguiente servicio.","ok");
+}
+$("#btnNuevo").addEventListener("click", reiniciarServicio);
 
 /* ---------- Conexión ---------- */
 function pintarRed(){

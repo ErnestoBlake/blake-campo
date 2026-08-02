@@ -144,10 +144,12 @@ body{
 .btn:active:not(:disabled){filter:brightness(.9)}
 .btn:disabled{background:var(--acero-750);color:var(--acero-700);cursor:not-allowed}
 .btn:focus-visible{outline:2px solid var(--azul-glow);outline-offset:3px}
+.btn[hidden]{display:none}
 .nota-btn{
   font-family:var(--dato);font-size:11px;color:var(--plata);
   text-align:center;margin-top:10px;line-height:1.5;
 }
+.nota-btn[hidden]{display:none}
 .nota-btn.alerta{color:var(--ambar)}
 .cierre{
   border-radius:3px;padding:24px 18px;text-align:center;
@@ -172,6 +174,35 @@ body{
 }
 .cierre .btn-nuevo[hidden]{display:none}
 .cierre .btn-nuevo:hover:not(:disabled){filter:none;background:rgba(47,181,124,.12)}
+
+/* ---------- Cierre: actividades + firma ---------- */
+.cierre-form{padding:4px 18px 8px}
+.cierre-form[hidden]{display:none}
+.cierre-form > .etiqueta{display:block;margin-bottom:14px}
+.campo-lbl{
+  display:block;font-family:var(--dato);font-size:11px;letter-spacing:.06em;
+  color:var(--plata);margin:14px 0 7px;text-transform:uppercase;
+}
+.cierre-form textarea{
+  width:100%;min-height:96px;resize:vertical;padding:12px 14px;
+  background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;
+  color:var(--plata-alta);font-family:var(--texto);font-size:15px;line-height:1.5;
+}
+.cierre-form textarea:focus{outline:2px solid var(--azul-glow);outline-offset:2px;border-color:var(--azul)}
+.firma-caja{
+  background:var(--acero-800);border:1px dashed var(--linea);border-radius:3px;
+  position:relative;overflow:hidden;
+}
+.firma-canvas{display:block;width:100%;height:170px;touch-action:none;cursor:crosshair}
+.firma-pista{
+  position:absolute;left:0;right:0;bottom:8px;text-align:center;
+  font-family:var(--dato);font-size:10.5px;color:var(--acero-700);
+  pointer-events:none;letter-spacing:.08em;text-transform:uppercase;
+}
+.firma-limpiar{
+  margin-top:8px;background:none;border:0;color:var(--azul-glow);cursor:pointer;
+  font-family:var(--dato);font-size:11px;text-decoration:underline;
+}
 
 /* ---------- Evidencia ---------- */
 .evidencia{padding:20px 18px;border-top:1px solid var(--linea)}
@@ -210,7 +241,7 @@ body{
 /* ---------- Aviso ---------- */
 .aviso{
   position:fixed;left:50%;transform:translateX(-50%);bottom:24px;
-  width:calc(100% - 36px);max-width:444px;z-index:50;
+  width:calc(100% - 36px);max-width:444px;z-index:150;
   background:var(--acero-750);border-left:3px solid var(--ambar);
   padding:14px 16px;border-radius:3px;font-size:13.5px;line-height:1.5;
   box-shadow:0 10px 30px rgba(0,0,0,.6);
@@ -224,14 +255,14 @@ body{
   letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;
 }
 
-/* ---------- Portada de identificación ---------- */
+/* ---------- Portadas (identidad y selección de servicio) ---------- */
 .portada{
   position:fixed;inset:0;z-index:100;background:var(--acero-900);
-  display:flex;align-items:center;justify-content:center;padding:24px;
+  display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;
 }
 .portada[hidden]{display:none}
-.portada-caja{width:100%;max-width:360px}
-.portada .marca{justify-content:center;margin-bottom:28px}
+.portada-caja{width:100%;max-width:380px;margin:auto}
+.portada .marca{justify-content:center;margin-bottom:24px}
 .portada h2{
   font-family:var(--display);font-weight:600;font-size:26px;
   text-transform:uppercase;letter-spacing:.02em;margin:10px 0 18px;line-height:1.1;
@@ -243,6 +274,24 @@ body{
 }
 .portada input:focus{outline:2px solid var(--azul-glow);outline-offset:2px;border-color:var(--azul)}
 .portada .pista{font-family:var(--dato);font-size:11px;color:var(--plata);text-align:center;margin-top:8px;line-height:1.5}
+.btn-sec{
+  background:transparent;border:1px dashed var(--linea);color:var(--plata-alta);
+  min-height:52px;font-size:16px;letter-spacing:.02em;text-transform:none;
+  font-family:var(--texto);font-weight:500;margin-bottom:6px;
+}
+.btn-sec:hover:not(:disabled){filter:none;background:var(--acero-800)}
+.orden-item{
+  width:100%;text-align:left;display:flex;flex-direction:column;gap:2px;
+  padding:14px 16px;margin-bottom:10px;cursor:pointer;
+  background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);
+}
+.orden-item:hover{border-color:var(--azul);background:rgba(46,127,212,.10)}
+.orden-item .oi-cliente{font-family:var(--display);font-size:19px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.orden-item .oi-sitio{font-size:13px;color:var(--plata)}
+.orden-item .oi-orden{font-family:var(--dato);font-size:11px;color:var(--azul-glow);margin-top:3px}
+.sep{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--plata);font-family:var(--dato);font-size:10px;letter-spacing:.15em;text-transform:uppercase}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--linea)}
+#formManual[hidden]{display:none}
 
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
@@ -258,9 +307,9 @@ body{
   </header>
 
   <section class="orden">
-    <span class="etiqueta">Orden de servicio 0428 · Prioridad alta</span>
-    <h1>HOLPRE</h1>
-    <p class="sitio">Planta Atitalaquia — Instalación de báscula de agregados</p>
+    <span class="etiqueta" id="ordenEtiqueta">Orden de servicio</span>
+    <h1 id="ordenTitulo">—</h1>
+    <p class="sitio" id="ordenSitio">—</p>
     <div class="coords">
       <span id="lectura">Ubicación sin leer</span>
       <span class="rango" id="rango" data-fuera="0">—</span>
@@ -276,6 +325,28 @@ body{
     <div id="pasos"></div>
   </section>
 
+  <section class="evidencia">
+    <div class="ev-cab">
+      <span class="etiqueta" id="evTitulo">Evidencia — antes de iniciar</span>
+      <span class="conteo" id="evConteo" data-completo="0">0 / 3</span>
+    </div>
+    <div class="rejilla" id="rejilla"></div>
+    <input type="file" id="camara" accept="image/*" capture="environment" hidden>
+  </section>
+
+  <!-- Cierre del servicio: actividades + firma del cliente -->
+  <section class="cierre-form" id="cierreForm" hidden>
+    <span class="etiqueta">Cierre del servicio</span>
+    <label class="campo-lbl" for="actividades">Actividades realizadas</label>
+    <textarea id="actividades" placeholder="Describa el trabajo realizado durante el servicio…"></textarea>
+    <label class="campo-lbl">Firma del cliente</label>
+    <div class="firma-caja">
+      <canvas class="firma-canvas" id="firma"></canvas>
+      <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
+    </div>
+    <button class="firma-limpiar" id="btnLimpiarFirma" type="button">Limpiar firma</button>
+  </section>
+
   <section class="accion">
     <button class="btn" id="btnPaso">Registrar llegada</button>
     <p class="nota-btn" id="notaBtn">Se capturará su hora y ubicación al presionar.</p>
@@ -287,22 +358,13 @@ body{
     </div>
   </section>
 
-  <section class="evidencia">
-    <div class="ev-cab">
-      <span class="etiqueta" id="evTitulo">Evidencia — antes de iniciar</span>
-      <span class="conteo" id="evConteo" data-completo="0">0 / 3</span>
-    </div>
-    <div class="rejilla" id="rejilla"></div>
-    <input type="file" id="camara" accept="image/*" capture="environment" hidden>
-  </section>
-
   <div class="cola">
     <span id="colaEtiqueta">Registros sin enviar</span>
     <span id="colaValor"><b data-cero="1">0</b> en el teléfono</span>
   </div>
 </div>
 
-<!-- Portada: identifica al técnico antes de usar la app -->
+<!-- Portada 1: identifica al técnico -->
 <div class="portada" id="portada" hidden>
   <div class="portada-caja">
     <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
@@ -314,23 +376,45 @@ body{
   </div>
 </div>
 
+<!-- Portada 2: selecciona el servicio (cliente/orden) -->
+<div class="portada" id="ordenes" hidden>
+  <div class="portada-caja">
+    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
+    <span class="etiqueta">Servicio a registrar</span>
+    <h2>Selecciona el cliente</h2>
+    <div id="listaOrdenes"></div>
+    <button class="btn btn-sec" id="btnOtro" type="button">+ Otro cliente (manual)</button>
+    <div id="formManual" hidden>
+      <div class="sep">Cliente nuevo</div>
+      <input id="mCliente" type="text" placeholder="Nombre del cliente" autocapitalize="words">
+      <input id="mObra" type="text" placeholder="Obra / sitio">
+      <input id="mOrden" type="text" placeholder="N.º de orden (opcional)">
+      <button class="btn" id="btnComenzar" type="button">Comenzar servicio</button>
+    </div>
+  </div>
+</div>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script>
 /* ============================================================
    Blake Campo — pantalla de jornada
-   Envía cada evento y foto al conector de Google (Apps Script),
+   Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
    ============================================================ */
 
 const CONFIG = {
-  // URL del conector de Google (Apps Script). Termina en /exec.
-  url: "https://script.google.com/macros/s/AKfycbxwCMmTAz81CpaDSgTZ2RYW2S-K4SxM-jNwpAvNSzzAvwG-yG6_vRBv1Ny5qDotRx6h/exec",
-  orden: "0428"
+  url: "https://script.google.com/macros/s/AKfycbxwCMmTAz81CpaDSgTZ2RYW2S-K4SxM-jNwpAvNSzzAvwG-yG6_vRBv1Ny5qDotRx6h/exec"
 };
 
-const SITIO = { nombre:"Planta Atitalaquia", lat:20.05750, lon:-99.22140, radio:200 };
+/* Clientes / órdenes precargados. Agrega más objetos aquí cuando quieras.
+   lat/lon/radio: si se definen, la app valida "en sitio / fuera de rango". */
+const ORDENES = [
+  { titulo:"HOLPRE", cliente:"Holcim", orden:"0428",
+    sitio:"Planta Atitalaquia — Instalación de báscula de agregados",
+    lat:20.05750, lon:-99.22140, radio:200 }
+];
 
 const SECUENCIA = [
   { id:"llegada", nombre:"Llegada",  boton:"Registrar llegada",  fase:"antes"   },
@@ -339,39 +423,46 @@ const SECUENCIA = [
   { id:"salida",  nombre:"Salida",   boton:"Salida del servicio",fase:"despues" }
 ];
 
-const estado = { tecnico:"", eventos:{}, fotos:{ antes:[], despues:[] }, cola:[], leyendo:false };
+const estado = {
+  tecnico:"", orden:null,
+  eventos:{}, fotos:{ antes:[], despues:[] },
+  actividades:"", firma:null,
+  cola:[], leyendo:false
+};
 
 const $ = s => document.querySelector(s);
 const faseActual = () => (estado.eventos.regreso ? "despues" : "antes");
 const pasoPendiente = () => SECUENCIA.find(p => !estado.eventos[p.id]) || null;
-const hoy  = () => new Date().toLocaleDateString("es-MX");
+const hoy   = () => new Date().toLocaleDateString("es-MX");
 const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
 
 /* ============================================================
-   Almacenamiento local (sobrevive si se cierra o recarga la app)
+   Almacenamiento local
    ============================================================ */
-const LS = {
-  tecnico:"blake.tecnico",
-  estado :"blake.estado",
-  cola   :"blake.cola"
-};
+const LS = { tecnico:"blake.tecnico", estado:"blake.estado", cola:"blake.cola" };
 function persistir(){
   try{
     localStorage.setItem(LS.tecnico, estado.tecnico);
-    // Guardamos eventos completos y solo los datos ligeros de las fotos.
     const fotosMeta = {
       antes:  estado.fotos.antes.map(f=>({kb:f.kb, enviada:!!f.enviada})),
       despues:estado.fotos.despues.map(f=>({kb:f.kb, enviada:!!f.enviada}))
     };
-    localStorage.setItem(LS.estado, JSON.stringify({eventos:estado.eventos, fotos:fotosMeta}));
-    localStorage.setItem(LS.cola,   JSON.stringify(estado.cola));
+    localStorage.setItem(LS.estado, JSON.stringify({
+      orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades
+    }));
+    localStorage.setItem(LS.cola, JSON.stringify(estado.cola));
   }catch(e){ /* almacenamiento lleno: no bloqueamos la jornada */ }
 }
 function restaurar(){
   try{
     estado.tecnico = localStorage.getItem(LS.tecnico) || "";
     const g = JSON.parse(localStorage.getItem(LS.estado) || "null");
-    if(g){ estado.eventos = g.eventos||{}; estado.fotos = g.fotos||{antes:[],despues:[]}; }
+    if(g){
+      estado.orden = g.orden || null;
+      estado.eventos = g.eventos || {};
+      estado.fotos = g.fotos || {antes:[],despues:[]};
+      estado.actividades = g.actividades || "";
+    }
     estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
   }catch(e){ /* datos corruptos: empezamos limpio */ }
 }
@@ -379,17 +470,11 @@ function restaurar(){
 /* ============================================================
    Cola de envío al conector de Google
    ============================================================ */
-function encolar(sobre){
-  estado.cola.push(sobre);
-  persistir();
-  enviarCola();
-}
+function encolar(sobre){ estado.cola.push(sobre); persistir(); enviarCola(); }
 
 async function enviarUno(sobre){
-  // POST "simple" (text/plain) para no chocar con las reglas CORS de Apps Script.
   await fetch(CONFIG.url, {
-    method:"POST",
-    mode:"no-cors",
+    method:"POST", mode:"no-cors",
     headers:{ "Content-Type":"text/plain;charset=utf-8" },
     body: JSON.stringify(sobre)
   });
@@ -400,25 +485,21 @@ async function enviarCola(){
   if(enviando || !navigator.onLine || estado.cola.length===0) return;
   enviando = true;
   try{
-    // Enviamos de uno en uno; si algo falla, dejamos el resto para después.
     while(estado.cola.length){
       const sobre = estado.cola[0];
       await enviarUno(sobre);
       estado.cola.shift();
-      if(sobre.tipo==="foto") marcarFotoEnviada(sobre.fase);
+      if(sobre.tipo==="foto" && sobre.fase!=="firma") marcarFotoEnviada(sobre.fase);
       persistir();
       pintar();
     }
-  }catch(e){
-    // Sin señal o error temporal: se reintenta al volver la conexión.
-  }finally{
-    enviando = false;
-  }
+  }catch(e){ /* sin señal: se reintenta al reconectar */ }
+  finally{ enviando = false; }
 }
 
 function marcarFotoEnviada(fase){
   const f = (estado.fotos[fase]||[]).find(x=>!x.enviada);
-  if(f){ f.enviada = true; f.url = null; }  // liberamos la imagen pesada de memoria
+  if(f){ f.enviada = true; f.url = null; }
 }
 
 /* ---------- Distancia Haversine ---------- */
@@ -441,6 +522,15 @@ function avisar(titulo, texto, tipo="info"){
 }
 
 /* ---------- Pintado ---------- */
+function pintarOrden(){
+  const o=estado.orden; if(!o) return;
+  $("#ordenEtiqueta").textContent = o.manual
+    ? `Servicio manual${o.orden?" · Orden "+o.orden:""}`
+    : `Orden de servicio ${o.orden} · ${o.cliente}`;
+  $("#ordenTitulo").textContent = (o.titulo || o.cliente || "—");
+  $("#ordenSitio").textContent = o.sitio || "—";
+}
+
 function pintarPasos(){
   const siguiente = pasoPendiente();
   $("#pasos").innerHTML = SECUENCIA.map((p,i)=>{
@@ -468,16 +558,11 @@ function pintarEvidencia(){
   c.dataset.completo = fotos.length>=3 ? "1" : "0";
 
   let html = fotos.map(f=>{
-    if(f.enviada && !f.url){
-      return `<div class="celda enviada"><span>✓</span></div>`;
-    }
-    return `<div class="celda">
-      <img src="${f.url}" alt="Evidencia ${fase}">
-      <span class="peso">${f.kb} KB</span></div>`;
+    if(f.enviada && !f.url) return `<div class="celda enviada"><span>✓</span></div>`;
+    return `<div class="celda"><img src="${f.url}" alt="Evidencia ${fase}"><span class="peso">${f.kb} KB</span></div>`;
   }).join("");
   if(fotos.length<3){
-    html += `<button class="celda add" id="btnFoto" ${bloqueado?"disabled":""}
-              aria-label="Tomar fotografía"><span>+</span></button>`;
+    html += `<button class="celda add" id="btnFoto" ${bloqueado?"disabled":""} aria-label="Tomar fotografía"><span>+</span></button>`;
   }
   for(let i=fotos.length+(fotos.length<3?1:0); i<3; i++) html += `<div class="celda"></div>`;
   $("#rejilla").innerHTML = html;
@@ -485,24 +570,37 @@ function pintarEvidencia(){
   if(b) b.onclick = ()=> $("#camara").click();
 }
 
+function pintarCierreForm(){
+  const mostrar = estado.orden && estado.eventos.regreso && !estado.eventos.salida;
+  $("#cierreForm").hidden = !mostrar;
+  if(mostrar){
+    if($("#actividades").value !== estado.actividades) $("#actividades").value = estado.actividades;
+    prepararFirma();
+  }
+}
+
 function pintarBoton(){
   const p = pasoPendiente();
   const btn=$("#btnPaso"), nota=$("#notaBtn");
   nota.classList.remove("alerta");
 
-  if(!p){
-    // Jornada terminada: escondemos el botón; la tarjeta de cierre toma su lugar.
-    btn.hidden = true; nota.hidden = true;
-    return;
-  }
+  if(!p){ btn.hidden = true; nota.hidden = true; return; }
   btn.hidden = false; nota.hidden = false;
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
-  const faltanFotos = p.id==="salida" && estado.fotos.despues.length<3;
-  btn.disabled = estado.leyendo || faltanFotos;
 
-  if(faltanFotos){
+  const esSalida = p.id==="salida";
+  const faltanFotos = esSalida && estado.fotos.despues.length<3;
+  const faltanActiv = esSalida && !estado.actividades.trim();
+  const faltanFirma = esSalida && !estado.firma;
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma;
+
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
     nota.classList.add("alerta");
-    nota.textContent="Faltan las 3 fotografías de cierre para poder registrar la salida.";
+    const faltan = [];
+    if(faltanFotos) faltan.push("las 3 fotos de cierre");
+    if(faltanActiv) faltan.push("las actividades realizadas");
+    if(faltanFirma) faltan.push("la firma del cliente");
+    nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
   } else if(p.id==="llegada"){
     nota.textContent="Se capturará su hora y ubicación al presionar.";
   } else {
@@ -523,16 +621,15 @@ function pintarCola(){
 
 function pintarCierre(){
   const c=$("#cierre");
-  if(pasoPendiente()){ c.hidden = true; return; }   // aún faltan momentos
+  if(pasoPendiente()){ c.hidden = true; return; }
   c.hidden = false;
   const pend = estado.cola.length;
   if(pend===0){
     c.dataset.estado = "listo";
     $("#cierreIcono").textContent = "✓";
     $("#cierreTitulo").textContent = "Servicio completado";
-    $("#cierreTexto").innerHTML =
-      "Se registraron los 4 momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
-    $("#btnNuevo").hidden = false;   // ya se envió todo: se permite iniciar otro
+    $("#cierreTexto").innerHTML = "Se registraron los 4 momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
+    $("#btnNuevo").hidden = false;
   } else {
     c.dataset.estado = "enviando";
     $("#cierreIcono").textContent = "↑";
@@ -540,53 +637,61 @@ function pintarCierre(){
     $("#cierreTexto").innerHTML =
       `El servicio quedó registrado. Faltan <span class="conteo-envio">${pend}</span> archivo(s) por enviar. ` +
       `Mantenga la app abierta y con señal hasta ver <b>“Servicio completado”</b>.`;
-    $("#btnNuevo").hidden = true;     // aún hay envíos pendientes: no reiniciar todavía
+    $("#btnNuevo").hidden = true;
   }
 }
 
 function pintar(){
   $("#tecnicoNombre").textContent = estado.tecnico || "—";
-  pintarPasos(); pintarEvidencia(); pintarBoton(); pintarCola(); pintarCierre();
+  pintarOrden(); pintarPasos(); pintarEvidencia(); pintarCierreForm();
+  pintarBoton(); pintarCola(); pintarCierre();
 }
 
 /* ---------- Registro de evento con GPS ---------- */
 function registrar(){
   const paso = pasoPendiente();
-  if(!paso) return;
-  if(!navigator.geolocation){
-    avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return;
-  }
+  if(!paso || !estado.orden) return;
+  if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
   estado.leyendo = true; pintarBoton();
 
   navigator.geolocation.getCurrentPosition(pos=>{
     const {latitude:lat, longitude:lon, accuracy:prec} = pos.coords;
-    const dist = metros(lat,lon,SITIO.lat,SITIO.lon);
-    const fuera = dist > SITIO.radio;
+    const o = estado.orden;
+    const tieneRef = (o.lat!=null && o.lon!=null);
+    let dist = null, fuera = false;
+    if(tieneRef){ dist = metros(lat,lon,o.lat,o.lon); fuera = dist > (o.radio||200); }
+    const estatus = !tieneRef ? "Sin referencia GPS" : (fuera ? "FUERA DE RANGO" : "En sitio");
     const hora = ahora();
 
-    estado.eventos[paso.id] = { hora, lat, lon, dist, fuera, prec:Math.round(prec) };
+    estado.eventos[paso.id] = { hora, lat, lon, dist:tieneRef?dist:null, fuera, prec:Math.round(prec) };
     estado.leyendo = false;
 
-    // Preparamos el registro y lo mandamos a la Hoja de Google.
     encolar({
-      tipo:"evento", tecnico:estado.tecnico, orden:CONFIG.orden, sitio:SITIO.nombre,
+      tipo:"evento", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", sitio:o.sitio||"",
       evento:paso.nombre, fecha:hoy(), hora,
+      actividades: paso.id==="salida" ? estado.actividades.trim() : "",
       lat:+lat.toFixed(6), lon:+lon.toFixed(6),
-      distancia:dist, fuera, precision:Math.round(prec)
+      distancia: tieneRef?dist:"", estatus, precision:Math.round(prec)
     });
+
+    // Al registrar la salida, también enviamos la firma del cliente.
+    if(paso.id==="salida" && estado.firma){
+      encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
+                fase:"firma", fecha:hoy(), hora, imagen:estado.firma });
+    }
     persistir();
 
     $("#lectura").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)} ±${Math.round(prec)} m`;
     const r=$("#rango");
-    r.textContent = fuera ? `Fuera · ${dist} m` : `En sitio · ${dist} m`;
+    r.textContent = !tieneRef ? "Ubicación registrada" : (fuera ? `Fuera · ${dist} m` : `En sitio · ${dist} m`);
     r.dataset.fuera = fuera ? "1" : "0";
 
     pintar();
     if(fuera){
       avisar("Ubicación fuera de rango",
-        `Registró ${paso.nombre.toLowerCase()} a ${dist} m de ${SITIO.nombre}. El evento quedó guardado y se notificó a administración.`,"error");
+        `Registró ${paso.nombre.toLowerCase()} a ${dist} m de ${o.sitio}. El evento quedó guardado y se notificó a administración.`,"error");
     } else {
-      avisar(`${paso.nombre} registrada`, `${hora} · ${dist} m del punto asignado.`,"ok");
+      avisar(`${paso.nombre} registrada`, tieneRef?`${hora} · ${dist} m del punto asignado.`:`${hora} · ubicación registrada.`,"ok");
     }
   }, err=>{
     estado.leyendo=false; pintarBoton();
@@ -614,13 +719,10 @@ $("#camara").addEventListener("change", e=>{
       const url = lienzo.toDataURL("image/jpeg",0.7);
       const kb = Math.round(url.length*0.75/1024);
       const fase = faseActual();
+      const o = estado.orden || {};
       estado.fotos[fase].push({url, kb, enviada:false});
-
-      // Enviamos la foto al Drive (se libera de memoria al confirmarse).
-      encolar({
-        tipo:"foto", tecnico:estado.tecnico, orden:CONFIG.orden, fase,
-        fecha:hoy(), hora:ahora(), imagen:url
-      });
+      encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
+                fase, fecha:hoy(), hora:ahora(), imagen:url });
       persistir(); pintar();
       avisar("Evidencia guardada", `Comprimida a ${kb} KB. Se enviará al recuperar señal.`,"ok");
     };
@@ -630,41 +732,127 @@ $("#camara").addEventListener("change", e=>{
   e.target.value = "";
 });
 
+/* ---------- Actividades ---------- */
+$("#actividades").addEventListener("input", e=>{
+  estado.actividades = e.target.value;
+  persistir(); pintarBoton();
+});
+
+/* ---------- Firma del cliente (dibujo en canvas) ---------- */
+let ctxFirma=null, dibujando=false, firmaConTrazo=false;
+function prepararFirma(){
+  const c=$("#firma");
+  if(c.dataset.listo==="1") return;
+  const ancho = c.clientWidth || c.parentElement.clientWidth || 300;
+  c.width = ancho; c.height = 170;
+  ctxFirma = c.getContext("2d");
+  ctxFirma.strokeStyle = "#E6EBF0";
+  ctxFirma.lineWidth = 2.2; ctxFirma.lineCap="round"; ctxFirma.lineJoin="round";
+  c.dataset.listo = "1";
+}
+function puntoFirma(e){
+  const c=$("#firma"), r=c.getBoundingClientRect();
+  return { x:e.clientX - r.left, y:e.clientY - r.top };
+}
+(function initFirma(){
+  const c=$("#firma");
+  c.addEventListener("pointerdown", e=>{
+    prepararFirma(); dibujando=true;
+    const p=puntoFirma(e); ctxFirma.beginPath(); ctxFirma.moveTo(p.x,p.y);
+    try{ c.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  c.addEventListener("pointermove", e=>{
+    if(!dibujando) return;
+    const p=puntoFirma(e); ctxFirma.lineTo(p.x,p.y); ctxFirma.stroke();
+    firmaConTrazo=true; $("#firmaPista").style.display="none";
+  });
+  const fin = ()=>{
+    if(!dibujando) return; dibujando=false;
+    if(firmaConTrazo){ estado.firma = $("#firma").toDataURL("image/png"); pintarBoton(); }
+  };
+  c.addEventListener("pointerup", fin);
+  c.addEventListener("pointercancel", fin);
+  c.addEventListener("pointerleave", fin);
+})();
+$("#btnLimpiarFirma").addEventListener("click", ()=>{
+  prepararFirma();
+  ctxFirma.clearRect(0,0,$("#firma").width,$("#firma").height);
+  firmaConTrazo=false; estado.firma=null;
+  $("#firmaPista").style.display="";
+  pintarBoton();
+});
+
 /* ---------- Identificación del técnico ---------- */
 function pedirTecnico(){
-  const p=$("#portada");
   $("#inTecnico").value = estado.tecnico || "";
-  p.hidden = false;
+  $("#portada").hidden = false;
   setTimeout(()=>$("#inTecnico").focus(), 50);
 }
 function entrarTecnico(){
   const v = $("#inTecnico").value.trim();
   if(v.length < 2){ avisar("Falta tu nombre","Escribe tu nombre o clave para continuar.","error"); return; }
-  estado.tecnico = v;
-  persistir();
+  estado.tecnico = v; persistir();
   $("#portada").hidden = true;
+  if(!estado.orden) pedirOrden();
   pintar();
 }
 $("#btnEntrar").addEventListener("click", entrarTecnico);
 $("#inTecnico").addEventListener("keydown", e=>{ if(e.key==="Enter") entrarTecnico(); });
 $("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
 
+/* ---------- Selección de cliente / orden ---------- */
+function renderOrdenes(){
+  $("#listaOrdenes").innerHTML = ORDENES.map((o,i)=>
+    `<button class="orden-item" data-i="${i}" type="button">
+       <span class="oi-cliente">${o.titulo || o.cliente}</span>
+       <span class="oi-sitio">${o.sitio}</span>
+       <span class="oi-orden">Orden ${o.orden}</span>
+     </button>`).join("");
+  $("#listaOrdenes").querySelectorAll(".orden-item").forEach(b=>{
+    b.onclick = ()=> elegirOrden(Object.assign({manual:false}, ORDENES[+b.dataset.i]));
+  });
+}
+function pedirOrden(){
+  renderOrdenes();
+  $("#formManual").hidden = true;
+  $("#mCliente").value=""; $("#mObra").value=""; $("#mOrden").value="";
+  $("#ordenes").hidden = false;
+}
+function elegirOrden(o){
+  estado.orden = o; persistir();
+  $("#ordenes").hidden = true;
+  pintar();
+  avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio}`, "ok");
+}
+$("#btnOtro").addEventListener("click", ()=>{
+  $("#formManual").hidden = false;
+  setTimeout(()=>$("#mCliente").focus(), 50);
+});
+$("#btnComenzar").addEventListener("click", ()=>{
+  const cliente=$("#mCliente").value.trim(), obra=$("#mObra").value.trim(), orden=$("#mOrden").value.trim();
+  if(cliente.length<2 || obra.length<2){ avisar("Faltan datos","Escribe al menos el cliente y la obra.","error"); return; }
+  elegirOrden({ manual:true, cliente, titulo:cliente, sitio:obra, orden:orden||"", lat:null, lon:null, radio:null });
+});
+
 /* ---------- Iniciar un nuevo servicio ---------- */
 function reiniciarServicio(){
-  if(estado.cola.length > 0){
-    avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error");
-    return;
-  }
+  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error"); return; }
   if(!confirm("¿Iniciar un nuevo servicio? El servicio actual ya quedó guardado en la hoja.")) return;
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
+  estado.actividades = ""; estado.firma = null; estado.orden = null;
+  const c=$("#firma"); if(c) c.dataset.listo="";
+  firmaConTrazo=false; $("#firmaPista").style.display="";
   localStorage.removeItem(LS.estado);
   persistir();
   $("#lectura").textContent = "Ubicación sin leer";
   const r=$("#rango"); r.textContent = "—"; r.dataset.fuera = "0";
-  pintar();
+  $("#actividades").value = "";
   window.scrollTo(0,0);
-  avisar("Nuevo servicio","Listo para registrar la llegada del siguiente servicio.","ok");
+  pedirOrden();
+  pintar();
+  avisar("Nuevo servicio","Elige el cliente para el siguiente servicio.","ok");
 }
 $("#btnNuevo").addEventListener("click", reiniciarServicio);
 
@@ -684,6 +872,7 @@ restaurar();
 pintarRed();
 pintar();
 if(!estado.tecnico) pedirTecnico();
+else if(!estado.orden) pedirOrden();
 enviarCola();
 </script>
 </body>

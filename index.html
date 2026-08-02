@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0D10">
+<title>Blake Campo — Jornada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --acero-900:#0B0D10;
+  --acero-800:#13171C;
+  --acero-750:#191E25;
+  --acero-700:#232A33;
+  --linea:#2C343E;
+  --plata:#9AA5B1;
+  --plata-alta:#E6EBF0;
+  --azul:#2E7FD4;
+  --azul-glow:#5FAEF5;
+  --ambar:#F2A81C;
+  --rojo:#E0413A;
+  --verde:#2FB57C;
+
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --texto:"IBM Plex Sans",system-ui,sans-serif;
+  --dato:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--acero-900)}
+body{
+  font-family:var(--texto);
+  color:var(--plata-alta);
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+
+/* ---------- Barra superior ---------- */
+.barra{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--linea);
+  background:var(--acero-900);position:sticky;top:0;z-index:10;
+}
+.marca{display:flex;align-items:center;gap:10px}
+.marca .tajo{width:3px;height:20px;background:var(--azul);box-shadow:0 0 10px var(--azul)}
+.marca span{
+  font-family:var(--display);font-weight:700;font-size:20px;
+  letter-spacing:.16em;text-transform:uppercase;
+}
+.red{
+  display:flex;align-items:center;gap:7px;
+  font-family:var(--dato);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--plata);
+}
+.led{width:7px;height:7px;border-radius:50%;background:var(--verde);box-shadow:0 0 8px var(--verde)}
+.red[data-estado="offline"] .led{background:var(--ambar);box-shadow:0 0 8px var(--ambar)}
+.red[data-estado="offline"]{color:var(--ambar)}
+
+/* ---------- Encabezado de orden ---------- */
+.orden{padding:20px 18px 18px;border-bottom:1px solid var(--linea);background:var(--acero-800)}
+.etiqueta{
+  font-family:var(--dato);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--plata);
+}
+.orden h1{
+  font-family:var(--display);font-weight:600;font-size:30px;
+  letter-spacing:.02em;line-height:1.05;margin:6px 0 2px;text-transform:uppercase;
+}
+.orden .sitio{font-size:14px;color:var(--plata);margin-bottom:14px}
+.coords{
+  font-family:var(--dato);font-size:11.5px;color:var(--plata);
+  display:flex;justify-content:space-between;gap:12px;
+  padding-top:12px;border-top:1px dashed var(--linea);
+}
+.coords .rango{color:var(--verde)}
+.coords .rango[data-fuera="1"]{color:var(--rojo)}
+.tecnico-linea{
+  display:flex;justify-content:space-between;align-items:center;
+  padding-top:12px;margin-top:12px;border-top:1px dashed var(--linea);
+  font-family:var(--dato);font-size:11.5px;color:var(--plata);
+}
+.tecnico-linea b{color:var(--plata-alta);font-weight:500}
+.tecnico-linea button{
+  background:none;border:0;color:var(--azul-glow);cursor:pointer;
+  font-family:var(--dato);font-size:11px;text-decoration:underline;
+}
+
+/* ---------- Escalera de jornada ---------- */
+.escalera{padding:22px 18px 8px}
+.escalera > .etiqueta{margin-bottom:16px;display:block}
+.paso{
+  display:grid;grid-template-columns:34px 1fr auto;align-items:center;
+  gap:14px;position:relative;padding:11px 0;
+}
+.paso:not(:last-child)::after{
+  content:"";position:absolute;left:16px;top:44px;bottom:-6px;
+  width:2px;background:var(--acero-700);
+}
+.paso[data-estado="hecho"]:not(:last-child)::after{background:var(--azul)}
+.bombilla{
+  width:34px;height:34px;border-radius:3px;border:2px solid var(--acero-700);
+  display:grid;place-items:center;background:var(--acero-800);
+  font-family:var(--dato);font-size:12px;color:var(--acero-700);
+  transition:all .25s ease;
+}
+.paso[data-estado="hecho"] .bombilla{
+  border-color:var(--azul);background:rgba(46,127,212,.14);color:var(--azul-glow);
+}
+.paso[data-estado="activo"] .bombilla{
+  border-color:var(--azul-glow);color:var(--azul-glow);
+  box-shadow:0 0 0 0 rgba(95,174,245,.5);animation:pulso 2s infinite;
+}
+@keyframes pulso{
+  0%{box-shadow:0 0 0 0 rgba(95,174,245,.45)}
+  70%{box-shadow:0 0 0 12px rgba(95,174,245,0)}
+  100%{box-shadow:0 0 0 0 rgba(95,174,245,0)}
+}
+.paso .nombre{
+  font-family:var(--display);font-size:19px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--acero-700);
+}
+.paso[data-estado="hecho"] .nombre{color:var(--plata-alta)}
+.paso[data-estado="activo"] .nombre{color:var(--azul-glow)}
+.paso .hora{font-family:var(--dato);font-size:13px;color:var(--acero-700)}
+.paso[data-estado="hecho"] .hora{color:var(--plata)}
+.paso .marca-fuera{
+  display:block;font-family:var(--dato);font-size:9.5px;
+  letter-spacing:.1em;color:var(--rojo);text-transform:uppercase;
+}
+
+/* ---------- Acción principal ---------- */
+.accion{padding:14px 18px 20px}
+.btn{
+  width:100%;min-height:60px;border:0;cursor:pointer;
+  background:var(--azul);color:#fff;
+  font-family:var(--display);font-size:20px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;
+  border-radius:3px;transition:filter .15s;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+.btn:active:not(:disabled){filter:brightness(.9)}
+.btn:disabled{background:var(--acero-750);color:var(--acero-700);cursor:not-allowed}
+.btn:focus-visible{outline:2px solid var(--azul-glow);outline-offset:3px}
+.nota-btn{
+  font-family:var(--dato);font-size:11px;color:var(--plata);
+  text-align:center;margin-top:10px;line-height:1.5;
+}
+.nota-btn.alerta{color:var(--ambar)}
+
+/* ---------- Evidencia ---------- */
+.evidencia{padding:20px 18px;border-top:1px solid var(--linea)}
+.ev-cab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+.ev-cab .conteo{font-family:var(--dato);font-size:13px;color:var(--ambar)}
+.ev-cab .conteo[data-completo="1"]{color:var(--verde)}
+.rejilla{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.celda{
+  aspect-ratio:1;border-radius:3px;overflow:hidden;position:relative;
+  background:var(--acero-800);border:1px dashed var(--linea);
+}
+.celda img{width:100%;height:100%;object-fit:cover;display:block}
+.celda .peso{
+  position:absolute;left:0;right:0;bottom:0;padding:3px 5px;
+  background:linear-gradient(transparent,rgba(11,13,16,.92));
+  font-family:var(--dato);font-size:9px;color:var(--plata);text-align:right;
+}
+.celda.enviada{display:grid;place-items:center;border-style:solid;border-color:var(--verde)}
+.celda.enviada span{font-family:var(--display);font-size:26px;color:var(--verde)}
+.celda.add{border:1px dashed var(--azul);display:grid;place-items:center;cursor:pointer;padding:0}
+.celda.add:disabled{border-color:var(--linea);cursor:not-allowed}
+.celda.add span{font-family:var(--display);font-size:30px;color:var(--azul);line-height:1}
+.celda.add:disabled span{color:var(--acero-700)}
+.celda.add:focus-visible{outline:2px solid var(--azul-glow);outline-offset:2px}
+
+/* ---------- Cola ---------- */
+.cola{
+  margin-top:auto;padding:14px 18px;border-top:1px solid var(--linea);
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--dato);font-size:11.5px;color:var(--plata);
+  background:var(--acero-800);
+}
+.cola b{color:var(--ambar);font-weight:500}
+.cola b[data-cero="1"]{color:var(--verde)}
+
+/* ---------- Aviso ---------- */
+.aviso{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:24px;
+  width:calc(100% - 36px);max-width:444px;z-index:50;
+  background:var(--acero-750);border-left:3px solid var(--ambar);
+  padding:14px 16px;border-radius:3px;font-size:13.5px;line-height:1.5;
+  box-shadow:0 10px 30px rgba(0,0,0,.6);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+}
+.aviso.ver{opacity:1;transform:translateX(-50%) translateY(0)}
+.aviso[data-tipo="error"]{border-left-color:var(--rojo)}
+.aviso[data-tipo="ok"]{border-left-color:var(--verde)}
+.aviso strong{
+  display:block;font-family:var(--display);font-size:15px;
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;
+}
+
+/* ---------- Portada de identificación ---------- */
+.portada{
+  position:fixed;inset:0;z-index:100;background:var(--acero-900);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.portada[hidden]{display:none}
+.portada-caja{width:100%;max-width:360px}
+.portada .marca{justify-content:center;margin-bottom:28px}
+.portada h2{
+  font-family:var(--display);font-weight:600;font-size:26px;
+  text-transform:uppercase;letter-spacing:.02em;margin:10px 0 18px;line-height:1.1;
+}
+.portada input{
+  width:100%;min-height:54px;padding:0 16px;margin-bottom:14px;
+  background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;
+  color:var(--plata-alta);font-family:var(--texto);font-size:16px;
+}
+.portada input:focus{outline:2px solid var(--azul-glow);outline-offset:2px;border-color:var(--azul)}
+.portada .pista{font-family:var(--dato);font-size:11px;color:var(--plata);text-align:center;margin-top:8px;line-height:1.5}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="barra">
+    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
+    <div class="red" id="red" data-estado="online"><i class="led"></i><em id="redTexto" style="font-style:normal">En línea</em></div>
+  </header>
+
+  <section class="orden">
+    <span class="etiqueta">Orden de servicio 0428 · Prioridad alta</span>
+    <h1>HOLPRE</h1>
+    <p class="sitio">Planta Atitalaquia — Instalación de báscula de agregados</p>
+    <div class="coords">
+      <span id="lectura">Ubicación sin leer</span>
+      <span class="rango" id="rango" data-fuera="0">—</span>
+    </div>
+    <div class="tecnico-linea">
+      <span>Técnico: <b id="tecnicoNombre">—</b></span>
+      <button id="btnCambiarTecnico" type="button">Cambiar</button>
+    </div>
+  </section>
+
+  <section class="escalera">
+    <span class="etiqueta">Secuencia de jornada</span>
+    <div id="pasos"></div>
+  </section>
+
+  <section class="accion">
+    <button class="btn" id="btnPaso">Registrar llegada</button>
+    <p class="nota-btn" id="notaBtn">Se capturará su hora y ubicación al presionar.</p>
+  </section>
+
+  <section class="evidencia">
+    <div class="ev-cab">
+      <span class="etiqueta" id="evTitulo">Evidencia — antes de iniciar</span>
+      <span class="conteo" id="evConteo" data-completo="0">0 / 3</span>
+    </div>
+    <div class="rejilla" id="rejilla"></div>
+    <input type="file" id="camara" accept="image/*" capture="environment" hidden>
+  </section>
+
+  <div class="cola">
+    <span>Registros sin enviar</span>
+    <span><b id="pendientes" data-cero="1">0</b> en el teléfono</span>
+  </div>
+</div>
+
+<!-- Portada: identifica al técnico antes de usar la app -->
+<div class="portada" id="portada" hidden>
+  <div class="portada-caja">
+    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
+    <span class="etiqueta">Identifícate</span>
+    <h2>¿Quién usa este teléfono?</h2>
+    <input id="inTecnico" type="text" placeholder="Nombre o clave del técnico" autocomplete="name" autocapitalize="words">
+    <button class="btn" id="btnEntrar" type="button">Entrar</button>
+    <p class="pista">Tu nombre quedará en cada registro para el reporte de la jornada.</p>
+  </div>
+</div>
+
+<div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+<script>
+/* ============================================================
+   Blake Campo — pantalla de jornada
+   Envía cada evento y foto al conector de Google (Apps Script),
+   que los guarda en una Hoja de Google y una carpeta de Drive.
+   Funciona sin internet: guarda en el teléfono y reintenta solo.
+   ============================================================ */
+
+const CONFIG = {
+  // URL del conector de Google (Apps Script). Termina en /exec.
+  url: "https://script.google.com/macros/s/AKfycbxwCMmTAz81CpaDSgTZ2RYW2S-K4SxM-jNwpAvNSzzAvwG-yG6_vRBv1Ny5qDotRx6h/exec",
+  orden: "0428"
+};
+
+const SITIO = { nombre:"Planta Atitalaquia", lat:20.05750, lon:-99.22140, radio:200 };
+
+const SECUENCIA = [
+  { id:"llegada", nombre:"Llegada",  boton:"Registrar llegada",  fase:"antes"   },
+  { id:"comida",  nombre:"Comida",   boton:"Salida a comida",    fase:"antes"   },
+  { id:"regreso", nombre:"Regreso",  boton:"Regreso de comida",  fase:"despues" },
+  { id:"salida",  nombre:"Salida",   boton:"Salida del servicio",fase:"despues" }
+];
+
+const estado = { tecnico:"", eventos:{}, fotos:{ antes:[], despues:[] }, cola:[], leyendo:false };
+
+const $ = s => document.querySelector(s);
+const faseActual = () => (estado.eventos.regreso ? "despues" : "antes");
+const pasoPendiente = () => SECUENCIA.find(p => !estado.eventos[p.id]) || null;
+const hoy  = () => new Date().toLocaleDateString("es-MX");
+const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
+
+/* ============================================================
+   Almacenamiento local (sobrevive si se cierra o recarga la app)
+   ============================================================ */
+const LS = {
+  tecnico:"blake.tecnico",
+  estado :"blake.estado",
+  cola   :"blake.cola"
+};
+function persistir(){
+  try{
+    localStorage.setItem(LS.tecnico, estado.tecnico);
+    // Guardamos eventos completos y solo los datos ligeros de las fotos.
+    const fotosMeta = {
+      antes:  estado.fotos.antes.map(f=>({kb:f.kb, enviada:!!f.enviada})),
+      despues:estado.fotos.despues.map(f=>({kb:f.kb, enviada:!!f.enviada}))
+    };
+    localStorage.setItem(LS.estado, JSON.stringify({eventos:estado.eventos, fotos:fotosMeta}));
+    localStorage.setItem(LS.cola,   JSON.stringify(estado.cola));
+  }catch(e){ /* almacenamiento lleno: no bloqueamos la jornada */ }
+}
+function restaurar(){
+  try{
+    estado.tecnico = localStorage.getItem(LS.tecnico) || "";
+    const g = JSON.parse(localStorage.getItem(LS.estado) || "null");
+    if(g){ estado.eventos = g.eventos||{}; estado.fotos = g.fotos||{antes:[],despues:[]}; }
+    estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
+  }catch(e){ /* datos corruptos: empezamos limpio */ }
+}
+
+/* ============================================================
+   Cola de envío al conector de Google
+   ============================================================ */
+function encolar(sobre){
+  estado.cola.push(sobre);
+  persistir();
+  enviarCola();
+}
+
+async function enviarUno(sobre){
+  // POST "simple" (text/plain) para no chocar con las reglas CORS de Apps Script.
+  await fetch(CONFIG.url, {
+    method:"POST",
+    mode:"no-cors",
+    headers:{ "Content-Type":"text/plain;charset=utf-8" },
+    body: JSON.stringify(sobre)
+  });
+}
+
+let enviando = false;
+async function enviarCola(){
+  if(enviando || !navigator.onLine || estado.cola.length===0) return;
+  enviando = true;
+  try{
+    // Enviamos de uno en uno; si algo falla, dejamos el resto para después.
+    while(estado.cola.length){
+      const sobre = estado.cola[0];
+      await enviarUno(sobre);
+      estado.cola.shift();
+      if(sobre.tipo==="foto") marcarFotoEnviada(sobre.fase);
+      persistir();
+      pintarCola();
+    }
+  }catch(e){
+    // Sin señal o error temporal: se reintenta al volver la conexión.
+  }finally{
+    enviando = false;
+  }
+}
+
+function marcarFotoEnviada(fase){
+  const f = (estado.fotos[fase]||[]).find(x=>!x.enviada);
+  if(f){ f.enviada = true; f.url = null; }  // liberamos la imagen pesada de memoria
+}
+
+/* ---------- Distancia Haversine ---------- */
+function metros(lat1,lon1,lat2,lon2){
+  const R=6371000, r=Math.PI/180;
+  const dLat=(lat2-lat1)*r, dLon=(lon2-lon1)*r;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLon/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(a)));
+}
+
+/* ---------- Aviso ---------- */
+let avisoTimer;
+function avisar(titulo, texto, tipo="info"){
+  const el=$("#aviso");
+  el.dataset.tipo=tipo;
+  el.innerHTML=`<strong>${titulo}</strong>${texto}`;
+  el.classList.add("ver");
+  clearTimeout(avisoTimer);
+  avisoTimer=setTimeout(()=>el.classList.remove("ver"),5200);
+}
+
+/* ---------- Pintado ---------- */
+function pintarPasos(){
+  const siguiente = pasoPendiente();
+  $("#pasos").innerHTML = SECUENCIA.map((p,i)=>{
+    const ev = estado.eventos[p.id];
+    const st = ev ? "hecho" : (siguiente && siguiente.id===p.id ? "activo" : "espera");
+    const hora = ev ? ev.hora : "—";
+    const fuera = ev && ev.fuera
+      ? `<span class="marca-fuera">Fuera de rango · ${ev.dist} m</span>` : "";
+    return `<div class="paso" data-estado="${st}">
+      <div class="bombilla">${String(i+1).padStart(2,"0")}</div>
+      <div><div class="nombre">${p.nombre}</div>${fuera}</div>
+      <div class="hora">${hora}</div>
+    </div>`;
+  }).join("");
+}
+
+function pintarEvidencia(){
+  const fase = faseActual();
+  const fotos = estado.fotos[fase];
+  const bloqueado = !estado.eventos.llegada;
+  $("#evTitulo").textContent = fase==="antes"
+    ? "Evidencia — antes de iniciar" : "Evidencia — al terminar";
+  const c=$("#evConteo");
+  c.textContent = `${fotos.length} / 3`;
+  c.dataset.completo = fotos.length>=3 ? "1" : "0";
+
+  let html = fotos.map(f=>{
+    if(f.enviada && !f.url){
+      return `<div class="celda enviada"><span>✓</span></div>`;
+    }
+    return `<div class="celda">
+      <img src="${f.url}" alt="Evidencia ${fase}">
+      <span class="peso">${f.kb} KB</span></div>`;
+  }).join("");
+  if(fotos.length<3){
+    html += `<button class="celda add" id="btnFoto" ${bloqueado?"disabled":""}
+              aria-label="Tomar fotografía"><span>+</span></button>`;
+  }
+  for(let i=fotos.length+(fotos.length<3?1:0); i<3; i++) html += `<div class="celda"></div>`;
+  $("#rejilla").innerHTML = html;
+  const b=$("#btnFoto");
+  if(b) b.onclick = ()=> $("#camara").click();
+}
+
+function pintarBoton(){
+  const p = pasoPendiente();
+  const btn=$("#btnPaso"), nota=$("#notaBtn");
+  nota.classList.remove("alerta");
+
+  if(!p){
+    btn.textContent="Jornada cerrada"; btn.disabled=true;
+    nota.textContent="El reporte del día quedó listo para firma del cliente.";
+    return;
+  }
+  btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
+  const faltanFotos = p.id==="salida" && estado.fotos.despues.length<3;
+  btn.disabled = estado.leyendo || faltanFotos;
+
+  if(faltanFotos){
+    nota.classList.add("alerta");
+    nota.textContent="Faltan las 3 fotografías de cierre para poder registrar la salida.";
+  } else if(p.id==="llegada"){
+    nota.textContent="Se capturará su hora y ubicación al presionar.";
+  } else {
+    nota.textContent="Un registro no puede corregirse después de enviarse.";
+  }
+}
+
+function pintarCola(){
+  const b=$("#pendientes");
+  b.textContent = estado.cola.length;
+  b.dataset.cero = estado.cola.length===0 ? "1" : "0";
+}
+
+function pintar(){
+  $("#tecnicoNombre").textContent = estado.tecnico || "—";
+  pintarPasos(); pintarEvidencia(); pintarBoton(); pintarCola();
+}
+
+/* ---------- Registro de evento con GPS ---------- */
+function registrar(){
+  const paso = pasoPendiente();
+  if(!paso) return;
+  if(!navigator.geolocation){
+    avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return;
+  }
+  estado.leyendo = true; pintarBoton();
+
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {latitude:lat, longitude:lon, accuracy:prec} = pos.coords;
+    const dist = metros(lat,lon,SITIO.lat,SITIO.lon);
+    const fuera = dist > SITIO.radio;
+    const hora = ahora();
+
+    estado.eventos[paso.id] = { hora, lat, lon, dist, fuera, prec:Math.round(prec) };
+    estado.leyendo = false;
+
+    // Preparamos el registro y lo mandamos a la Hoja de Google.
+    encolar({
+      tipo:"evento", tecnico:estado.tecnico, orden:CONFIG.orden, sitio:SITIO.nombre,
+      evento:paso.nombre, fecha:hoy(), hora,
+      lat:+lat.toFixed(6), lon:+lon.toFixed(6),
+      distancia:dist, fuera, precision:Math.round(prec)
+    });
+    persistir();
+
+    $("#lectura").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)} ±${Math.round(prec)} m`;
+    const r=$("#rango");
+    r.textContent = fuera ? `Fuera · ${dist} m` : `En sitio · ${dist} m`;
+    r.dataset.fuera = fuera ? "1" : "0";
+
+    pintar();
+    if(fuera){
+      avisar("Ubicación fuera de rango",
+        `Registró ${paso.nombre.toLowerCase()} a ${dist} m de ${SITIO.nombre}. El evento quedó guardado y se notificó a administración.`,"error");
+    } else {
+      avisar(`${paso.nombre} registrada`, `${hora} · ${dist} m del punto asignado.`,"ok");
+    }
+  }, err=>{
+    estado.leyendo=false; pintarBoton();
+    const causa = err.code===1 ? "Debe permitir el acceso a la ubicación en el navegador."
+                : err.code===3 ? "La señal de GPS tardó demasiado. Salga a cielo abierto e intente otra vez."
+                : "No se pudo leer la ubicación.";
+    avisar("Ubicación no disponible", causa, "error");
+  }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+}
+
+/* ---------- Captura y compresión de foto ---------- */
+$("#camara").addEventListener("change", e=>{
+  const archivo = e.target.files && e.target.files[0];
+  if(!archivo) return;
+  const lector = new FileReader();
+  lector.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 1280;
+      const escala = Math.min(1, max/Math.max(img.width, img.height));
+      const lienzo = document.createElement("canvas");
+      lienzo.width = Math.round(img.width*escala);
+      lienzo.height = Math.round(img.height*escala);
+      lienzo.getContext("2d").drawImage(img,0,0,lienzo.width,lienzo.height);
+      const url = lienzo.toDataURL("image/jpeg",0.7);
+      const kb = Math.round(url.length*0.75/1024);
+      const fase = faseActual();
+      estado.fotos[fase].push({url, kb, enviada:false});
+
+      // Enviamos la foto al Drive (se libera de memoria al confirmarse).
+      encolar({
+        tipo:"foto", tecnico:estado.tecnico, orden:CONFIG.orden, fase,
+        fecha:hoy(), hora:ahora(), imagen:url
+      });
+      persistir(); pintar();
+      avisar("Evidencia guardada", `Comprimida a ${kb} KB. Se enviará al recuperar señal.`,"ok");
+    };
+    img.src = lector.result;
+  };
+  lector.readAsDataURL(archivo);
+  e.target.value = "";
+});
+
+/* ---------- Identificación del técnico ---------- */
+function pedirTecnico(){
+  const p=$("#portada");
+  $("#inTecnico").value = estado.tecnico || "";
+  p.hidden = false;
+  setTimeout(()=>$("#inTecnico").focus(), 50);
+}
+function entrarTecnico(){
+  const v = $("#inTecnico").value.trim();
+  if(v.length < 2){ avisar("Falta tu nombre","Escribe tu nombre o clave para continuar.","error"); return; }
+  estado.tecnico = v;
+  persistir();
+  $("#portada").hidden = true;
+  pintar();
+}
+$("#btnEntrar").addEventListener("click", entrarTecnico);
+$("#inTecnico").addEventListener("keydown", e=>{ if(e.key==="Enter") entrarTecnico(); });
+$("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
+
+/* ---------- Conexión ---------- */
+function pintarRed(){
+  const en = navigator.onLine;
+  $("#red").dataset.estado = en ? "online" : "offline";
+  $("#redTexto").textContent = en ? "En línea" : "Sin conexión";
+}
+addEventListener("online", ()=>{ pintarRed(); avisar("Conexión recuperada","Enviando registros pendientes.","ok"); enviarCola(); });
+addEventListener("offline", ()=>{ pintarRed(); avisar("Sin conexión","Sus registros se guardan en el teléfono y se enviarán solos.","info"); });
+
+$("#btnPaso").addEventListener("click", registrar);
+
+/* ---------- Arranque ---------- */
+restaurar();
+pintarRed();
+pintar();
+if(!estado.tecnico) pedirTecnico();
+enviarCola();
+</script>
+</body>
+</html>

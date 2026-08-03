@@ -407,16 +407,18 @@ body{
    ============================================================ */
 
 const CONFIG = {
-  url: "https://script.google.com/macros/s/AKfycbxwCMmTAz81CpaDSgTZ2RYW2S-K4SxM-jNwpAvNSzzAvwG-yG6_vRBv1Ny5qDotRx6h/exec"
+  url: "https://script.google.com/macros/s/AKfycbwd5GdeRP_rd_sgthG8tsbI58uUYjdmRN0ShPAG60UmZ29jX12bBF7rr1NBG09vj5uV/exec"
 };
 
-/* Clientes / órdenes precargados. Agrega más objetos aquí cuando quieras.
-   lat/lon/radio: si se definen, la app valida "en sitio / fuera de rango". */
-const ORDENES = [
-  { titulo:"HOLPRE", cliente:"Holcim", orden:"0428",
+/* Lista de clientes. Se ADMINISTRA desde la pestaña "Clientes" de la Hoja de Google
+   y la app la carga sola desde el conector. Esta lista local es solo un respaldo
+   inicial (por si el primer arranque es sin señal). */
+const ORDENES_DEFAULT = [
+  { cliente:"Holcim", titulo:"Holcim", orden:"0428",
     sitio:"Planta Atitalaquia — Instalación de báscula de agregados",
     lat:20.05750, lon:-99.22140, radio:200 }
 ];
+let ORDENES = ORDENES_DEFAULT.slice();
 
 const SECUENCIA = [
   { id:"llegada", nombre:"Llegada",  boton:"Registrar llegada",  fase:"antes"   },
@@ -814,6 +816,34 @@ $("#btnEntrar").addEventListener("click", entrarTecnico);
 $("#inTecnico").addEventListener("keydown", e=>{ if(e.key==="Enter") entrarTecnico(); });
 $("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
 
+/* ---------- Lista de clientes (desde la Hoja, vía conector) ---------- */
+const LS_CLIENTES = "blake.clientes";
+function cargarClientesCache(){
+  try{
+    const c = JSON.parse(localStorage.getItem(LS_CLIENTES) || "null");
+    if(c && c.length) ORDENES = c;
+  }catch(e){}
+}
+let _cbSeq = 0;
+function actualizarClientes(){
+  const cb = "blakeCli" + (++_cbSeq);
+  const s = document.createElement("script");
+  window[cb] = function(resp){
+    try{
+      if(resp && resp.ok && Array.isArray(resp.clientes) && resp.clientes.length){
+        ORDENES = resp.clientes;
+        localStorage.setItem(LS_CLIENTES, JSON.stringify(ORDENES));
+        if(!$("#ordenes").hidden) renderOrdenes();
+      }
+    }catch(e){}
+    delete window[cb];
+    if(s.parentNode) s.parentNode.removeChild(s);
+  };
+  s.src = CONFIG.url + "?callback=" + cb + "&t=" + Date.now();
+  s.onerror = function(){ delete window[cb]; if(s.parentNode) s.parentNode.removeChild(s); };
+  document.head.appendChild(s);
+}
+
 /* ---------- Selección de cliente / orden ---------- */
 function renderOrdenes(){
   $("#listaOrdenes").innerHTML = ORDENES.map((o,i)=>
@@ -882,11 +912,13 @@ $("#btnPaso").addEventListener("click", registrar);
 
 /* ---------- Arranque ---------- */
 restaurar();
+cargarClientesCache();
 pintarRed();
 pintar();
 if(!estado.tecnico) pedirTecnico();
 else if(!estado.orden) pedirOrden();
 enviarCola();
+actualizarClientes();   // pide la lista fresca de clientes al conector
 </script>
 </body>
 </html>

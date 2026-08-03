@@ -391,6 +391,8 @@ body{
       <input id="mCliente" type="text" placeholder="Nombre del cliente" autocapitalize="words">
       <input id="mObra" type="text" placeholder="Obra / sitio">
       <input id="mOrden" type="text" placeholder="N.º de orden (opcional)">
+      <button class="btn btn-sec" id="btnUbicacion" type="button">📍 Usar mi ubicación actual</button>
+      <p class="pista" id="ubicEstado">Ubicación no capturada aún (opcional).</p>
       <button class="btn" id="btnComenzar" type="button">Comenzar servicio</button>
     </div>
   </div>
@@ -813,10 +815,24 @@ $("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
 
 /* ---------- Lista de clientes (desde la Hoja, vía conector) ---------- */
 const LS_CLIENTES = "blake.clientes";
+/* Corrige coordenadas a las que se les perdió el punto decimal
+   (ej. 195816963 -> 19.5816963). Latitud máx 90, longitud máx 180. */
+function normCoord(v, max){
+  if(v===null || v===undefined || v==="") return null;
+  var n = Number(v); if(!isFinite(n)) return null;
+  var s = n<0 ? -1 : 1; n = Math.abs(n);
+  while(n > max) n = n/10;
+  return s*n;
+}
+function normalizarCliente(o){
+  o.lat = normCoord(o.lat, 90);
+  o.lon = normCoord(o.lon, 180);
+  return o;
+}
 function cargarClientesCache(){
   try{
     const c = JSON.parse(localStorage.getItem(LS_CLIENTES) || "null");
-    if(c && c.length) ORDENES = c;
+    if(c && c.length) ORDENES = c.map(normalizarCliente);
   }catch(e){}
 }
 let _cbSeq = 0;
@@ -826,7 +842,7 @@ function actualizarClientes(){
   window[cb] = function(resp){
     try{
       if(resp && resp.ok && Array.isArray(resp.clientes) && resp.clientes.length){
-        ORDENES = resp.clientes;
+        ORDENES = resp.clientes.map(normalizarCliente);
         localStorage.setItem(LS_CLIENTES, JSON.stringify(ORDENES));
         if(!$("#ordenes").hidden) renderOrdenes();
       }
@@ -863,14 +879,35 @@ function elegirOrden(o){
   pintar();
   avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio}`, "ok");
 }
+let mLat=null, mLon=null;
 $("#btnOtro").addEventListener("click", ()=>{
+  mLat=null; mLon=null;
+  $("#ubicEstado").textContent = "Ubicación no capturada aún (opcional).";
   $("#formManual").hidden = false;
   setTimeout(()=>$("#mCliente").focus(), 50);
+});
+$("#btnUbicacion").addEventListener("click", ()=>{
+  if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
+  $("#ubicEstado").textContent = "Leyendo ubicación…";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    mLat = +pos.coords.latitude.toFixed(6);
+    mLon = +pos.coords.longitude.toFixed(6);
+    $("#ubicEstado").textContent = `✅ Ubicación capturada (±${Math.round(pos.coords.accuracy)} m)`;
+  }, err=>{
+    const causa = err.code===1 ? "Debe permitir el acceso a la ubicación en el navegador."
+                : err.code===3 ? "La señal de GPS tardó demasiado. Salga a cielo abierto e intente otra vez."
+                : "No se pudo leer la ubicación.";
+    $("#ubicEstado").textContent = "⚠️ " + causa;
+    avisar("Ubicación no disponible", causa, "error");
+  }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 });
 $("#btnComenzar").addEventListener("click", ()=>{
   const cliente=$("#mCliente").value.trim(), obra=$("#mObra").value.trim(), orden=$("#mOrden").value.trim();
   if(cliente.length<2 || obra.length<2){ avisar("Faltan datos","Escribe al menos el cliente y la obra.","error"); return; }
-  elegirOrden({ manual:true, cliente, titulo:cliente, sitio:obra, orden:orden||"", lat:null, lon:null, radio:null });
+  const radio = (mLat!=null) ? 200 : null;
+  // Guarda el cliente nuevo en la lista central (pestaña "Clientes" de la Hoja).
+  encolar({ tipo:"cliente", cliente, sitio:obra, orden:orden||"", lat:mLat, lon:mLon, radio });
+  elegirOrden({ manual:true, cliente, titulo:cliente, sitio:obra, orden:orden||"", lat:mLat, lon:mLon, radio });
 });
 
 /* ---------- Iniciar un nuevo servicio ---------- */

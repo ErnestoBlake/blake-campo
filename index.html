@@ -597,22 +597,17 @@ function pintarBoton(){
   btn.hidden = false; nota.hidden = false;
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
 
-  const esComida = p.id==="comida";
-  const faltanAntes = esComida && estado.fotos.antes.length<3;
-
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const faltanActiv = esSalida && !estado.actividades.trim();
   const faltanFirma = esSalida && !estado.firma;
-  btn.disabled = estado.leyendo || faltanAntes || faltanFotos || faltanActiv || faltanFirma;
+  // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma;
 
-  if(faltanAntes){
-    nota.classList.add("alerta");
-    nota.textContent = "Toma al menos 3 fotos del ANTES (estado inicial) para poder continuar.";
-  } else if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
     nota.classList.add("alerta");
     const faltan = [];
-    if(faltanFotos) faltan.push("las 3 fotos del DESPUÉS");
+    if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(faltanActiv) faltan.push("las actividades realizadas");
     if(faltanFirma) faltan.push("la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";

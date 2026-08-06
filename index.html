@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0D10">
-<title>Blake Campo — Jornada</title>
+<title>Reporte de Servicio Blake Inc</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -189,10 +189,16 @@ body{
   color:var(--plata-alta);font-family:var(--texto);font-size:15px;line-height:1.5;
 }
 .cierre-form textarea:focus{outline:2px solid var(--azul-glow);outline-offset:2px;border-color:var(--azul)}
+.chk-linea{
+  display:flex;align-items:center;gap:9px;margin:14px 0 10px;
+  font-family:var(--texto);font-size:14.5px;color:var(--plata-alta);
+}
+.chk-linea input{width:19px;height:19px;accent-color:var(--azul);flex:0 0 auto}
 .firma-caja{
   background:var(--acero-800);border:1px dashed var(--linea);border-radius:3px;
   position:relative;overflow:hidden;
 }
+.firma-caja[hidden]{display:none}
 .firma-canvas{display:block;width:100%;height:170px;touch-action:none;cursor:crosshair}
 .firma-pista{
   position:absolute;left:0;right:0;bottom:8px;text-align:center;
@@ -202,6 +208,11 @@ body{
 .firma-limpiar{
   margin-top:8px;background:none;border:0;color:var(--azul-glow);cursor:pointer;
   font-family:var(--dato);font-size:11px;text-decoration:underline;
+}
+.link-volver{
+  display:block;margin:0 0 14px;background:none;border:0;color:var(--azul-glow);cursor:pointer;
+  font-family:var(--dato);font-size:11px;letter-spacing:.06em;text-decoration:underline;
+  text-transform:uppercase;
 }
 
 /* ---------- Evidencia ---------- */
@@ -289,7 +300,6 @@ body{
 .orden-item:hover{border-color:var(--azul);background:rgba(46,127,212,.10)}
 .orden-item .oi-cliente{font-family:var(--display);font-size:19px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .orden-item .oi-sitio{font-size:13px;color:var(--plata)}
-.orden-item .oi-orden{font-family:var(--dato);font-size:11px;color:var(--azul-glow);margin-top:3px}
 .sep{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--plata);font-family:var(--dato);font-size:10px;letter-spacing:.15em;text-transform:uppercase}
 .sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--linea)}
 #formManual[hidden]{display:none}
@@ -303,7 +313,7 @@ body{
 <div class="app">
 
   <header class="barra">
-    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
+    <div class="marca"><i class="tajo"></i><span>Blake Inc</span></div>
     <div class="red" id="red" data-estado="online"><i class="led"></i><em id="redTexto" style="font-style:normal">En línea</em></div>
   </header>
 
@@ -317,7 +327,7 @@ body{
     </div>
     <div class="tecnico-linea">
       <span>Técnico: <b id="tecnicoNombre">—</b></span>
-      <button id="btnCambiarTecnico" type="button">Cambiar</button>
+      <button id="btnCambiarTecnico" type="button">Cerrar sesión</button>
     </div>
   </section>
 
@@ -340,13 +350,13 @@ body{
   <section class="cierre-form" id="cierreForm" hidden>
     <span class="etiqueta">Cierre del servicio</span>
     <label class="campo-lbl" for="actividades">Actividades realizadas</label>
-    <textarea id="actividades" placeholder="Describa el trabajo realizado durante el servicio…"></textarea>
-    <label class="campo-lbl">Firma del cliente</label>
-    <div class="firma-caja">
+    <textarea id="actividades" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
+    <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Incluir firma del cliente</label>
+    <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
       <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
     </div>
-    <button class="firma-limpiar" id="btnLimpiarFirma" type="button">Limpiar firma</button>
+    <button class="firma-limpiar" id="btnLimpiarFirma" type="button" hidden>Limpiar firma</button>
   </section>
 
   <section class="accion">
@@ -366,31 +376,35 @@ body{
   </div>
 </div>
 
-<!-- Portada 1: identifica al técnico -->
+<!-- Portada 1: inicio de sesión del técnico -->
 <div class="portada" id="portada" hidden>
   <div class="portada-caja">
-    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
-    <span class="etiqueta">Identifícate</span>
-    <h2>¿Quién usa este teléfono?</h2>
-    <input id="inTecnico" type="text" placeholder="Nombre o clave del técnico" autocomplete="name" autocapitalize="words">
+    <div class="marca"><i class="tajo"></i><span>Blake Inc</span></div>
+    <span class="etiqueta">Inicia sesión</span>
+    <h2>Ingresa tu usuario</h2>
+    <input id="inUsuario" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none">
+    <input id="inClave" type="password" placeholder="Contraseña" autocomplete="current-password">
     <button class="btn" id="btnEntrar" type="button">Entrar</button>
-    <p class="pista">Tu nombre quedará en cada registro para el reporte de la jornada.</p>
+    <p class="pista" id="pistaLogin">Tu usuario y contraseña los da de alta tu administrador.</p>
   </div>
 </div>
 
 <!-- Portada 2: selecciona el servicio (cliente/orden) -->
 <div class="portada" id="ordenes" hidden>
   <div class="portada-caja">
-    <div class="marca"><i class="tajo"></i><span>Blake Campo</span></div>
+    <div class="marca"><i class="tajo"></i><span>Blake Inc</span></div>
     <span class="etiqueta">Servicio a registrar</span>
-    <h2>Selecciona el cliente</h2>
-    <div id="listaOrdenes"></div>
-    <button class="btn btn-sec" id="btnOtro" type="button">+ Otro cliente (manual)</button>
+    <h2 id="ordenesTitulo">Selecciona el cliente</h2>
+    <div id="bloqueLista">
+      <input id="buscarCliente" type="text" placeholder="Escribe las primeras letras del cliente…" autocapitalize="words">
+      <div id="listaOrdenes"></div>
+      <button class="btn btn-sec" id="btnOtro" type="button">+ Otro cliente (manual)</button>
+    </div>
     <div id="formManual" hidden>
+      <button class="link-volver" id="btnCancelarManual" type="button">← Volver a la lista</button>
       <div class="sep">Cliente nuevo</div>
       <input id="mCliente" type="text" placeholder="Nombre del cliente" autocapitalize="words">
       <input id="mObra" type="text" placeholder="Obra / sitio">
-      <input id="mOrden" type="text" placeholder="N.º de orden (opcional)">
       <button class="btn btn-sec" id="btnUbicacion" type="button">📍 Usar mi ubicación actual</button>
       <p class="pista" id="ubicEstado">Ubicación no capturada aún (opcional).</p>
       <button class="btn" id="btnComenzar" type="button">Comenzar servicio</button>
@@ -398,18 +412,31 @@ body{
   </div>
 </div>
 
+<!-- Modal: confirmación antes de cerrar el servicio -->
+<div class="portada" id="modalCierre" hidden>
+  <div class="portada-caja">
+    <div class="marca"><i class="tajo"></i><span>Blake Inc</span></div>
+    <span class="etiqueta">Antes de enviar</span>
+    <h2>¿El servicio está por concluirse?</h2>
+    <p class="pista" style="text-align:left;margin:0 0 20px">Verifique que las actividades y la evidencia estén completas. Una vez enviado, el registro de salida no puede corregirse.</p>
+    <button class="btn" id="btnConfirmarCierre" type="button">Confirmar y enviar</button>
+    <button class="btn btn-sec" id="btnRegresarCierre" type="button">Regresar</button>
+  </div>
+</div>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script>
 /* ============================================================
-   Blake Campo — pantalla de jornada
+   Reporte de Servicio Blake Inc — pantalla de jornada
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
-   Funciona sin internet: guarda en el teléfono y reintenta solo.
+   Funciona sin internet: guarda en el teléfono y reintenta solo
+   (excepto iniciar sesión y comenzar un servicio nuevo, que sí piden señal).
    ============================================================ */
 
 const CONFIG = {
-  url: "https://script.google.com/macros/s/AKfycbwd5GdeRP_rd_sgthG8tsbI58uUYjdmRN0ShPAG60UmZ29jX12bBF7rr1NBG09vj5uV/exec"
+  url: "https://script.google.com/macros/s/AKfycby1zTRUgSjrV-BdpEPV1tcRTcibfBUSxrWO7IBOc6Ei2-cdS8wO18N8rzHfPYwUVN-G/exec"
 };
 
 /* Lista de clientes. Se ADMINISTRA desde la pestaña "Clientes" de la Hoja de Google
@@ -430,9 +457,9 @@ const SECUENCIA = [
 ];
 
 const estado = {
-  tecnico:"", orden:null,
+  tecnico:"", usuario:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
-  actividades:"", firma:null,
+  actividades:"", firma:null, incluirFirma:false,
   cola:[], leyendo:false
 };
 
@@ -445,16 +472,18 @@ const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute
 /* ============================================================
    Almacenamiento local
    ============================================================ */
-const LS = { tecnico:"blake.tecnico", estado:"blake.estado", cola:"blake.cola" };
+const LS = { tecnico:"blake.tecnico", usuario:"blake.usuario", estado:"blake.estado", cola:"blake.cola" };
 function persistir(){
   try{
     localStorage.setItem(LS.tecnico, estado.tecnico);
+    localStorage.setItem(LS.usuario, estado.usuario);
     const fotosMeta = {
       antes:  estado.fotos.antes.map(f=>({kb:f.kb, enviada:!!f.enviada})),
       despues:estado.fotos.despues.map(f=>({kb:f.kb, enviada:!!f.enviada}))
     };
     localStorage.setItem(LS.estado, JSON.stringify({
-      orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades
+      orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades,
+      incluirFirma:estado.incluirFirma
     }));
     localStorage.setItem(LS.cola, JSON.stringify(estado.cola));
   }catch(e){ /* almacenamiento lleno: no bloqueamos la jornada */ }
@@ -462,12 +491,14 @@ function persistir(){
 function restaurar(){
   try{
     estado.tecnico = localStorage.getItem(LS.tecnico) || "";
+    estado.usuario = localStorage.getItem(LS.usuario) || "";
     const g = JSON.parse(localStorage.getItem(LS.estado) || "null");
     if(g){
       estado.orden = g.orden || null;
       estado.eventos = g.eventos || {};
       estado.fotos = g.fotos || {antes:[],despues:[]};
       estado.actividades = g.actividades || "";
+      estado.incluirFirma = !!g.incluirFirma;
     }
     estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
   }catch(e){ /* datos corruptos: empezamos limpio */ }
@@ -530,16 +561,14 @@ function avisar(titulo, texto, tipo="info"){
 /* ---------- Pintado ---------- */
 function pintarOrden(){
   const o=estado.orden; if(!o) return;
-  $("#ordenEtiqueta").textContent = o.manual
-    ? `Servicio manual${o.orden?" · Orden "+o.orden:""}`
-    : `Orden de servicio ${o.orden} · ${o.cliente}`;
+  $("#ordenEtiqueta").textContent = o.folio ? `Folio ${o.folio}` : "Folio pendiente";
   $("#ordenTitulo").textContent = (o.titulo || o.cliente || "—");
   $("#ordenSitio").textContent = o.sitio || "—";
 }
 
 function pintarPasos(){
   const siguiente = pasoPendiente();
-  $("#pasos").innerHTML = SECUENCIA.map((p,i)=>{
+  $("#pasos").innerHTML = SECUENCIA.filter(p => p.id==="salida" || !estado.eventos[p.id]).map((p,i)=>{
     const ev = estado.eventos[p.id];
     const st = ev ? "hecho" : (siguiente && siguiente.id===p.id ? "activo" : "espera");
     const hora = ev ? ev.hora : "—";
@@ -586,7 +615,10 @@ function pintarCierreForm(){
   $("#cierreForm").hidden = !mostrar;
   if(mostrar){
     if($("#actividades").value !== estado.actividades) $("#actividades").value = estado.actividades;
-    prepararFirma();
+    if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
+    $("#firmaCaja").hidden = !estado.incluirFirma;
+    $("#btnLimpiarFirma").hidden = !estado.incluirFirma;
+    if(estado.incluirFirma) prepararFirma();
   }
 }
 
@@ -602,7 +634,7 @@ function pintarBoton(){
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const faltanActiv = esSalida && !estado.actividades.trim();
-  const faltanFirma = esSalida && !estado.firma;
+  const faltanFirma = esSalida && estado.incluirFirma && !estado.firma;
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
   btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma;
 
@@ -683,13 +715,13 @@ function registrar(){
       evento:paso.nombre, fecha:hoy(), hora,
       actividades: paso.id==="salida" ? estado.actividades.trim() : "",
       lat:+lat.toFixed(6), lon:+lon.toFixed(6),
-      distancia: tieneRef?dist:"", estatus, precision:Math.round(prec)
+      distancia: tieneRef?dist:"", estatus, precision:Math.round(prec), folio:o.folio||""
     });
 
-    // Al registrar la salida, también enviamos la firma del cliente.
-    if(paso.id==="salida" && estado.firma){
+    // Al registrar la salida, también enviamos la firma del cliente (si se activó la casilla).
+    if(paso.id==="salida" && estado.incluirFirma && estado.firma){
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
-                fase:"firma", fecha:hoy(), hora, imagen:estado.firma });
+                fase:"firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
     }
     persistir();
 
@@ -734,7 +766,7 @@ $("#camara").addEventListener("change", e=>{
       const o = estado.orden || {};
       estado.fotos[fase].push({url, kb, enviada:false});
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
-                fase, fecha:hoy(), hora:ahora(), imagen:url });
+                fase, fecha:hoy(), hora:ahora(), imagen:url, folio:o.folio||"" });
       persistir(); pintar();
       avisar("Evidencia guardada", `Comprimida a ${kb} KB. Se enviará al recuperar señal.`,"ok");
     };
@@ -748,6 +780,13 @@ $("#camara").addEventListener("change", e=>{
 $("#actividades").addEventListener("input", e=>{
   estado.actividades = e.target.value;
   persistir(); pintarBoton();
+});
+
+/* ---------- Casilla: incluir firma del cliente ---------- */
+$("#chkFirma").addEventListener("change", e=>{
+  estado.incluirFirma = e.target.checked;
+  if(!estado.incluirFirma) estado.firma = null;
+  persistir(); pintarCierreForm(); pintarBoton();
 });
 
 /* ---------- Firma del cliente (dibujo en canvas) ---------- */
@@ -795,23 +834,61 @@ $("#btnLimpiarFirma").addEventListener("click", ()=>{
   pintarBoton();
 });
 
-/* ---------- Identificación del técnico ---------- */
-function pedirTecnico(){
-  $("#inTecnico").value = estado.tecnico || "";
-  $("#portada").hidden = false;
-  setTimeout(()=>$("#inTecnico").focus(), 50);
+/* ---------- Llamadas JSONP al conector (login, folio, clientes) ---------- */
+let _cbSeq = 0;
+function llamarJSONP(query, timeoutMs){
+  timeoutMs = timeoutMs || 12000;
+  return new Promise(resolve=>{
+    const cb = "blakeCb" + (++_cbSeq);
+    const s = document.createElement("script");
+    let listo = false;
+    // No se borra window[cb]: si la respuesta llega tarde (después del timeout),
+    // que caiga en un no-op en vez de tronar con "blakeCbN is not defined".
+    const limpiar = ()=>{ window[cb] = function(){}; if(s.parentNode) s.parentNode.removeChild(s); };
+    const temporizador = setTimeout(()=>{ if(listo) return; listo=true; limpiar(); resolve(null); }, timeoutMs);
+    window[cb] = function(resp){
+      if(listo) return; listo=true; clearTimeout(temporizador); limpiar(); resolve(resp);
+    };
+    s.src = CONFIG.url + "?" + query + "&callback=" + cb + "&t=" + Date.now();
+    s.onerror = function(){ if(listo) return; listo=true; clearTimeout(temporizador); limpiar(); resolve(null); };
+    document.head.appendChild(s);
+  });
 }
-function entrarTecnico(){
-  const v = $("#inTecnico").value.trim();
-  if(v.length < 2){ avisar("Falta tu nombre","Escribe tu nombre o clave para continuar.","error"); return; }
-  estado.tecnico = v; persistir();
+
+/* ---------- Inicio de sesión del técnico (usuario/contraseña) ---------- */
+function pedirLogin(){
+  $("#inUsuario").value = ""; $("#inClave").value = "";
+  $("#portada").hidden = false;
+  setTimeout(()=>$("#inUsuario").focus(), 50);
+}
+async function iniciarSesion(){
+  const usuario = $("#inUsuario").value.trim();
+  const clave = $("#inClave").value;
+  if(usuario.length < 2 || clave.length < 1){
+    avisar("Faltan datos","Escribe tu usuario y contraseña para continuar.","error"); return;
+  }
+  const btn = $("#btnEntrar");
+  btn.disabled = true; btn.textContent = "Validando…";
+  const resp = await llamarJSONP("login=1&usuario="+encodeURIComponent(usuario)+"&clave="+encodeURIComponent(clave));
+  btn.disabled = false; btn.textContent = "Entrar";
+  if(!resp){
+    avisar("Sin conexión","No se pudo validar el usuario. Revisa tu señal e intenta de nuevo.","error"); return;
+  }
+  if(!resp.ok){
+    avisar("No se pudo iniciar sesión", resp.error || "Usuario o contraseña incorrectos.","error"); return;
+  }
+  estado.tecnico = resp.nombre; estado.usuario = usuario; persistir();
   $("#portada").hidden = true;
   if(!estado.orden) pedirOrden();
   pintar();
 }
-$("#btnEntrar").addEventListener("click", entrarTecnico);
-$("#inTecnico").addEventListener("keydown", e=>{ if(e.key==="Enter") entrarTecnico(); });
-$("#btnCambiarTecnico").addEventListener("click", pedirTecnico);
+$("#btnEntrar").addEventListener("click", iniciarSesion);
+$("#inClave").addEventListener("keydown", e=>{ if(e.key==="Enter") iniciarSesion(); });
+$("#btnCambiarTecnico").addEventListener("click", ()=>{
+  if(!confirm("¿Cerrar sesión? Tendrás que iniciar sesión de nuevo con tu usuario y contraseña.")) return;
+  estado.tecnico = ""; estado.usuario = ""; persistir();
+  pedirLogin();
+});
 
 /* ---------- Lista de clientes (desde la Hoja, vía conector) ---------- */
 const LS_CLIENTES = "blake.clientes";
@@ -835,7 +912,6 @@ function cargarClientesCache(){
     if(c && c.length) ORDENES = c.map(normalizarCliente);
   }catch(e){}
 }
-let _cbSeq = 0;
 function actualizarClientes(){
   const cb = "blakeCli" + (++_cbSeq);
   const s = document.createElement("script");
@@ -844,7 +920,7 @@ function actualizarClientes(){
       if(resp && resp.ok && Array.isArray(resp.clientes) && resp.clientes.length){
         ORDENES = resp.clientes.map(normalizarCliente);
         localStorage.setItem(LS_CLIENTES, JSON.stringify(ORDENES));
-        if(!$("#ordenes").hidden) renderOrdenes();
+        if(!$("#ordenes").hidden) renderOrdenes($("#buscarCliente").value);
       }
     }catch(e){}
     delete window[cb];
@@ -856,35 +932,68 @@ function actualizarClientes(){
 }
 
 /* ---------- Selección de cliente / orden ---------- */
-function renderOrdenes(){
-  $("#listaOrdenes").innerHTML = ORDENES.map((o,i)=>
-    `<button class="orden-item" data-i="${i}" type="button">
+function renderOrdenes(filtro){
+  filtro = (filtro || "").trim().toLowerCase();
+  const lista = filtro
+    ? ORDENES.filter(o => (o.titulo||o.cliente||"").toLowerCase().includes(filtro))
+    : ORDENES;
+  $("#listaOrdenes").innerHTML = lista.map((o)=>{
+    const i = ORDENES.indexOf(o);
+    return `<button class="orden-item" data-i="${i}" type="button">
        <span class="oi-cliente">${o.titulo || o.cliente}</span>
        <span class="oi-sitio">${o.sitio}</span>
-       <span class="oi-orden">Orden ${o.orden}</span>
-     </button>`).join("");
+     </button>`;
+  }).join("") || `<p class="pista">Ningún cliente coincide con la búsqueda.</p>`;
   $("#listaOrdenes").querySelectorAll(".orden-item").forEach(b=>{
-    b.onclick = ()=> elegirOrden(Object.assign({manual:false}, ORDENES[+b.dataset.i]));
+    b.onclick = ()=> comenzarServicio(Object.assign({manual:false}, ORDENES[+b.dataset.i]));
   });
 }
 function pedirOrden(){
+  $("#buscarCliente").value = "";
   renderOrdenes();
+  $("#bloqueLista").hidden = false;
   $("#formManual").hidden = true;
-  $("#mCliente").value=""; $("#mObra").value=""; $("#mOrden").value="";
+  $("#mCliente").value=""; $("#mObra").value="";
   $("#ordenes").hidden = false;
+}
+$("#buscarCliente").addEventListener("input", e=> renderOrdenes(e.target.value));
+
+/* Pide un folio consecutivo al conector antes de dar por elegido el servicio. */
+let generandoFolio = false;
+async function pedirFolio(){
+  const resp = await llamarJSONP("folio=1");
+  return (resp && resp.ok && resp.folio) ? resp.folio : null;
+}
+async function comenzarServicio(o){
+  if(generandoFolio) return;
+  generandoFolio = true;
+  avisar("Generando folio…","Un momento, se está asignando el número de servicio.","info");
+  const folio = await pedirFolio();
+  generandoFolio = false;
+  if(!folio){
+    avisar("No se pudo generar el folio","Revisa tu conexión e intenta de nuevo.","error");
+    return;
+  }
+  o.folio = folio;
+  elegirOrden(o);
 }
 function elegirOrden(o){
   estado.orden = o; persistir();
   $("#ordenes").hidden = true;
   pintar();
-  avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio}`, "ok");
+  avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio} · Folio ${o.folio}`, "ok");
 }
 let mLat=null, mLon=null;
 $("#btnOtro").addEventListener("click", ()=>{
   mLat=null; mLon=null;
   $("#ubicEstado").textContent = "Ubicación no capturada aún (opcional).";
+  $("#bloqueLista").hidden = true;
   $("#formManual").hidden = false;
   setTimeout(()=>$("#mCliente").focus(), 50);
+});
+$("#btnCancelarManual").addEventListener("click", ()=>{
+  $("#formManual").hidden = true;
+  $("#bloqueLista").hidden = false;
 });
 $("#btnUbicacion").addEventListener("click", ()=>{
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
@@ -902,12 +1011,12 @@ $("#btnUbicacion").addEventListener("click", ()=>{
   }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 });
 $("#btnComenzar").addEventListener("click", ()=>{
-  const cliente=$("#mCliente").value.trim(), obra=$("#mObra").value.trim(), orden=$("#mOrden").value.trim();
+  const cliente=$("#mCliente").value.trim(), obra=$("#mObra").value.trim();
   if(cliente.length<2 || obra.length<2){ avisar("Faltan datos","Escribe al menos el cliente y la obra.","error"); return; }
   const radio = (mLat!=null) ? 200 : null;
   // Guarda el cliente nuevo en la lista central (pestaña "Clientes" de la Hoja).
-  encolar({ tipo:"cliente", cliente, sitio:obra, orden:orden||"", lat:mLat, lon:mLon, radio });
-  elegirOrden({ manual:true, cliente, titulo:cliente, sitio:obra, orden:orden||"", lat:mLat, lon:mLon, radio });
+  encolar({ tipo:"cliente", cliente, sitio:obra, orden:"", lat:mLat, lon:mLon, radio });
+  comenzarServicio({ manual:true, cliente, titulo:cliente, sitio:obra, orden:"", lat:mLat, lon:mLon, radio });
 });
 
 /* ---------- Iniciar un nuevo servicio ---------- */
@@ -916,9 +1025,10 @@ function reiniciarServicio(){
   if(!confirm("¿Iniciar un nuevo servicio? El servicio actual ya quedó guardado en la hoja.")) return;
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
-  estado.actividades = ""; estado.firma = null; estado.orden = null;
+  estado.actividades = ""; estado.firma = null; estado.incluirFirma = false; estado.orden = null;
   const c=$("#firma"); if(c) c.dataset.listo="";
   firmaConTrazo=false; $("#firmaPista").style.display="";
+  $("#chkFirma").checked = false;
   localStorage.removeItem(LS.estado);
   persistir();
   $("#lectura").textContent = "Ubicación sin leer";
@@ -940,14 +1050,22 @@ function pintarRed(){
 addEventListener("online", ()=>{ pintarRed(); avisar("Conexión recuperada","Enviando registros pendientes.","ok"); enviarCola(); });
 addEventListener("offline", ()=>{ pintarRed(); avisar("Sin conexión","Sus registros se guardan en el teléfono y se enviarán solos.","info"); });
 
-$("#btnPaso").addEventListener("click", registrar);
+/* Antes de enviar la Salida (cierre del servicio) se confirma con un modal. */
+function onClickPaso(){
+  const p = pasoPendiente();
+  if(p && p.id==="salida"){ $("#modalCierre").hidden = false; return; }
+  registrar();
+}
+$("#btnPaso").addEventListener("click", onClickPaso);
+$("#btnRegresarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; });
+$("#btnConfirmarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; registrar(); });
 
 /* ---------- Arranque ---------- */
 restaurar();
 cargarClientesCache();
 pintarRed();
 pintar();
-if(!estado.tecnico) pedirTecnico();
+if(!estado.tecnico) pedirLogin();
 else if(!estado.orden) pedirOrden();
 enviarCola();
 actualizarClientes();   // pide la lista fresca de clientes al conector

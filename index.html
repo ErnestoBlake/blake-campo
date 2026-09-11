@@ -382,6 +382,15 @@ body{
 }
 .act-vacio{padding:14px;border:1px dashed var(--linea);border-radius:3px}
 .act-cola{font-family:var(--dato);font-size:11px;color:var(--plata);text-align:center;margin-top:12px}
+.act-servicio{
+  display:flex;flex-direction:column;gap:2px;padding:12px 14px;margin-bottom:6px;
+  background:var(--acero-800);border:1px solid var(--linea);border-left:3px solid var(--naranja);border-radius:3px;
+}
+.act-servicio b{font-family:var(--display);font-size:18px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.act-servicio span{font-family:var(--dato);font-size:11px;color:var(--plata)}
+.act-bloqueo{padding:18px 16px;border:1px dashed var(--ambar);border-radius:3px;margin:18px 0}
+.act-bloqueo[hidden],#actContenido[hidden]{display:none}
+.act-bloqueo p{font-size:14px;line-height:1.5;color:var(--plata-alta);margin-bottom:14px}
 
 #modalConfirmar{z-index:140}
 .confirmar-texto{text-align:left!important;white-space:pre-line;margin:0 0 20px!important;font-size:13px!important}
@@ -537,8 +546,19 @@ body{
       <h2 id="actFecha">—</h2>
       <p class="pista" id="actNombre">—</p>
     </div>
+    <div class="act-servicio" id="actServicio" hidden>
+      <b id="actCliente">—</b>
+      <span id="actSitio">—</span>
+      <span id="actFolio">—</span>
+    </div>
     <div class="act-meta"><span id="actResumen">—</span><span id="actSync">—</span></div>
 
+    <div class="act-bloqueo" id="actBloqueo" hidden>
+      <p id="actBloqueoTexto">—</p>
+      <button class="btn" id="btnActBloqueo" type="button">—</button>
+    </div>
+
+    <div id="actContenido">
     <span class="etiqueta act-bloque">Asignadas</span>
     <div id="actLista"></div>
 
@@ -564,6 +584,7 @@ body{
       <button class="btn" id="btnEnviarAct" type="button" disabled>Enviar reporte</button>
       <p class="nota-btn" id="actNotaEnvio">—</p>
       <p class="act-cola" id="actCola">—</p>
+    </div>
     </div>
   </div>
 </div>
@@ -1136,15 +1157,20 @@ $("#buscarCliente").addEventListener("input", e=> renderOrdenes(e.target.value))
 
 /* Pide un folio consecutivo al conector antes de dar por elegido el servicio. */
 let generandoFolio = false;
-async function pedirFolio(){
-  const resp = await llamarJSONP("folio=1");
+/* El cliente "Blake Inc" es trabajo interno: usa su propio consecutivo (INT-2026-0001). */
+function esClienteInterno(o){
+  const n = String((o && (o.cliente || o.titulo)) || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
+  return n.indexOf("blake inc") === 0 || n === "interno";
+}
+async function pedirFolio(interno){
+  const resp = await llamarJSONP("folio=1" + (interno ? "&interno=1" : ""));
   return (resp && resp.ok && resp.folio) ? resp.folio : null;
 }
 async function comenzarServicio(o){
   if(generandoFolio) return;
   generandoFolio = true;
   avisar("Generando folio…","Un momento, se está asignando el número de servicio.","info");
-  const folio = await pedirFolio();
+  const folio = await pedirFolio(esClienteInterno(o));
   generandoFolio = false;
   if(!folio){
     avisar("No se pudo generar el folio","Revisa tu conexión e intenta de nuevo.","error");
@@ -1305,9 +1331,11 @@ function pintarEstadoInicio(){
     : "✓ Todo enviado";
   let pend = null;
   try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id))).length; }catch(_){}
-  $("#inicioActDet").textContent = pend === null
-    ? "Actividades asignadas, pendientes y adicionales del día."
-    : `${pend} actividad(es) pendiente(s) · adicionales del día.`;
+  const o = estado.orden;
+  const servicio = o
+    ? `${o.titulo || o.cliente} · folio ${o.folio || "—"}` + (estado.eventos.llegada ? "" : " · falta registrar llegada")
+    : "Falta elegir el cliente";
+  $("#inicioActDet").textContent = (pend === null ? "Actividades del día" : `${pend} actividad(es) pendiente(s)`) + " · " + servicio;
 }
 function mostrarInicio(){
   $("#inicioNombre").textContent = estado.tecnico || "—";
@@ -1380,8 +1408,35 @@ function etiquetaFecha(f){
   return { txt:`Programada · ${p[2]}/${p[1]}`, cls:"" };
 }
 
+/* Para reportar actividades se exige servicio abierto (cliente + folio) y llegada con GPS. */
+function pintarCandadoAct(){
+  const o = estado.orden;
+  const s = $("#actServicio");
+  s.hidden = !o;
+  if(o){
+    $("#actCliente").textContent = o.titulo || o.cliente || "—";
+    $("#actSitio").textContent = o.sitio || "—";
+    $("#actFolio").textContent = "Folio " + (o.folio || "—") + (estado.eventos.llegada ? " · llegada " + estado.eventos.llegada.hora : " · sin llegada");
+  }
+  const bloqueo = $("#actBloqueo"), btn = $("#btnActBloqueo"), txt = $("#actBloqueoTexto");
+  if(!o){
+    txt.textContent = "Primero elige el cliente. Se generará el folio del servicio y después podrás reportar tus actividades. Si el trabajo es de taller u oficina, elige el cliente “Blake Inc”.";
+    btn.textContent = "Elegir cliente";
+    btn.onclick = ()=>{ $("#actividadesPantalla").hidden = true; pedirOrden(); };
+    bloqueo.hidden = false; $("#actContenido").hidden = true; return false;
+  }
+  if(!estado.eventos.llegada){
+    txt.textContent = "Registra tu llegada con GPS en " + (o.titulo || o.cliente) + " para poder reportar tus actividades.";
+    btn.textContent = "Registrar llegada";
+    btn.onclick = ()=>{ $("#actividadesPantalla").hidden = true; pintar(); window.scrollTo(0,0); };
+    bloqueo.hidden = false; $("#actContenido").hidden = true; return false;
+  }
+  bloqueo.hidden = true; $("#actContenido").hidden = false; return true;
+}
+
 function pintarActividades(){
   const ocultas = idsEnCola();
+  const listo = pintarCandadoAct();
   const lista = act.lista.filter(a=>!ocultas.has(String(a.id)));
   $("#actNombre").textContent = estado.tecnico || "—";
   $("#actFecha").textContent = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long" });
@@ -1493,6 +1548,8 @@ function validarAct(){
   const vigentes = new Set(act.lista.map(a=>String(a.id)));
   const ids = Object.keys(act.marcas).filter(id=>vigentes.has(id));
   const faltan = [];
+  if(!estado.orden) faltan.push("elegir el cliente");
+  else if(!estado.eventos.llegada) faltan.push("registrar tu llegada");
   if(!ids.length && !act.adicionales.length) faltan.push("marcar al menos una actividad o agregar una adicional");
   const sinNota = ids.filter(id=>act.marcas[id]!=="TERMINADA" && !(act.notas[id] || "").trim()).length;
   if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
@@ -1517,11 +1574,14 @@ function pintarEnvioAct(){
 async function enviarActividades(){
   const { ids, faltan } = validarAct();
   if(faltan.length) return;
+  const o = estado.orden;
+  if(!o || !estado.eventos.llegada) return;
   const cuenta = v => ids.filter(id=>act.marcas[id]===v).length;
   const btnEnv = $("#btnEnviarAct");
   if(btnEnv.dataset.ocupado === "1") return;
   btnEnv.dataset.ocupado = "1";
   const ok = await confirmar("¿Enviar reporte?",
+    `Cliente: ${o.titulo || o.cliente}\nFolio: ${o.folio || "—"}\n\n` +
     `Terminadas: ${cuenta("TERMINADA")}\nPendientes: ${cuenta("PENDIENTE")}\nCanceladas: ${cuenta("CANCELADA")}\n` +
     `Adicionales: ${act.adicionales.length}\nFotos: ${act.fotos.length}\n\nUna vez enviado no puede corregirse.`, "Enviar reporte");
   btnEnv.dataset.ocupado = "";
@@ -1530,6 +1590,7 @@ async function enviarActividades(){
   const reporteId = "R" + idCorto();
   encolar({
     tipo:"reporte_act", token:estado.token, reporteId,
+    cliente: o.titulo || o.cliente || "", folio: o.folio || "", sitio: o.sitio || "",
     items: ids.map(id=>({ id, estado:act.marcas[id], nota:(act.notas[id] || "").trim() })),
     adicionales: act.adicionales.slice(),
     detalle: act.detalle.trim()

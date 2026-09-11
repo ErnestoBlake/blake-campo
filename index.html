@@ -1063,8 +1063,9 @@ restaurar();
 cargarClientesCache();
 pintarRed();
 pintar();
-if(!estado.tecnico) pedirLogin();
-else if(!estado.orden) pedirOrden();
+/* El login siempre es la primera pantalla al abrir la app, aunque haya
+   una sesión de técnico guardada del uso anterior. */
+pedirLogin();
 enviarCola();
 actualizarClientes();   // pide la lista fresca de clientes al conector
 </script>

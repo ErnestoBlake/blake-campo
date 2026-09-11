@@ -381,6 +381,8 @@ body{
 .act-vacio{padding:14px;border:1px dashed var(--linea);border-radius:3px}
 .act-cola{font-family:var(--dato);font-size:11px;color:var(--plata);text-align:center;margin-top:12px}
 
+#modalConfirmar{z-index:140}
+.confirmar-texto{text-align:left!important;white-space:pre-line;margin:0 0 20px!important;font-size:13px!important}
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
 }
@@ -563,6 +565,17 @@ body{
   </div>
 </div>
 
+<!-- Modal genérico de confirmación (reemplaza la ventana nativa del navegador, que algunos navegadores bloquean) -->
+<div class="portada" id="modalConfirmar" hidden role="dialog" aria-modal="true" aria-labelledby="mcTitulo">
+  <div class="portada-caja">
+    <span class="etiqueta">Confirmar</span>
+    <h2 id="mcTitulo">—</h2>
+    <p class="pista confirmar-texto" id="mcTexto"></p>
+    <button class="btn" id="mcSi" type="button">Confirmar</button>
+    <button class="btn btn-sec" id="mcNo" type="button">Regresar</button>
+  </div>
+</div>
+
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script>
@@ -607,6 +620,21 @@ const faseActual = () => (estado.eventos.regreso ? "despues" : "antes");
 const pasoPendiente = () => SECUENCIA.find(p => !estado.eventos[p.id]) || null;
 const hoy   = () => new Date().toLocaleDateString("es-MX");
 const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
+
+/* ---------- Confirmación dentro de la app (no usa la ventana nativa del navegador) ---------- */
+function confirmar(titulo, texto, textoSi){
+  return new Promise(resolve=>{
+    const m = $("#modalConfirmar");
+    $("#mcTitulo").textContent = titulo;
+    $("#mcTexto").textContent = texto || "";
+    $("#mcSi").textContent = textoSi || "Confirmar";
+    const cerrar = (valor)=>{ m.hidden = true; $("#mcSi").onclick = null; $("#mcNo").onclick = null; resolve(valor); };
+    $("#mcSi").onclick = ()=> cerrar(true);
+    $("#mcNo").onclick = ()=> cerrar(false);
+    m.hidden = false;
+    setTimeout(()=> $("#mcSi").focus(), 50);
+  });
+}
 
 /* ============================================================
    Almacenamiento local
@@ -1164,9 +1192,9 @@ $("#btnComenzar").addEventListener("click", ()=>{
 });
 
 /* ---------- Iniciar un nuevo servicio ---------- */
-function reiniciarServicio(){
+async function reiniciarServicio(){
   if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error"); return; }
-  if(!confirm("¿Iniciar un nuevo servicio? El servicio actual ya quedó guardado en la hoja.")) return;
+  if(!await confirmar("¿Iniciar un nuevo servicio?", "El servicio actual ya quedó guardado en la hoja.", "Iniciar nuevo servicio")) return;
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.firma = null; estado.incluirFirma = false; estado.orden = null;
@@ -1258,8 +1286,8 @@ function mostrarInicio(){
   $("#actividadesPantalla").hidden = true;
   $("#inicio").hidden = false;
 }
-function cerrarSesion(){
-  if(!confirm("¿Cerrar sesión? Tendrás que iniciar sesión de nuevo con tu correo y contraseña.")) return;
+async function cerrarSesion(){
+  if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   pedirLogin();
@@ -1452,13 +1480,18 @@ function pintarEnvioAct(){
     ? `${estado.cola.length} registro(s) sin enviar en el teléfono` : "✓ Todo enviado";
 }
 
-function enviarActividades(){
+async function enviarActividades(){
   const { ids, faltan } = validarAct();
   if(faltan.length) return;
   const cuenta = v => ids.filter(id=>act.marcas[id]===v).length;
-  if(!confirm(`¿Enviar reporte?\n\nTerminadas: ${cuenta("TERMINADA")}\nPendientes: ${cuenta("PENDIENTE")}\n` +
-              `Canceladas: ${cuenta("CANCELADA")}\nAdicionales: ${act.adicionales.length}\nFotos: ${act.fotos.length}\n\n` +
-              `Una vez enviado no puede corregirse.`)) return;
+  const btnEnv = $("#btnEnviarAct");
+  if(btnEnv.dataset.ocupado === "1") return;
+  btnEnv.dataset.ocupado = "1";
+  const ok = await confirmar("¿Enviar reporte?",
+    `Terminadas: ${cuenta("TERMINADA")}\nPendientes: ${cuenta("PENDIENTE")}\nCanceladas: ${cuenta("CANCELADA")}\n` +
+    `Adicionales: ${act.adicionales.length}\nFotos: ${act.fotos.length}\n\nUna vez enviado no puede corregirse.`, "Enviar reporte");
+  btnEnv.dataset.ocupado = "";
+  if(!ok) return;
 
   const reporteId = "R" + idCorto();
   encolar({

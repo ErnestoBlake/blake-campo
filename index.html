@@ -314,6 +314,8 @@ body{
 .menu-op b{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .menu-op span{font-size:13px;color:var(--plata);line-height:1.4}
 .link-centro{margin:18px auto 0}
+.inicio-estado{font-family:var(--dato);font-size:11.5px;color:var(--plata);text-align:center;margin-top:6px;line-height:1.5}
+.inicio-estado[data-pend="1"]{color:var(--ambar)}
 .tecnico-linea .acciones-sesion{display:flex;gap:14px}
 
 .pantalla{position:fixed;inset:0;z-index:100;background:var(--acero-900);overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -518,6 +520,7 @@ body{
       <b>Servicio en campo</b>
       <span id="inicioServicioDet">Jornada con GPS, evidencia y firma del cliente.</span>
     </button>
+    <p class="inicio-estado" id="inicioEstado">—</p>
     <button class="link-volver link-centro" id="btnInicioSalir" type="button">Cerrar sesión</button>
   </div>
 </div>
@@ -701,6 +704,7 @@ async function enviarCola(){
       persistir();
       pintar();
       if(!$("#actividadesPantalla").hidden) pintarEnvioAct();
+      if(!$("#inicio").hidden) pintarEstadoInicio();
     }
   }catch(e){ /* sin señal: se reintenta al reconectar */ }
   finally{ enviando = false; }
@@ -1251,6 +1255,17 @@ const hoyISO = () => {
 const act = { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], cargando:false };
 
 function claveAct(){ return LS_ACT + "." + (estado.usuario || "").toLowerCase(); }
+function claveFotosAct(){ return LS_ACT + ".fotos." + (estado.usuario || "").toLowerCase(); }
+function guardarFotosAct(){
+  try{
+    if(act.fotos.length) localStorage.setItem(claveFotosAct(), JSON.stringify(act.fotos));
+    else localStorage.removeItem(claveFotosAct());
+    return true;
+  }catch(e){
+    avisar("Memoria del teléfono llena", "Las fotos no se pudieron guardar en el teléfono. Envía el reporte sin cerrar ni recargar la app.", "error");
+    return false;
+  }
+}
 function guardarAct(){
   try{
     localStorage.setItem(claveAct(), JSON.stringify({
@@ -1265,6 +1280,10 @@ function cargarAct(){
     const g = JSON.parse(localStorage.getItem(claveAct()) || "null");
     if(g) Object.assign(act, g, { fotos:[], cargando:false });
   }catch(e){}
+  try{
+    const f = JSON.parse(localStorage.getItem(claveFotosAct()) || "null");
+    if(Array.isArray(f)) act.fotos = f;
+  }catch(e){}
 }
 
 /* Actividades ya reportadas como Terminada/Cancelada que siguen en la cola: no se vuelven a mostrar */
@@ -1277,8 +1296,22 @@ function idsEnCola(){
 }
 
 /* ---------- Menú de inicio ---------- */
+function pintarEstadoInicio(){
+  const e = $("#inicioEstado"); if(!e) return;
+  const n = estado.cola.length;
+  e.dataset.pend = n ? "1" : "0";
+  e.textContent = n
+    ? (navigator.onLine ? `Enviando ${n} registro(s)… no cierres la app.` : `${n} registro(s) guardados en el teléfono; se enviarán al recuperar señal.`)
+    : "✓ Todo enviado";
+  let pend = null;
+  try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id))).length; }catch(_){}
+  $("#inicioActDet").textContent = pend === null
+    ? "Actividades asignadas, pendientes y adicionales del día."
+    : `${pend} actividad(es) pendiente(s) · adicionales del día.`;
+}
 function mostrarInicio(){
   $("#inicioNombre").textContent = estado.tecnico || "—";
+  pintarEstadoInicio();
   $("#inicioServicioDet").textContent = estado.orden
     ? `En curso: ${estado.orden.titulo || estado.orden.cliente} · Folio ${estado.orden.folio || "—"}`
     : "Jornada con GPS, evidencia y firma del cliente.";
@@ -1440,7 +1473,7 @@ function pintarFotosAct(){
   $("#actRejilla").innerHTML = html;
   const b = $("#btnFotoAct"); if(b) b.onclick = ()=> $("#camaraAct").click();
   $("#actRejilla").querySelectorAll(".quitar-foto").forEach(x=>{
-    x.onclick = ()=>{ act.fotos.splice(+x.dataset.i, 1); pintarFotosAct(); pintarEnvioAct(); };
+    x.onclick = ()=>{ act.fotos.splice(+x.dataset.i, 1); guardarFotosAct(); pintarFotosAct(); pintarEnvioAct(); };
   });
 }
 $("#camaraAct").addEventListener("change", e=>{
@@ -1448,6 +1481,7 @@ $("#camaraAct").addEventListener("change", e=>{
   if(!archivo) return;
   comprimirImagen(archivo, (url, kb)=>{
     act.fotos.push({ url, kb });
+    guardarFotosAct();
     pintarFotosAct(); pintarEnvioAct();
     avisar("Foto agregada", `Comprimida a ${kb} KB. Se enviará junto con el reporte.`, "ok");
   });
@@ -1513,11 +1547,12 @@ async function enviarActividades(){
   act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
   act.marcas = {}; act.notas = {}; act.adicionales = []; act.detalle = ""; act.fotos = [];
   $("#actDetalle").value = "";
-  guardarAct(); pintarActividades();
-  $("#actividadesPantalla").scrollTop = 0;
-  avisar("Reporte guardado", navigator.onLine
-    ? "Enviando al servidor. No cierres la app hasta ver “Todo enviado”."
-    : "Sin señal: se enviará solo al recuperar la conexión.", "ok");
+  guardarAct(); guardarFotosAct();
+  mostrarInicio();
+  window.scrollTo(0, 0);
+  avisar("Reporte enviado", navigator.onLine
+    ? "Se está subiendo al servidor. Espera a que el menú diga “✓ Todo enviado”."
+    : "Sin señal: quedó guardado en el teléfono y se enviará solo al recuperar la conexión.", "ok");
 }
 $("#btnEnviarAct").addEventListener("click", enviarActividades);
 

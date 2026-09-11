@@ -392,6 +392,31 @@ body{
 .act-bloqueo[hidden],#actContenido[hidden]{display:none}
 .act-bloqueo p{font-size:14px;line-height:1.5;color:var(--plata-alta);margin-bottom:14px}
 
+/* ---------- Cierre: actividades asignadas + adicionales ---------- */
+.cierre-form .act-bloque{display:block;margin:22px 0 10px}
+.cierre-form input[type="text"]{
+  width:100%;padding:12px 14px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;
+  color:var(--plata-alta);font-family:var(--texto);font-size:15px;line-height:1.5;
+}
+.cierre-form input[type="text"]:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.cierre-form textarea.act-nota{min-height:70px;margin-top:10px}
+.cierre-form .act-ayuda{font-family:var(--dato);font-size:11px;color:var(--plata);line-height:1.5;margin-bottom:10px}
+
+/* ---------- Pantalla de envío del reporte ---------- */
+#envio{z-index:130}
+#envio h2{margin-bottom:20px}
+.env-barra{height:12px;background:var(--acero-800);border:1px solid var(--linea);border-radius:999px;overflow:hidden}
+.env-barra i{display:block;height:100%;width:0;background:var(--naranja);transition:width .35s ease}
+#envio[data-estado="listo"] .env-barra i{background:var(--verde)}
+#envio[data-estado="pausa"] .env-barra i{background:var(--ambar)}
+.env-pct{font-family:var(--dato);font-size:12px;color:var(--plata);text-align:center;margin-top:8px;letter-spacing:.1em}
+#envio[data-estado="listo"] .env-pct{color:var(--verde)}
+#envio[data-estado="pausa"] .env-pct{color:var(--ambar)}
+.env-detalle{font-size:14px;color:var(--plata-alta);text-align:center;line-height:1.5;margin:16px 0 22px}
+#envio .btn-nuevo{background:transparent;border:1px solid var(--verde);color:var(--verde)}
+#envio .btn-nuevo:hover:not(:disabled){filter:none;background:rgba(47,181,124,.12)}
+#envio .btn[hidden],#envio .link-volver[hidden]{display:none}
+
 #modalConfirmar{z-index:140}
 .confirmar-texto{text-align:left!important;white-space:pre-line;margin:0 0 20px!important;font-size:13px!important}
 @media (prefers-reduced-motion:reduce){
@@ -439,6 +464,18 @@ body{
   <!-- Cierre del servicio: actividades + firma del cliente -->
   <section class="cierre-form" id="cierreForm" hidden>
     <span class="etiqueta">Cierre del servicio</span>
+
+    <span class="etiqueta act-bloque">Actividades asignadas para este cliente</span>
+    <p class="act-ayuda" id="cierreActAyuda">—</p>
+    <div id="cierreActLista"></div>
+
+    <span class="etiqueta act-bloque">Actividades adicionales</span>
+    <div class="adic-fila">
+      <input id="cierreAdicInput" type="text" placeholder="Describe la actividad adicional" autocapitalize="sentences" maxlength="300">
+      <button class="btn" id="btnCierreAdic" type="button">+ Agregar</button>
+    </div>
+    <div id="cierreAdicLista"></div>
+
     <label class="campo-lbl" for="actividades">Actividades realizadas</label>
     <textarea id="actividades" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
     <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Incluir firma del cliente</label>
@@ -589,6 +626,20 @@ body{
   </div>
 </div>
 
+<!-- Pantalla: envío del reporte (logo + barra de progreso) -->
+<div class="portada" id="envio" hidden data-estado="enviando">
+  <div class="portada-caja">
+    <div class="marca marca--portada"><img class="logo-mark logo-mark--grande" data-logo alt="Blake Inc"></div>
+    <span class="etiqueta" id="envEtiqueta">Enviando reporte</span>
+    <h2 id="envTitulo">Enviando reporte…</h2>
+    <div class="env-barra"><i id="envBarra"></i></div>
+    <div class="env-pct" id="envPct">0 %</div>
+    <p class="env-detalle" id="envDetalle">—</p>
+    <button class="btn btn-nuevo" id="btnEnvNuevo" type="button" hidden>Iniciar nuevo reporte de servicio técnico</button>
+    <button class="link-volver link-centro" id="btnEnvMenu" type="button" hidden>Ir al menú</button>
+  </div>
+</div>
+
 <!-- Modal genérico de confirmación (reemplaza la ventana nativa del navegador, que algunos navegadores bloquean) -->
 <div class="portada" id="modalConfirmar" hidden role="dialog" aria-modal="true" aria-labelledby="mcTitulo">
   <div class="portada-caja">
@@ -726,14 +777,20 @@ async function enviarCola(){
       pintar();
       if(!$("#actividadesPantalla").hidden) pintarEnvioAct();
       if(!$("#inicio").hidden) pintarEstadoInicio();
+      pintarEnvio();
     }
   }catch(e){ /* sin señal: se reintenta al reconectar */ }
-  finally{ enviando = false; }
+  finally{ enviando = false; pintarEnvio(); }
 }
 
 function marcarFotoEnviada(fase){
   const f = (estado.fotos[fase]||[]).find(x=>!x.enviada);
-  if(f){ f.enviada = true; f.url = null; }
+  if(!f) return;
+  f.enviada = true;
+  /* Las fotos del cierre ("después") se conservan en memoria: al registrar la
+     salida se vuelven a enviar como evidencia del reporte de actividades, que
+     es lo que la hoja usa para calificar. Las de "antes" sí se liberan. */
+  if(fase !== "despues") f.url = null;
 }
 
 /* ---------- Distancia Haversine ---------- */
@@ -753,6 +810,72 @@ function avisar(titulo, texto, tipo="info"){
   el.classList.add("ver");
   clearTimeout(avisoTimer);
   avisoTimer=setTimeout(()=>el.classList.remove("ver"),5200);
+}
+
+/* ============================================================
+   Pantalla de envío del reporte
+   Al enviar un reporte (de campo o de actividades) se cubre la pantalla
+   con el logotipo de Blake Inc y una barra de progreso. No se regresa a
+   la pantalla de captura: al terminar aparece la opción de iniciar un
+   nuevo reporte de servicio técnico.
+   ============================================================ */
+const envio = { activo:false, total:0, origen:"" };
+
+function iniciarEnvio(origen){
+  envio.activo = true;
+  envio.origen = origen || "";
+  envio.total = Math.max(1, estado.cola.length);
+  const p = $("#envio");
+  p.dataset.estado = "enviando";
+  $("#envBarra").style.width = "0%";
+  $("#envPct").textContent = "0 %";
+  $("#btnEnvNuevo").hidden = true;
+  $("#btnEnvMenu").hidden = true;
+  p.hidden = false;
+  window.scrollTo(0,0);
+  pintarEnvio();
+  enviarCola();
+}
+
+function pintarEnvio(){
+  if(!envio.activo) return;
+  const pend = estado.cola.length;
+  const hechos = Math.max(0, envio.total - pend);
+  const pct = envio.total ? Math.round(hechos * 100 / envio.total) : 100;
+  $("#envBarra").style.width = (pend === 0 ? 100 : Math.min(pct, 99)) + "%";
+  $("#envPct").textContent = (pend === 0 ? 100 : Math.min(pct, 99)) + " %";
+  const p = $("#envio");
+
+  if(pend === 0){
+    p.dataset.estado = "listo";
+    $("#envEtiqueta").textContent = "Reporte enviado";
+    $("#envTitulo").textContent = "Reporte enviado";
+    $("#envDetalle").innerHTML = "Todo se guardó en la hoja de Google: registros, actividades y fotografías. <b>Ya puede cerrar la aplicación.</b>";
+    $("#btnEnvNuevo").hidden = false;
+    $("#btnEnvMenu").hidden = false;
+  } else if(!navigator.onLine){
+    p.dataset.estado = "pausa";
+    $("#envEtiqueta").textContent = "Sin conexión";
+    $("#envTitulo").textContent = "Guardado en el teléfono";
+    $("#envDetalle").innerHTML =
+      `Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados y se enviarán solos al recuperar la señal. ` +
+      "No cierre la aplicación si puede evitarlo.";
+    $("#btnEnvNuevo").hidden = true;
+    $("#btnEnvMenu").hidden = false;
+  } else {
+    p.dataset.estado = "enviando";
+    $("#envEtiqueta").textContent = "Enviando reporte";
+    $("#envTitulo").textContent = "Enviando reporte…";
+    $("#envDetalle").innerHTML =
+      `Subiendo <b>${hechos}</b> de <b>${envio.total}</b> archivo(s). Mantenga la aplicación abierta y con señal.`;
+    $("#btnEnvNuevo").hidden = true;
+    $("#btnEnvMenu").hidden = true;
+  }
+}
+
+function cerrarEnvio(){
+  envio.activo = false;
+  $("#envio").hidden = true;
 }
 
 /* ---------- Pintado ---------- */
@@ -816,7 +939,18 @@ function pintarCierreForm(){
     $("#firmaCaja").hidden = !estado.incluirFirma;
     $("#btnLimpiarFirma").hidden = !estado.incluirFirma;
     if(estado.incluirFirma) prepararFirma();
+    prepararCierreAct();
+    pintarCierreAct();
   }
+}
+
+/* La primera vez que se abre el cierre se bajan las actividades asignadas. */
+let cierreActPedido = false;
+function prepararCierreAct(){
+  if(cierreActPedido) return;
+  cierreActPedido = true;
+  if(!act.actualizado && !act.lista.length) cargarAct();
+  refrescarActividades();
 }
 
 function pintarBoton(){
@@ -832,13 +966,15 @@ function pintarBoton(){
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const faltanActiv = esSalida && !estado.actividades.trim();
   const faltanFirma = esSalida && estado.incluirFirma && !estado.firma;
+  const sinNota = esSalida ? idsMarcadosCliente().filter(id=>act.marcas[id]!=="TERMINADA" && !(act.notas[id]||"").trim()).length : 0;
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
-  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma;
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || sinNota>0;
 
-  if(esSalida && (faltanFotos || faltanActiv || faltanFirma)){
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || sinNota)){
     nota.classList.add("alerta");
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
+    if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
     if(faltanActiv) faltan.push("las actividades realizadas");
     if(faltanFirma) faltan.push("la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
@@ -920,6 +1056,8 @@ function registrar(){
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
                 fase:"firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
     }
+    // Y el reporte de actividades del día para este cliente (asignadas + adicionales).
+    if(paso.id==="salida") encolarReporteAct(o);
     persistir();
 
     $("#lectura").textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)} ±${Math.round(prec)} m`;
@@ -934,6 +1072,8 @@ function registrar(){
     } else {
       avisar(`${paso.nombre} registrada`, tieneRef?`${hora} · ${dist} m del punto asignado.`:`${hora} · ubicación registrada.`,"ok");
     }
+    // Salida registrada: se cubre la pantalla con el logo y la barra de envío.
+    if(paso.id==="salida") iniciarEnvio("servicio");
   }, err=>{
     estado.leyendo=false; pintarBoton();
     const causa = err.code===1 ? "Debe permitir el acceso a la ubicación en el navegador."
@@ -1225,6 +1365,9 @@ $("#btnComenzar").addEventListener("click", ()=>{
 async function reiniciarServicio(){
   if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error"); return; }
   if(!await confirmar("¿Iniciar un nuevo servicio?", "El servicio actual ya quedó guardado en la hoja.", "Iniciar nuevo servicio")) return;
+  limpiarServicio();
+}
+function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.firma = null; estado.incluirFirma = false; estado.orden = null;
@@ -1236,12 +1379,26 @@ async function reiniciarServicio(){
   $("#lectura").textContent = "Ubicación sin leer";
   const r=$("#rango"); r.textContent = "—"; r.dataset.fuera = "0";
   $("#actividades").value = "";
+  cierreActPedido = false;
+  $("#cierreActLista").innerHTML = "";
+  $("#cierreAdicLista").innerHTML = "";
+  $("#cierreAdicInput").value = "";
   window.scrollTo(0,0);
   pedirOrden();
   pintar();
   avisar("Nuevo servicio","Elige el cliente para el siguiente servicio.","ok");
 }
 $("#btnNuevo").addEventListener("click", reiniciarServicio);
+
+/* Botones de la pantalla de envío */
+$("#btnEnvNuevo").addEventListener("click", ()=>{
+  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que termine de subirse el reporte.","error"); return; }
+  cerrarEnvio();
+  $("#inicio").hidden = true;
+  $("#actividadesPantalla").hidden = true;
+  limpiarServicio();
+});
+$("#btnEnvMenu").addEventListener("click", ()=>{ cerrarEnvio(); mostrarInicio(); });
 
 /* ---------- Conexión ---------- */
 function pintarRed(){
@@ -1250,7 +1407,7 @@ function pintarRed(){
   $("#redTexto").textContent = en ? "En línea" : "Sin conexión";
 }
 addEventListener("online", ()=>{ pintarRed(); avisar("Conexión recuperada","Enviando registros pendientes.","ok"); enviarCola(); });
-addEventListener("offline", ()=>{ pintarRed(); avisar("Sin conexión","Sus registros se guardan en el teléfono y se enviarán solos.","info"); });
+addEventListener("offline", ()=>{ pintarRed(); pintarEnvio(); avisar("Sin conexión","Sus registros se guardan en el teléfono y se enviarán solos.","info"); });
 
 /* Antes de enviar la Salida (cierre del servicio) se confirma con un modal. */
 function onClickPaso(){
@@ -1448,43 +1605,141 @@ function pintarActividades(){
   $("#actResumen").innerHTML = `<b>${lista.length}</b> pendiente(s)` +
     (atrasadas ? ` · <span class="atr">${atrasadas} atrasada(s)</span>` : "");
 
-  $("#actLista").innerHTML = lista.length ? lista.map(a=>{
-    const id = String(a.id), f = etiquetaFecha(a.fecha), m = act.marcas[id] || "";
-    const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
-      .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
-    const pideNota = m==="PENDIENTE" || m==="CANCELADA";
-    const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
-    return `<div class="act-item" data-marca="${m}">
-      <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${origen}</div>
-      <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
-      ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
-      <div class="act-ops">${ops}</div>
-      ${pideNota ? `<textarea class="act-nota" data-id="${esc(id)}" placeholder="${m==="PENDIENTE" ? "¿Por qué quedó pendiente? ¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?"}">${esc(act.notas[id] || "")}</textarea>` : ""}
-    </div>`;
-  }).join("") : `<p class="pista act-vacio">${act.cargando ? "Cargando actividades…"
+  $("#actLista").innerHTML = lista.length ? lista.map(htmlActItem).join("")
+    : `<p class="pista act-vacio">${act.cargando ? "Cargando actividades…"
       : "No tienes actividades pendientes asignadas. Si realizaste trabajos, regístralos como actividad adicional."}</p>`;
+  enlazarActItems($("#actLista"));
 
-  $("#actLista").querySelectorAll(".act-op").forEach(b=>{
+  $("#actAdicLista").innerHTML = htmlAdicionales();
+  enlazarAdicionales($("#actAdicLista"));
+
+  pintarFotosAct(); pintarEnvioAct();
+  if(!$("#cierreForm").hidden) pintarCierreAct();
+}
+
+/* ============================================================
+   Actividades dentro del cierre del servicio (registrar salida)
+   El técnico ve aquí las actividades que le fueron asignadas para el
+   cliente del servicio abierto y puede agregar adicionales. Se usa el
+   mismo borrador (objeto "act") que la pantalla "Mis actividades".
+   ============================================================ */
+function normCliente(s){
+  return String(s==null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\s+/g," ").trim().toLowerCase();
+}
+/* Actividades vigentes del colaborador para el cliente del servicio abierto.
+   Las asignaciones que todavía no traen cliente se muestran siempre. */
+function actividadesDelCliente(){
+  const ocultas = idsEnCola();
+  const cli = normCliente(estado.orden && (estado.orden.titulo || estado.orden.cliente));
+  return act.lista.filter(a=>{
+    if(ocultas.has(String(a.id))) return false;
+    const ac = normCliente(a.cliente);
+    return !ac || !cli || ac === cli;
+  });
+}
+function idsMarcadosCliente(){
+  const vig = new Set(actividadesDelCliente().map(a=>String(a.id)));
+  return Object.keys(act.marcas).filter(id=>vig.has(id));
+}
+
+function htmlActItem(a){
+  const id = String(a.id), f = etiquetaFecha(a.fecha), m = act.marcas[id] || "";
+  const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
+    .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
+  const pideNota = m==="PENDIENTE" || m==="CANCELADA";
+  const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
+  return `<div class="act-item" data-marca="${m}">
+    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${origen}</div>
+    <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
+    ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
+    <div class="act-ops">${ops}</div>
+    ${pideNota ? `<textarea class="act-nota" data-id="${esc(id)}" placeholder="${m==="PENDIENTE" ? "¿Por qué quedó pendiente? ¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?"}">${esc(act.notas[id] || "")}</textarea>` : ""}
+  </div>`;
+}
+function enlazarActItems(cont){
+  cont.querySelectorAll(".act-op").forEach(b=>{
     b.onclick = ()=>{
       const id = b.dataset.id, v = b.dataset.v;
       if(act.marcas[id] === v) delete act.marcas[id]; else act.marcas[id] = v;
-      guardarAct(); pintarActividades();
+      guardarAct(); repintarAct();
       if(v!=="TERMINADA" && act.marcas[id]===v){
-        const t = $(`#actLista .act-nota[data-id="${CSS.escape(id)}"]`); if(t) t.focus();
+        const t = cont.querySelector(`.act-nota[data-id="${CSS.escape(id)}"]`); if(t) t.focus();
       }
     };
   });
-  $("#actLista").querySelectorAll(".act-nota").forEach(t=>{
-    t.oninput = ()=>{ act.notas[t.dataset.id] = t.value; guardarAct(); pintarEnvioAct(); };
+  cont.querySelectorAll(".act-nota").forEach(t=>{
+    t.oninput = ()=>{ act.notas[t.dataset.id] = t.value; guardarAct(); pintarEnvioAct(); pintarBoton(); };
   });
-
-  $("#actAdicLista").innerHTML = act.adicionales.map((t,i)=>
+}
+function htmlAdicionales(){
+  return act.adicionales.map((t,i)=>
     `<div class="adic-item"><span>${esc(t)}</span><button type="button" data-i="${i}" aria-label="Quitar actividad adicional">✕</button></div>`).join("");
-  $("#actAdicLista").querySelectorAll("button").forEach(b=>{
-    b.onclick = ()=>{ act.adicionales.splice(+b.dataset.i, 1); guardarAct(); pintarActividades(); };
+}
+function enlazarAdicionales(cont){
+  cont.querySelectorAll("button").forEach(b=>{
+    b.onclick = ()=>{ act.adicionales.splice(+b.dataset.i, 1); guardarAct(); repintarAct(); };
   });
+}
+/* Repinta las dos vistas que comparten el borrador de actividades. */
+function repintarAct(){ pintarActividades(); pintarBoton(); }
 
-  pintarFotosAct(); pintarEnvioAct();
+function pintarCierreAct(){
+  const cont = $("#cierreActLista"), adic = $("#cierreAdicLista");
+  const lista = actividadesDelCliente();
+  const cli = (estado.orden && (estado.orden.titulo || estado.orden.cliente)) || "este cliente";
+  $("#cierreActAyuda").textContent = act.cargando
+    ? "Cargando tus actividades asignadas…"
+    : (lista.length
+        ? `Marca cómo quedó cada actividad asignada para ${cli}. Si quedó pendiente o se canceló, explica por qué.`
+        : "No tienes actividades asignadas pendientes para este cliente. Registra lo que hiciste como actividad adicional.");
+  // No se reconstruye la lista mientras el técnico está escribiendo dentro de ella.
+  const f = document.activeElement;
+  const escribiendo = f && /^(TEXTAREA|INPUT)$/.test(f.tagName) && (cont.contains(f) || adic.contains(f));
+  if(escribiendo) return;
+  cont.innerHTML = lista.map(htmlActItem).join("");
+  enlazarActItems(cont);
+  adic.innerHTML = htmlAdicionales();
+  enlazarAdicionales(adic);
+}
+
+function agregarAdicionalCierre(){
+  const i = $("#cierreAdicInput"), t = i.value.trim();
+  if(t.length < 3){ avisar("Actividad muy corta", "Describe la actividad adicional que realizaste.", "error"); return; }
+  act.adicionales.push(t);
+  i.value = "";
+  guardarAct(); repintarAct();
+}
+$("#btnCierreAdic").addEventListener("click", agregarAdicionalCierre);
+$("#cierreAdicInput").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); agregarAdicionalCierre(); } });
+
+/* Al registrar la salida se manda también el reporte de actividades del día
+   para ese cliente: asignadas marcadas + adicionales + el detalle escrito en
+   "Actividades realizadas", con las fotos del cierre como evidencia. */
+function encolarReporteAct(o){
+  const ids = idsMarcadosCliente();
+  if(!ids.length && !act.adicionales.length) return;
+  const reporteId = "R" + idCorto();
+  encolar({
+    tipo:"reporte_act", token:estado.token, reporteId,
+    cliente: o.titulo || o.cliente || "", folio: o.folio || "", sitio: o.sitio || "",
+    items: ids.map(id=>({ id, estado:act.marcas[id], nota:(act.notas[id] || "").trim() })),
+    adicionales: act.adicionales.slice(),
+    detalle: estado.actividades.trim()
+  });
+  estado.fotos.despues.filter(f=>f.url).forEach((f,i)=> encolar({
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (i+1), imagen:f.url
+  }));
+
+  // Las pendientes siguen en la lista con su nota; las terminadas y canceladas salen.
+  const sello = new Date().toLocaleDateString("es-MX", { day:"2-digit", month:"2-digit", year:"2-digit" });
+  ids.forEach(id=>{
+    const a = act.lista.find(x=>String(x.id)===id), nota = (act.notas[id] || "").trim();
+    if(a && act.marcas[id]==="PENDIENTE" && nota) a.nota = (a.nota ? a.nota + "\n" : "") + `[${sello}] ${nota}`;
+  });
+  act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
+  act.marcas = {}; act.notas = {}; act.adicionales = [];
+  guardarAct();
 }
 
 function agregarAdicional(){
@@ -1609,11 +1864,9 @@ async function enviarActividades(){
   act.marcas = {}; act.notas = {}; act.adicionales = []; act.detalle = ""; act.fotos = [];
   $("#actDetalle").value = "";
   guardarAct(); guardarFotosAct();
-  mostrarInicio();
-  window.scrollTo(0, 0);
-  avisar("Reporte enviado", navigator.onLine
-    ? "Se está subiendo al servidor. Espera a que el menú diga “✓ Todo enviado”."
-    : "Sin señal: quedó guardado en el teléfono y se enviará solo al recuperar la conexión.", "ok");
+  $("#actividadesPantalla").hidden = true;
+  pintarActividades();
+  iniciarEnvio("actividades");
 }
 $("#btnEnviarAct").addEventListener("click", enviarActividades);
 

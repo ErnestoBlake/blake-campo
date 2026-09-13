@@ -309,6 +309,7 @@ body{
   background:var(--acero-800);border:1px solid var(--linea);border-left:3px solid var(--naranja);
   border-radius:3px;color:var(--plata-alta);
 }
+.menu-op[hidden]{display:none}
 .menu-op:hover{background:rgba(243,146,0,.10)}
 .menu-op:focus-visible{outline:2px solid var(--naranja-glow);outline-offset:2px}
 .menu-op b{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
@@ -401,6 +402,37 @@ body{
 .cierre-form input[type="text"]:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
 .cierre-form textarea.act-nota{min-height:70px;margin-top:10px}
 .cierre-form .act-ayuda{font-family:var(--dato);font-size:11px;color:var(--plata);line-height:1.5;margin-bottom:10px}
+
+/* ---------- Panel de administrador: asignar actividades ---------- */
+.adm-campo{display:block;font-family:var(--dato);font-size:11px;letter-spacing:.06em;
+  color:var(--plata);margin:16px 0 7px;text-transform:uppercase}
+.pantalla select,.pantalla input[type="date"]{
+  width:100%;min-height:50px;padding:0 12px;background:var(--acero-800);
+  border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);
+  font-family:var(--texto);font-size:15px;
+}
+.pantalla select:focus,.pantalla input[type="date"]:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.adm-persona{
+  background:var(--acero-800);border:1px solid var(--linea);border-left:3px solid var(--naranja);
+  border-radius:3px;padding:12px 14px;margin-bottom:10px;
+}
+.adm-persona>b{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:block}
+.adm-persona>.adm-puesto{font-family:var(--dato);font-size:10.5px;color:var(--plata);display:block;margin-bottom:8px}
+.adm-persona[data-cero="1"]{border-left-color:var(--verde)}
+.adm-tarea{border-top:1px dashed var(--linea);padding:10px 0 4px;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.adm-tarea .adm-meta{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.adm-acciones{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.adm-acciones button{
+  flex:1 1 auto;min-height:40px;padding:0 10px;border:1px solid var(--linea);background:transparent;
+  color:var(--plata-alta);border-radius:3px;cursor:pointer;font-family:var(--dato);
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+}
+.adm-acciones button:hover{background:rgba(243,146,0,.10);border-color:var(--naranja)}
+.adm-acciones button[data-peligro="1"]:hover{background:rgba(224,60,60,.12);border-color:var(--rojo);color:var(--rojo)}
+.adm-editor{margin-top:8px;padding:10px;border:1px dashed var(--naranja);border-radius:3px}
+.adm-editor[hidden]{display:none}
+.adm-editor .adm-acciones{margin-top:8px}
+.adm-vacio{font-family:var(--dato);font-size:11px;color:var(--verde)}
 
 /* ---------- Pantalla de envío del reporte ---------- */
 #envio{z-index:130}
@@ -566,6 +598,10 @@ body{
       <b>Servicio en campo</b>
       <span id="inicioServicioDet">Jornada con GPS, evidencia y firma del cliente.</span>
     </button>
+    <button class="menu-op" id="btnIrAdmin" type="button" hidden>
+      <b>Asignar actividades</b>
+      <span id="inicioAdminDet">Panel de administrador: asigna el trabajo del día por colaborador.</span>
+    </button>
     <p class="inicio-estado" id="inicioEstado">—</p>
     <button class="link-volver link-centro" id="btnInicioSalir" type="button">Cerrar sesión</button>
   </div>
@@ -623,6 +659,43 @@ body{
       <p class="act-cola" id="actCola">—</p>
     </div>
     </div>
+  </div>
+</div>
+
+<!-- Pantalla: panel de administrador (asignar actividades) -->
+<div class="pantalla" id="adminPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnAdmMenu" type="button">← Menú</button>
+      <button class="link-volver" id="btnAdmRefrescar" type="button">↻ Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Asignar actividades</span>
+      <h2 id="admFechaTitulo">—</h2>
+      <p class="pista" id="admSync">—</p>
+    </div>
+
+    <label class="adm-campo" for="admResponsable">Colaborador</label>
+    <select id="admResponsable"></select>
+
+    <label class="adm-campo" for="admCliente">Cliente</label>
+    <select id="admCliente"></select>
+
+    <label class="adm-campo" for="admFecha">Fecha de la actividad</label>
+    <input type="date" id="admFecha">
+
+    <label class="adm-campo" for="admTextos">Actividades (una por renglón)</label>
+    <textarea id="admTextos" placeholder="Ejemplo:&#10;Calibrar báscula de cemento&#10;Revisar sensor de nivel del silo 2"></textarea>
+    <div class="act-conteo" id="admConteo">0 actividades</div>
+
+    <div style="margin-top:16px">
+      <button class="btn" id="btnAsignar" type="button" disabled>Asignar</button>
+      <p class="nota-btn" id="admNota">—</p>
+    </div>
+
+    <span class="etiqueta act-bloque">Pendientes del equipo</span>
+    <div id="admEquipo"></div>
+    <p class="act-cola" id="admCola">—</p>
   </div>
 </div>
 
@@ -777,6 +850,7 @@ async function enviarCola(){
       pintar();
       if(!$("#actividadesPantalla").hidden) pintarEnvioAct();
       if(!$("#inicio").hidden) pintarEstadoInicio();
+      if(!$("#adminPantalla").hidden) pintarBotonAsignar();
       pintarEnvio();
     }
   }catch(e){ /* sin señal: se reintenta al reconectar */ }
@@ -1502,12 +1576,16 @@ function mostrarInicio(){
     : "Jornada con GPS, evidencia y firma del cliente.";
   $("#ordenes").hidden = true;
   $("#actividadesPantalla").hidden = true;
+  $("#adminPantalla").hidden = true;
+  $("#btnIrAdmin").hidden = !esAdminApp();
   $("#inicio").hidden = false;
 }
 async function cerrarSesion(){
   if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
+  adm.usuarios = []; adm.actualizado = null;
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
+  $("#adminPantalla").hidden = true;
   pedirLogin();
 }
 $("#btnIrServicio").addEventListener("click", ()=>{
@@ -1869,6 +1947,211 @@ async function enviarActividades(){
   iniciarEnvio("actividades");
 }
 $("#btnEnviarAct").addEventListener("click", enviarActividades);
+
+/* ============================================================
+   Panel de administrador — asignar actividades
+   Solo para usuarios con rol "Administrador". Asigna por colaborador:
+   persona + cliente + fecha + una actividad por renglón. Abajo muestra
+   los pendientes de todo el equipo y permite cancelar, reasignar o
+   reprogramar cada uno. El conector valida el rol otra vez del lado
+   del servidor: esconder el botón no es la seguridad, solo la comodidad.
+   ============================================================ */
+const adm = { usuarios:[], actualizado:null, cargando:false, editando:null };
+const esAdminApp = () => normCliente(estado.rol) === "administrador";
+
+function abrirAdmin(){
+  const p = $("#adminPantalla");
+  p.hidden = false; p.scrollTop = 0;
+  if(!$("#admFecha").value) $("#admFecha").value = hoyISO();
+  pintarAdmin();
+  refrescarEquipo();
+}
+
+async function refrescarEquipo(){
+  if(adm.cargando) return;
+  if(!navigator.onLine){ pintarAdmin(); return; }
+  adm.cargando = true; pintarAdmin();
+  const resp = await llamarJSONP("equipo=1&token=" + encodeURIComponent(estado.token || ""), 25000);
+  adm.cargando = false;
+  if(!resp){ avisar("Sin conexión", "No se pudo leer el equipo. Se muestra lo último cargado.", "info"); pintarAdmin(); return; }
+  if(!resp.ok){
+    if(/sesi[oó]n|autorizado/i.test(resp.error || "")){
+      avisar("Sesión vencida", "Inicia sesión de nuevo.", "error");
+      $("#adminPantalla").hidden = true; pedirLogin(); return;
+    }
+    avisar("No se pudo cargar el equipo", resp.error || "Error del conector.", "error");
+    pintarAdmin(); return;
+  }
+  adm.usuarios = Array.isArray(resp.usuarios) ? resp.usuarios : [];
+  adm.actualizado = new Date().toISOString();
+  pintarAdmin();
+}
+$("#btnAdmRefrescar").addEventListener("click", refrescarEquipo);
+
+/* Lista de clientes para asignar. Siempre incluye "Blake Inc" (trabajo interno). */
+function clientesParaAsignar(){
+  const lista = ORDENES.map(o=>({ cliente:o.titulo || o.cliente || "", sitio:o.sitio || "" }))
+    .filter(o=>o.cliente);
+  if(!lista.some(o=>normCliente(o.cliente).indexOf("blake inc") === 0)){
+    lista.unshift({ cliente:"Blake Inc", sitio:"Oficina / taller" });
+  }
+  return lista;
+}
+
+function pintarAdmin(){
+  $("#admFechaTitulo").textContent = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long" });
+  const hora = adm.actualizado
+    ? new Date(adm.actualizado).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit", hour12:false }) : "";
+  $("#admSync").textContent = (adm.cargando ? "Actualizando…" : (hora ? "Equipo actualizado " + hora : "Sin descargar"))
+    + (navigator.onLine ? "" : " · sin conexión");
+
+  // Selector de colaborador (conserva la selección si sigue existiendo)
+  const selR = $("#admResponsable"), antesR = selR.value;
+  selR.innerHTML = `<option value="">— Elige al colaborador —</option>` + adm.usuarios.map(u=>
+    `<option value="${esc(u.usuario)}">${esc(u.nombre)}${u.puesto ? " · " + esc(u.puesto) : ""}</option>`).join("");
+  if(antesR && adm.usuarios.some(u=>u.usuario === antesR)) selR.value = antesR;
+
+  // Selector de cliente
+  const selC = $("#admCliente"), antesC = selC.value, cli = clientesParaAsignar();
+  selC.innerHTML = `<option value="">— Elige el cliente —</option>` + cli.map(o=>
+    `<option value="${esc(o.cliente)}" data-sitio="${esc(o.sitio)}">${esc(o.cliente)}${o.sitio ? " · " + esc(o.sitio) : ""}</option>`).join("");
+  if(antesC && cli.some(o=>o.cliente === antesC)) selC.value = antesC;
+
+  pintarEquipo();
+  pintarBotonAsignar();
+}
+
+function textosAsignar(){
+  return $("#admTextos").value.split("\n").map(t=>t.trim()).filter(t=>t.length >= 3);
+}
+function pintarBotonAsignar(){
+  const t = textosAsignar(), faltan = [];
+  if(!$("#admResponsable").value) faltan.push("el colaborador");
+  if(!$("#admCliente").value) faltan.push("el cliente");
+  if(!$("#admFecha").value) faltan.push("la fecha");
+  if(!t.length) faltan.push("al menos una actividad");
+  $("#btnAsignar").disabled = faltan.length > 0;
+  $("#admConteo").textContent = t.length + (t.length === 1 ? " actividad" : " actividades");
+  const n = $("#admNota");
+  n.classList.toggle("alerta", faltan.length > 0);
+  n.textContent = faltan.length ? "Falta " + faltan.join(", ") + "." : "Se asignarán " + t.length + " actividad(es).";
+  $("#admCola").textContent = estado.cola.length
+    ? `${estado.cola.length} registro(s) sin enviar en el teléfono` : "✓ Todo enviado";
+}
+["#admResponsable","#admCliente","#admFecha"].forEach(s=> $(s).addEventListener("change", pintarBotonAsignar));
+$("#admTextos").addEventListener("input", pintarBotonAsignar);
+
+function pintarEquipo(){
+  const cont = $("#admEquipo");
+  if(cont.contains(document.activeElement) && /^(SELECT|INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  if(!adm.usuarios.length){
+    cont.innerHTML = `<p class="pista act-vacio">${adm.cargando ? "Cargando equipo…" : "Aún no se descarga el equipo."}</p>`;
+    return;
+  }
+  cont.innerHTML = adm.usuarios.map(u=>{
+    const pend = Array.isArray(u.pendientes) ? u.pendientes : [];
+    const tareas = pend.map(a=>{
+      const f = etiquetaFecha(a.fecha);
+      const cl = a.cliente ? esc(a.cliente) : "sin cliente";
+      return `<div class="adm-tarea">
+        <div>${esc(a.titulo || a.texto)}</div>
+        <div class="adm-meta"><span class="act-fecha ${f.cls}">${f.txt}</span><span class="act-fecha">${cl}</span></div>
+        <div class="adm-acciones">
+          <button type="button" data-acc="reasignar" data-id="${esc(a.id)}">Reasignar</button>
+          <button type="button" data-acc="fecha" data-id="${esc(a.id)}">Cambiar fecha</button>
+          <button type="button" data-acc="cancelar" data-peligro="1" data-id="${esc(a.id)}">Cancelar</button>
+        </div>
+        <div class="adm-editor" id="ed-${esc(a.id)}" hidden></div>
+      </div>`;
+    }).join("");
+    return `<div class="adm-persona" data-cero="${pend.length ? "0" : "1"}">
+      <b>${esc(u.nombre)}</b>
+      <span class="adm-puesto">${esc(u.puesto || u.rol || "")} · ${pend.length} pendiente(s)</span>
+      ${tareas || `<span class="adm-vacio">✓ Sin pendientes</span>`}
+    </div>`;
+  }).join("");
+
+  cont.querySelectorAll(".adm-acciones button").forEach(b=>{
+    b.onclick = ()=> abrirEditorAdmin(b.dataset.id, b.dataset.acc);
+  });
+}
+
+/* Editor en línea para reasignar / reprogramar / cancelar una asignación */
+function abrirEditorAdmin(id, accion){
+  $("#admEquipo").querySelectorAll(".adm-editor").forEach(e=>{ e.hidden = true; e.innerHTML = ""; });
+  const caja = $(`#ed-${CSS.escape(id)}`);
+  if(!caja) return;
+  if(accion === "reasignar"){
+    caja.innerHTML = `<label class="adm-campo">Nuevo responsable</label>
+      <select class="ed-resp">${adm.usuarios.map(u=>`<option value="${esc(u.usuario)}">${esc(u.nombre)}</option>`).join("")}</select>
+      <div class="adm-acciones"><button type="button" class="ed-ok">Guardar</button><button type="button" class="ed-no">Cerrar</button></div>`;
+  } else if(accion === "fecha"){
+    caja.innerHTML = `<label class="adm-campo">Nueva fecha</label>
+      <input type="date" class="ed-fecha" value="${hoyISO()}">
+      <div class="adm-acciones"><button type="button" class="ed-ok">Guardar</button><button type="button" class="ed-no">Cerrar</button></div>`;
+  } else {
+    caja.innerHTML = `<label class="adm-campo">Motivo de la cancelación</label>
+      <input type="text" class="ed-motivo" maxlength="200" placeholder="¿Por qué se cancela?">
+      <div class="adm-acciones"><button type="button" class="ed-ok" data-peligro="1">Cancelar actividad</button><button type="button" class="ed-no">Cerrar</button></div>`;
+  }
+  caja.hidden = false;
+  caja.querySelector(".ed-no").onclick = ()=>{ caja.hidden = true; caja.innerHTML = ""; };
+  caja.querySelector(".ed-ok").onclick = ()=>{
+    const sobre = { tipo:"asignar", token:estado.token, accion, id };
+    if(accion === "reasignar"){
+      sobre.responsable = caja.querySelector(".ed-resp").value;
+      if(!sobre.responsable) return;
+    } else if(accion === "fecha"){
+      sobre.fecha = caja.querySelector(".ed-fecha").value;
+      if(!sobre.fecha) return;
+    } else {
+      sobre.motivo = caja.querySelector(".ed-motivo").value.trim();
+    }
+    caja.hidden = true; caja.innerHTML = "";
+    mandarAdmin(sobre, accion === "cancelar" ? "Actividad cancelada" : "Cambio guardado");
+  };
+}
+
+/* Envía el sobre y vuelve a leer el equipo para confirmar contra la hoja. */
+function mandarAdmin(sobre, titulo){
+  encolar(sobre);
+  pintarBotonAsignar();
+  avisar(titulo, navigator.onLine
+    ? "Enviando al servidor; la lista se actualiza sola al terminar."
+    : "Sin señal: quedó guardado en el teléfono y se enviará al recuperar la conexión.", "ok");
+  esperarColaYRefrescar();
+}
+async function esperarColaYRefrescar(){
+  for(let i = 0; i < 40 && estado.cola.length; i++) await new Promise(r=>setTimeout(r, 500));
+  if(estado.cola.length === 0 && !$("#adminPantalla").hidden) refrescarEquipo();
+}
+
+async function asignarActividades(){
+  const textos = textosAsignar();
+  const responsable = $("#admResponsable").value;
+  const opc = $("#admCliente").selectedOptions[0];
+  const cliente = $("#admCliente").value;
+  if(!textos.length || !responsable || !cliente) return;
+  const nombre = ($("#admResponsable").selectedOptions[0] || {}).textContent || responsable;
+  const ok = await confirmar("¿Asignar actividades?",
+    `Colaborador: ${nombre}\nCliente: ${cliente}\nFecha: ${$("#admFecha").value}\n\n` +
+    textos.map((t,i)=>`${i+1}. ${t}`).join("\n"), "Asignar");
+  if(!ok) return;
+  encolar({
+    tipo:"asignar", token:estado.token, responsable, textos,
+    fecha: $("#admFecha").value, cliente, sitio: (opc && opc.dataset.sitio) || "",
+    asignacionId: "G" + idCorto()
+  });
+  $("#admTextos").value = "";
+  pintarBotonAsignar();
+  avisar("Actividades asignadas", navigator.onLine
+    ? "Enviando al servidor; la lista de pendientes se actualiza sola al terminar."
+    : "Sin señal: quedaron guardadas en el teléfono y se enviarán al recuperar la conexión.", "ok");
+  esperarColaYRefrescar();
+}
+$("#btnAsignar").addEventListener("click", asignarActividades);
+$("#btnAdmMenu").addEventListener("click", mostrarInicio);
+$("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAdmin(); });
 
 /* Logotipo en las pantallas nuevas (se reutiliza el de la portada) */
 document.querySelectorAll("img[data-logo]").forEach(i=>{

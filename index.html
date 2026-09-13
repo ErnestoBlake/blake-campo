@@ -893,11 +893,12 @@ function avisar(titulo, texto, tipo="info"){
    la pantalla de captura: al terminar aparece la opción de iniciar un
    nuevo reporte de servicio técnico.
    ============================================================ */
-const envio = { activo:false, total:0, origen:"" };
+const envio = { activo:false, total:0, origen:"", resumen:"" };
 
-function iniciarEnvio(origen){
+function iniciarEnvio(origen, resumen){
   envio.activo = true;
   envio.origen = origen || "";
+  envio.resumen = resumen || "";
   envio.total = Math.max(1, estado.cola.length);
   const p = $("#envio");
   p.dataset.estado = "enviando";
@@ -919,29 +920,36 @@ function pintarEnvio(){
   $("#envBarra").style.width = (pend === 0 ? 100 : Math.min(pct, 99)) + "%";
   $("#envPct").textContent = (pend === 0 ? 100 : Math.min(pct, 99)) + " %";
   const p = $("#envio");
+  const asg = envio.origen === "asignacion";
+  $("#btnEnvNuevo").textContent = asg ? "Asignar a otro colaborador" : "Iniciar nuevo reporte de servicio técnico";
 
   if(pend === 0){
     p.dataset.estado = "listo";
-    $("#envEtiqueta").textContent = "Reporte enviado";
-    $("#envTitulo").textContent = "Reporte enviado";
-    $("#envDetalle").innerHTML = "Todo se guardó en la hoja de Google: registros, actividades y fotografías. <b>Ya puede cerrar la aplicación.</b>";
+    $("#envEtiqueta").textContent = asg ? "Actividades asignadas" : "Reporte enviado";
+    $("#envTitulo").textContent = asg ? "Actividades asignadas" : "Reporte enviado";
+    $("#envDetalle").innerHTML = asg
+      ? (envio.resumen ? esc(envio.resumen) + ".<br>" : "") + "Ya le aparecen en su teléfono la próxima vez que abra la app."
+      : "Todo se guardó en la hoja de Google: registros, actividades y fotografías. <b>Ya puede cerrar la aplicación.</b>";
     $("#btnEnvNuevo").hidden = false;
     $("#btnEnvMenu").hidden = false;
   } else if(!navigator.onLine){
     p.dataset.estado = "pausa";
     $("#envEtiqueta").textContent = "Sin conexión";
     $("#envTitulo").textContent = "Guardado en el teléfono";
-    $("#envDetalle").innerHTML =
-      `Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados y se enviarán solos al recuperar la señal. ` +
-      "No cierre la aplicación si puede evitarlo.";
+    $("#envDetalle").innerHTML = asg
+      ? `La asignación quedó guardada en el teléfono y se mandará sola al recuperar la señal. ` +
+        "Hasta entonces el colaborador todavía no la ve."
+      : `Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados y se enviarán solos al recuperar la señal. ` +
+        "No cierre la aplicación si puede evitarlo.";
     $("#btnEnvNuevo").hidden = true;
     $("#btnEnvMenu").hidden = false;
   } else {
     p.dataset.estado = "enviando";
-    $("#envEtiqueta").textContent = "Enviando reporte";
-    $("#envTitulo").textContent = "Enviando reporte…";
-    $("#envDetalle").innerHTML =
-      `Subiendo <b>${hechos}</b> de <b>${envio.total}</b> archivo(s). Mantenga la aplicación abierta y con señal.`;
+    $("#envEtiqueta").textContent = asg ? "Asignando" : "Enviando reporte";
+    $("#envTitulo").textContent = asg ? "Asignando actividades…" : "Enviando reporte…";
+    $("#envDetalle").innerHTML = asg
+      ? (envio.resumen ? esc(envio.resumen) + ".<br>" : "") + "Guardando en la hoja. Mantenga la aplicación abierta."
+      : `Subiendo <b>${hechos}</b> de <b>${envio.total}</b> archivo(s). Mantenga la aplicación abierta y con señal.`;
     $("#btnEnvNuevo").hidden = true;
     $("#btnEnvMenu").hidden = true;
   }
@@ -1466,7 +1474,17 @@ $("#btnNuevo").addEventListener("click", reiniciarServicio);
 
 /* Botones de la pantalla de envío */
 $("#btnEnvNuevo").addEventListener("click", ()=>{
-  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que termine de subirse el reporte.","error"); return; }
+  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que termine de subirse.","error"); return; }
+  if(envio.origen === "asignacion"){
+    // Regresa al panel para seguir asignando, con la lista del equipo ya actualizada.
+    cerrarEnvio();
+    $("#adminPantalla").hidden = false;
+    $("#adminPantalla").scrollTop = 0;
+    $("#admResponsable").value = "";
+    pintarBotonAsignar();
+    refrescarEquipo();
+    return;
+  }
   cerrarEnvio();
   $("#inicio").hidden = true;
   $("#actividadesPantalla").hidden = true;
@@ -2144,9 +2162,8 @@ async function asignarActividades(){
   });
   $("#admTextos").value = "";
   pintarBotonAsignar();
-  avisar("Actividades asignadas", navigator.onLine
-    ? "Enviando al servidor; la lista de pendientes se actualiza sola al terminar."
-    : "Sin señal: quedaron guardadas en el teléfono y se enviarán al recuperar la conexión.", "ok");
+  const soloNombre = String(nombre).split(" · ")[0];
+  iniciarEnvio("asignacion", `${textos.length} actividad(es) para ${soloNombre} · ${cliente}`);
   esperarColaYRefrescar();
 }
 $("#btnAsignar").addEventListener("click", asignarActividades);

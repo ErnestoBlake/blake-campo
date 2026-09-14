@@ -524,7 +524,7 @@ body{
 
     <label class="campo-lbl" for="actividades">Actividades realizadas</label>
     <textarea id="actividades" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
-    <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Incluir firma del cliente</label>
+    <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
       <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
@@ -1122,7 +1122,9 @@ function pintarBoton(){
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const faltanActiv = esSalida && !estado.actividades.trim();
-  const faltanFirma = esSalida && estado.incluirFirma && !estado.firma;
+  /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
+     recuadro, para que no se raye por accidente antes de tiempo. */
+  const faltanFirma = esSalida && !estado.firma;
   const sinNota = esSalida ? idsMarcadosCliente().filter(id=>act.marcas[id]!=="TERMINADA" && !(act.notas[id]||"").trim()).length : 0;
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
   btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || sinNota>0;
@@ -1133,7 +1135,7 @@ function pintarBoton(){
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
     if(faltanActiv) faltan.push("las actividades realizadas");
-    if(faltanFirma) faltan.push("la firma del cliente");
+    if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
   } else if(p.id==="llegada"){
     nota.textContent="Se capturará su hora y ubicación al presionar.";
@@ -1269,7 +1271,7 @@ function registrar(){
     });
 
     // Al registrar la salida, también enviamos la firma del cliente (si se activó la casilla).
-    if(paso.id==="salida" && estado.incluirFirma && estado.firma){
+    if(paso.id==="salida" && estado.firma){
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
                 fase:"firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
     }
@@ -1373,7 +1375,7 @@ $("#actividades").addEventListener("input", e=>{
   persistir(); pintarBoton();
 });
 
-/* ---------- Casilla: incluir firma del cliente ---------- */
+/* ---------- Casilla: habilitar el recuadro de firma (la firma es obligatoria) ---------- */
 $("#chkFirma").addEventListener("change", e=>{
   estado.incluirFirma = e.target.checked;
   if(!estado.incluirFirma) estado.firma = null;

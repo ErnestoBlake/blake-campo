@@ -192,6 +192,11 @@ body{
   font-family:var(--texto);font-size:14.5px;color:var(--plata-alta);
 }
 .chk-linea input{width:19px;height:19px;accent-color:var(--naranja);flex:0 0 auto}
+.leyenda-firma{
+  margin:10px 0 8px;padding:11px 13px;border:1px solid var(--linea);
+  border-left:3px solid var(--naranja);background:var(--acero-800);
+  font-size:13px;line-height:1.5;color:var(--plata-alta);border-radius:3px;
+}
 .firma-caja{
   background:var(--acero-800);border:1px dashed var(--linea);border-radius:3px;
   position:relative;overflow:hidden;
@@ -258,11 +263,52 @@ body{
   opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
 }
 .aviso.ver{opacity:1;transform:translateX(-50%) translateY(0)}
-.aviso[data-tipo="error"]{border-left-color:var(--rojo)}
 .aviso[data-tipo="ok"]{border-left-color:var(--verde)}
 .aviso strong{
   display:block;font-family:var(--display);font-size:15px;
   letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;
+}
+
+/* ---------- Aviso de FALLA: grande, rojo, palpitando ---------- */
+/* Un error no se puede pasar por alto en planta, con sol y con casco:
+   se va hasta arriba, ocupa el ancho, palpita y no se cierra solo. */
+.aviso[data-tipo="error"]{
+  top:12px;bottom:auto;
+  width:calc(100% - 20px);max-width:560px;
+  background:#B0140E;border:3px solid #FF5C4F;border-left:3px solid #FF5C4F;
+  border-radius:6px;padding:18px 18px 16px;
+  font-size:17px;line-height:1.45;color:#FFF;font-weight:600;
+  pointer-events:auto;cursor:pointer;
+  box-shadow:0 0 0 4px rgba(224,65,58,.28),0 14px 40px rgba(0,0,0,.7);
+  animation:palpitaFalla 1.05s ease-in-out infinite;
+}
+.aviso[data-tipo="error"] strong{
+  font-size:30px;line-height:1.05;letter-spacing:.06em;
+  color:#FFF;margin-bottom:8px;
+}
+.aviso[data-tipo="error"] strong::before{content:"\26A0  "}
+.aviso[data-tipo="error"] .aviso-cerrar{
+  display:block;margin-top:12px;font-family:var(--display);
+  font-size:15px;letter-spacing:.14em;text-transform:uppercase;
+  color:#FFD9D5;opacity:.95;
+}
+@keyframes palpitaFalla{
+  0%,100%{ box-shadow:0 0 0 4px rgba(224,65,58,.25),0 14px 40px rgba(0,0,0,.7); background:#B0140E; }
+  50%    { box-shadow:0 0 0 16px rgba(224,65,58,0),0 14px 40px rgba(0,0,0,.7); background:#E0413A; }
+}
+/* Aviso de ADVERTENCIA: grande y ámbar, sin palpitar */
+.aviso[data-tipo="alerta"]{
+  top:12px;bottom:auto;
+  width:calc(100% - 20px);max-width:560px;
+  background:#7A4E00;border:3px solid var(--ambar);border-left:3px solid var(--ambar);
+  border-radius:6px;padding:18px;font-size:16px;line-height:1.45;
+  color:#FFF3DC;font-weight:600;pointer-events:auto;cursor:pointer;
+  box-shadow:0 14px 40px rgba(0,0,0,.7);
+}
+.aviso[data-tipo="alerta"] strong{font-size:26px;line-height:1.1;color:#FFC24D;margin-bottom:6px}
+.aviso[data-tipo="alerta"] strong::before{content:"\26A0  "}
+@media (prefers-reduced-motion:reduce){
+  .aviso[data-tipo="error"]{animation:none;background:#E0413A}
 }
 
 /* ---------- Portadas (identidad y selección de servicio) ---------- */
@@ -524,6 +570,14 @@ body{
 
     <label class="campo-lbl" for="actividades">Actividades realizadas</label>
     <textarea id="actividades" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
+    <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
+    <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
+    <div class="firma-caja" id="firmaTecCaja">
+      <canvas class="firma-canvas" id="firmaTec"></canvas>
+      <span class="firma-pista" id="firmaTecPista">Firme aquí con el dedo</span>
+    </div>
+    <button class="firma-limpiar" id="btnLimpiarFirmaTec" type="button">Limpiar firma del técnico</button>
+
     <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
@@ -807,9 +861,17 @@ const SECUENCIA = [
 const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
-  actividades:"", firma:null, incluirFirma:false,
-  cola:[], leyendo:false
+  actividades:"", firma:null, firmaTec:null, incluirFirma:false,
+  cola:[], leyendo:false,
+  enviados:0   // sobres realmente entregados al conector en este servicio
 };
+
+/* Texto honesto del estado de envio: "Todo enviado" SOLO si de verdad ya
+   se envio algo. Con la cola vacia y nada enviado aun, decirlo confunde. */
+function textoCola(){
+  if(estado.cola.length) return estado.cola.length + " registro(s) sin enviar en el teléfono";
+  return estado.enviados ? "✓ Todo enviado" : "Nada pendiente · el reporte aún no se envía";
+}
 
 const $ = s => document.querySelector(s);
 const faseActual = () => (estado.eventos.regreso ? "despues" : "antes");
@@ -893,6 +955,8 @@ async function enviarCola(){
       const sobre = estado.cola[0];
       await enviarUno(sobre);
       estado.cola.shift();
+      estado.enviados++;
+      if(envio.activo) envio.hechos++;
       if(sobre.tipo==="foto" && sobre.fase!=="firma") marcarFotoEnviada(sobre.fase);
       persistir();
       pintar();
@@ -927,12 +991,24 @@ function metros(lat1,lon1,lat2,lon2){
 let avisoTimer;
 function avisar(titulo, texto, tipo="info"){
   const el=$("#aviso");
+  const grave = (tipo==="error" || tipo==="alerta");
   el.dataset.tipo=tipo;
-  el.innerHTML=`<strong>${titulo}</strong>${texto}`;
+  el.innerHTML=`<strong>${titulo}</strong>${texto}` +
+    (grave ? `<span class="aviso-cerrar">Toque aqui para cerrar</span>` : "");
   el.classList.add("ver");
   clearTimeout(avisoTimer);
-  avisoTimer=setTimeout(()=>el.classList.remove("ver"),5200);
+  // Una falla no desaparece sola: se queda hasta que el tecnico la toque,
+  // y ademas vibra el telefono. Los avisos normales siguen igual.
+  if(grave){
+    try{ if(navigator.vibrate) navigator.vibrate(tipo==="error"?[140,90,140,90,220]:[120,80,120]); }catch(e){}
+  } else {
+    avisoTimer=setTimeout(()=>el.classList.remove("ver"),5200);
+  }
 }
+document.addEventListener("DOMContentLoaded", function(){
+  const el=$("#aviso");
+  if(el) el.addEventListener("click", ()=>el.classList.remove("ver"));
+});
 
 /* ============================================================
    Pantalla de envío del reporte
@@ -941,12 +1017,18 @@ function avisar(titulo, texto, tipo="info"){
    la pantalla de captura: al terminar aparece la opción de iniciar un
    nuevo reporte de servicio técnico.
    ============================================================ */
-const envio = { activo:false, total:0, origen:"", resumen:"" };
+const envio = { activo:false, total:0, hechos:0, origen:"", resumen:"", preparando:"" };
 
-function iniciarEnvio(origen, resumen){
+/* La pantalla de envio se abre EN CUANTO el tecnico da la orden, aunque
+   todavia falte leer el GPS o guardar las fotos: en planta, un boton que
+   no responde se vuelve a oprimir. El tercer parametro es el texto de esa
+   espera; mientras exista, la barra no dice todavia "Reporte enviado". */
+function iniciarEnvio(origen, resumen, preparando){
   envio.activo = true;
   envio.origen = origen || "";
   envio.resumen = resumen || "";
+  envio.preparando = preparando || "";
+  envio.hechos = 0;
   envio.total = Math.max(1, estado.cola.length);
   const p = $("#envio");
   p.dataset.estado = "enviando";
@@ -960,9 +1042,32 @@ function iniciarEnvio(origen, resumen){
   enviarCola();
 }
 
+/* Se llama cuando ya quedo armado todo lo que se va a mandar. */
+function listoEnvio(){
+  if(!envio.activo) return;
+  envio.preparando = "";
+  envio.hechos = 0;
+  envio.total = Math.max(1, estado.cola.length);
+  pintarEnvio();
+  enviarCola();
+}
+
 function pintarEnvio(){
   if(!envio.activo) return;
   const pend = estado.cola.length;
+  if(envio.preparando){
+    const p0 = $("#envio");
+    p0.dataset.estado = "enviando";
+    $("#envEtiqueta").textContent = "Un momento";
+    $("#envTitulo").textContent = envio.preparando;
+    $("#envDetalle").innerHTML = "No cierre la aplicación.";
+    $("#envBarra").style.width = "8%";
+    $("#envPct").textContent = "…";
+    $("#btnEnvNuevo").hidden = true;
+    $("#btnEnvMenu").hidden = true;
+    return;
+  }
+  envio.total = Math.max(envio.total, pend + envio.hechos);
   const hechos = Math.max(0, envio.total - pend);
   const pct = envio.total ? Math.round(hechos * 100 / envio.total) : 100;
   $("#envBarra").style.width = (pend === 0 ? 100 : Math.min(pct, 99)) + "%";
@@ -1096,6 +1201,7 @@ function pintarCierreForm(){
     $("#firmaCaja").hidden = !estado.incluirFirma;
     $("#btnLimpiarFirma").hidden = !estado.incluirFirma;
     if(estado.incluirFirma) prepararFirma();
+    prepararFirmaTec();
     prepararCierreAct();
     pintarCierreAct();
   }
@@ -1125,16 +1231,18 @@ function pintarBoton(){
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
   const faltanFirma = esSalida && !estado.firma;
+  const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = esSalida ? idsMarcadosCliente().filter(id=>act.marcas[id]!=="TERMINADA" && !(act.notas[id]||"").trim()).length : 0;
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
-  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || sinNota>0;
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || sinNota>0;
 
-  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || sinNota)){
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || sinNota)){
     nota.classList.add("alerta");
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
     if(faltanActiv) faltan.push("las actividades realizadas");
+    if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
   } else if(p.id==="llegada"){
@@ -1148,7 +1256,9 @@ function pintarCola(){
   const et=$("#colaEtiqueta"), val=$("#colaValor");
   if(estado.cola.length===0){
     et.textContent = "Estado de envío";
-    val.innerHTML = '<b data-cero="1">✓ Todo enviado</b>';
+    val.innerHTML = estado.enviados
+      ? '<b data-cero="1">✓ Todo enviado</b>'
+      : '<b data-cero="0">Aún sin enviar</b>';
   } else {
     et.textContent = "Registros sin enviar";
     val.innerHTML = `<b data-cero="0">${estado.cola.length}</b> en el teléfono`;
@@ -1215,6 +1325,7 @@ async function cancelarServicio(){
     `Folio de cancelación: ${folioCan}\nCliente: ${o.titulo || o.cliente}\nMotivo: ${motivo}\n\n` +
     "Quedará registrado con su nombre, la hora y su ubicación. No se puede deshacer.", "Sí, cancelar");
   if(!ok) return;
+  iniciarEnvio("cancelacion", `${folioCan} · ${o.titulo || o.cliente} · ${motivo}`, "Registrando la cancelación…");
   const ev = estado.eventos || {};
   const ref = ev.regreso || ev.comida || ev.llegada || null;
   encolar({
@@ -1230,7 +1341,7 @@ async function cancelarServicio(){
   });
   $("#cancelaMotivo").value = ""; $("#cancelaDetalle").value = "";
   $("#cancelaPanel").hidden = true;
-  iniciarEnvio("cancelacion", `${folioCan} · ${o.titulo || o.cliente} · ${motivo}`);
+  listoEnvio();
   limpiarServicio();
 }
 $("#btnAbrirCancela").addEventListener("click", ()=>{
@@ -1249,6 +1360,9 @@ function registrar(){
   if(!paso || !estado.orden) return;
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
   estado.leyendo = true; pintarBoton();
+  // La salida cierra el servicio: la pantalla de envio se abre de inmediato,
+  // sin esperar a que el GPS conteste.
+  if(paso.id==="salida") iniciarEnvio("servicio", "", "Leyendo la ubicación GPS…");
 
   navigator.geolocation.getCurrentPosition(pos=>{
     const {latitude:lat, longitude:lon, accuracy:prec} = pos.coords;
@@ -1275,6 +1389,11 @@ function registrar(){
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
                 fase:"firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
     }
+    // La firma del tecnico se guarda como evidencia aparte, ya sellada.
+    if(paso.id==="salida" && estado.firmaTec){
+      encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
+                fase:"firma_tecnico", fecha:hoy(), hora, imagen:estado.firmaTec, folio:o.folio||"" });
+    }
     // Y el reporte de actividades del día para este cliente (asignadas + adicionales).
     if(paso.id==="salida") encolarReporteAct(o);
     persistir();
@@ -1292,9 +1411,10 @@ function registrar(){
       avisar(`${paso.nombre} registrada`, tieneRef?`${hora} · ${dist} m del punto asignado.`:`${hora} · ubicación registrada.`,"ok");
     }
     // Salida registrada: se cubre la pantalla con el logo y la barra de envío.
-    if(paso.id==="salida") iniciarEnvio("servicio");
+    if(paso.id==="salida") listoEnvio();
   }, err=>{
     estado.leyendo=false; pintarBoton();
+    if(envio.activo && envio.preparando) cerrarEnvio();
     const causa = err.code===1 ? "Debe permitir el acceso a la ubicación en el navegador."
                 : err.code===3 ? "La señal de GPS tardó demasiado. Salga a cielo abierto e intente otra vez."
                 : "No se pudo leer la ubicación.";
@@ -1382,50 +1502,81 @@ $("#chkFirma").addEventListener("change", e=>{
   persistir(); pintarCierreForm(); pintarBoton();
 });
 
-/* ---------- Firma del cliente (dibujo en canvas) ---------- */
-let ctxFirma=null, dibujando=false, firmaConTrazo=false;
-function prepararFirma(){
-  const c=$("#firma");
-  if(c.dataset.listo==="1") return;
-  const ancho = c.clientWidth || c.parentElement.clientWidth || 300;
-  c.width = ancho; c.height = 170;
-  ctxFirma = c.getContext("2d");
-  ctxFirma.strokeStyle = "#E6EBF0";
-  ctxFirma.lineWidth = 2.2; ctxFirma.lineCap="round"; ctxFirma.lineJoin="round";
-  c.dataset.listo = "1";
-}
-function puntoFirma(e){
-  const c=$("#firma"), r=c.getBoundingClientRect();
-  return { x:e.clientX - r.left, y:e.clientY - r.top };
-}
-(function initFirma(){
-  const c=$("#firma");
+/* ---------- Firmas (dibujo en canvas) ----------
+   Dos firmas al cerrar el servicio:
+   - la del TECNICO, que hace suyo el contenido del reporte (art. 804 LFT:
+     el control de actividades lo conserva el patron; firmado por el
+     trabajador deja de ser un registro unilateral de la empresa);
+   - la del CLIENTE, que acredita la prestacion del servicio.
+   La del tecnico se sella con su nombre, correo, folio, fecha, hora y
+   coordenadas, igual que las fotografias. */
+function montarFirma(cfg){
+  const c = $("#"+cfg.canvas);
+  if(!c) return null;
+  const api = { ctx:null, trazo:false, dibujando:false };
+  api.preparar = function(){
+    if(c.dataset.listo==="1") return;
+    const ancho = c.clientWidth || c.parentElement.clientWidth || 300;
+    c.width = ancho; c.height = 170;
+    api.ctx = c.getContext("2d");
+    api.ctx.strokeStyle = "#E6EBF0";
+    api.ctx.lineWidth = 2.2; api.ctx.lineCap="round"; api.ctx.lineJoin="round";
+    c.dataset.listo = "1";
+  };
+  api.limpiar = function(){
+    api.preparar();
+    api.ctx.clearRect(0,0,c.width,c.height);
+    api.trazo = false;
+    cfg.guardar(null);
+    const pista = $("#"+cfg.pista); if(pista) pista.style.display="";
+    pintarBoton();
+  };
+  api.reiniciar = function(){ c.dataset.listo=""; api.trazo=false; const pi=$("#"+cfg.pista); if(pi) pi.style.display=""; };
+  const punto = e => { const r=c.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
   c.addEventListener("pointerdown", e=>{
-    prepararFirma(); dibujando=true;
-    const p=puntoFirma(e); ctxFirma.beginPath(); ctxFirma.moveTo(p.x,p.y);
+    api.preparar(); api.dibujando=true;
+    const p=punto(e); api.ctx.beginPath(); api.ctx.moveTo(p.x,p.y);
     try{ c.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   });
   c.addEventListener("pointermove", e=>{
-    if(!dibujando) return;
-    const p=puntoFirma(e); ctxFirma.lineTo(p.x,p.y); ctxFirma.stroke();
-    firmaConTrazo=true; $("#firmaPista").style.display="none";
+    if(!api.dibujando) return;
+    const p=punto(e); api.ctx.lineTo(p.x,p.y); api.ctx.stroke();
+    api.trazo = true;
+    const pista = $("#"+cfg.pista); if(pista) pista.style.display="none";
   });
   const fin = ()=>{
-    if(!dibujando) return; dibujando=false;
-    if(firmaConTrazo){ estado.firma = $("#firma").toDataURL("image/png"); pintarBoton(); }
+    if(!api.dibujando) return; api.dibujando=false;
+    if(api.trazo){ cfg.guardar(cfg.sellar ? firmaSellada(c) : c.toDataURL("image/png")); pintarBoton(); }
   };
   c.addEventListener("pointerup", fin);
   c.addEventListener("pointercancel", fin);
   c.addEventListener("pointerleave", fin);
-})();
-$("#btnLimpiarFirma").addEventListener("click", ()=>{
-  prepararFirma();
-  ctxFirma.clearRect(0,0,$("#firma").width,$("#firma").height);
-  firmaConTrazo=false; estado.firma=null;
-  $("#firmaPista").style.display="";
-  pintarBoton();
+  const btn = $("#"+cfg.limpiar); if(btn) btn.addEventListener("click", api.limpiar);
+  return api;
+}
+
+/* Copia la firma sobre fondo solido y le quema el sello de identidad. */
+function firmaSellada(c){
+  const t = document.createElement("canvas");
+  t.width = c.width; t.height = c.height;
+  const x = t.getContext("2d");
+  x.fillStyle = "#0B0D10"; x.fillRect(0,0,t.width,t.height);
+  x.drawImage(c,0,0);
+  try{ sellarLienzo(t); }catch(e){}
+  return t.toDataURL("image/png");
+}
+
+const firmaCliente = montarFirma({
+  canvas:"firma", pista:"firmaPista", limpiar:"btnLimpiarFirma", sellar:false,
+  guardar: d => { estado.firma = d; }
 });
+const firmaTecnico = montarFirma({
+  canvas:"firmaTec", pista:"firmaTecPista", limpiar:"btnLimpiarFirmaTec", sellar:true,
+  guardar: d => { estado.firmaTec = d; }
+});
+function prepararFirma(){ if(firmaCliente) firmaCliente.preparar(); }
+function prepararFirmaTec(){ if(firmaTecnico) firmaTecnico.preparar(); }
 
 /* ---------- Llamadas JSONP al conector (login, folio, clientes) ---------- */
 let _cbSeq = 0;
@@ -1626,9 +1777,10 @@ async function reiniciarServicio(){
 function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
-  estado.actividades = ""; estado.firma = null; estado.incluirFirma = false; estado.orden = null;
-  const c=$("#firma"); if(c) c.dataset.listo="";
-  firmaConTrazo=false; $("#firmaPista").style.display="";
+  estado.actividades = ""; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
+  estado.enviados = 0;
+  if(firmaCliente) firmaCliente.reiniciar();
+  if(firmaTecnico) firmaTecnico.reiniciar();
   $("#chkFirma").checked = false;
   localStorage.removeItem(LS.estado);
   persistir();
@@ -1751,7 +1903,7 @@ function pintarEstadoInicio(){
   e.dataset.pend = n ? "1" : "0";
   e.textContent = n
     ? (navigator.onLine ? `Enviando ${n} registro(s)… no cierres la app.` : `${n} registro(s) guardados en el teléfono; se enviarán al recuperar señal.`)
-    : "✓ Todo enviado";
+    : (estado.enviados ? "✓ Todo enviado" : "Aún no se ha enviado ningún reporte.");
   let pend = null;
   try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id))).length; }catch(_){}
   const o = estado.orden;
@@ -2030,7 +2182,11 @@ function encolarHojaCliente(o, reporteId, ids){
     salida: { hora: ahora(), lat:null, lon:null },
     hechas, adicionales: act.adicionales.slice(),
     detalle: estado.actividades.trim(),
-    firma: estado.incluirFirma && estado.firma ? estado.firma : ""
+    firma: estado.incluirFirma && estado.firma ? estado.firma : "",
+    firmaTecnico: estado.firmaTec || "",
+    leyendaTecnico: estado.firmaTec
+      ? "Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí."
+      : ""
   });
 }
 
@@ -2146,8 +2302,7 @@ function pintarEnvioAct(){
         ? "Aviso: con menos de 3 fotos la calificación del reporte baja 2 puntos."
         : "Listo para enviar. Si no hay señal, se guarda en el teléfono y se envía solo.");
   $("#actDetalleConteo").textContent = act.detalle.length + " caracteres";
-  $("#actCola").textContent = estado.cola.length
-    ? `${estado.cola.length} registro(s) sin enviar en el teléfono` : "✓ Todo enviado";
+  $("#actCola").textContent = textoCola();
 }
 
 async function enviarActividades(){
@@ -2165,6 +2320,8 @@ async function enviarActividades(){
     `Adicionales: ${act.adicionales.length}\nFotos: ${act.fotos.length}\n\nUna vez enviado no puede corregirse.`, "Enviar reporte");
   btnEnv.dataset.ocupado = "";
   if(!ok) return;
+  iniciarEnvio("actividades", "", "Preparando el reporte…");
+  await new Promise(r=>setTimeout(r, 30));   // deja pintar la pantalla antes del trabajo pesado
 
   const reporteId = "R" + idCorto();
   encolar({
@@ -2190,7 +2347,7 @@ async function enviarActividades(){
   guardarAct(); guardarFotosAct();
   $("#actividadesPantalla").hidden = true;
   pintarActividades();
-  iniciarEnvio("actividades");
+  listoEnvio();
 }
 $("#btnEnviarAct").addEventListener("click", enviarActividades);
 
@@ -2281,8 +2438,7 @@ function pintarBotonAsignar(){
   const n = $("#admNota");
   n.classList.toggle("alerta", faltan.length > 0);
   n.textContent = faltan.length ? "Falta " + faltan.join(", ") + "." : "Se asignarán " + t.length + " actividad(es).";
-  $("#admCola").textContent = estado.cola.length
-    ? `${estado.cola.length} registro(s) sin enviar en el teléfono` : "✓ Todo enviado";
+  $("#admCola").textContent = textoCola();
 }
 ["#admResponsable","#admCliente","#admFecha"].forEach(s=> $(s).addEventListener("change", pintarBotonAsignar));
 $("#admTextos").addEventListener("input", pintarBotonAsignar);

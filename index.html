@@ -592,7 +592,7 @@ body{
     <h2 id="inicioNombre">—</h2>
     <button class="menu-op" id="btnIrActividades" type="button">
       <b>Mis actividades</b>
-      <span id="inicioActDet">Actividades asignadas, pendientes y adicionales del día.</span>
+      <span id="inicioActDet">Consulta todos tus pendientes, de todos los clientes.</span>
     </button>
     <button class="menu-op" id="btnIrServicio" type="button">
       <b>Servicio en campo</b>
@@ -631,8 +631,14 @@ body{
       <button class="btn" id="btnActBloqueo" type="button">—</button>
     </div>
 
+    <div id="actConsulta" hidden>
+      <span class="etiqueta act-bloque" id="actConsultaTitulo">Todos tus pendientes</span>
+      <p class="pista" id="actConsultaAyuda">Consulta. Para reportar una actividad abre el servicio con su cliente.</p>
+      <div id="actListaConsulta"></div>
+    </div>
+
     <div id="actContenido">
-    <span class="etiqueta act-bloque">Asignadas</span>
+    <span class="etiqueta act-bloque">Asignadas para este cliente</span>
     <div id="actLista"></div>
 
     <span class="etiqueta act-bloque">Actividades adicionales</span>
@@ -1583,8 +1589,8 @@ function pintarEstadoInicio(){
   const o = estado.orden;
   const servicio = o
     ? `${o.titulo || o.cliente} · folio ${o.folio || "—"}` + (estado.eventos.llegada ? "" : " · falta registrar llegada")
-    : "Falta elegir el cliente";
-  $("#inicioActDet").textContent = (pend === null ? "Actividades del día" : `${pend} actividad(es) pendiente(s)`) + " · " + servicio;
+    : "de todos tus clientes";
+  $("#inicioActDet").textContent = (pend === null ? "Consulta todos tus pendientes" : `${pend} pendiente(s)`) + " · " + servicio;
 }
 function mostrarInicio(){
   $("#inicioNombre").textContent = estado.tecnico || "—";
@@ -1673,7 +1679,7 @@ function pintarCandadoAct(){
   }
   const bloqueo = $("#actBloqueo"), btn = $("#btnActBloqueo"), txt = $("#actBloqueoTexto");
   if(!o){
-    txt.textContent = "Primero elige el cliente. Se generará el folio del servicio y después podrás reportar tus actividades. Si el trabajo es de taller u oficina, elige el cliente “Blake Inc”.";
+    txt.textContent = "Abajo puedes consultar todos tus pendientes. Para reportar uno, primero elige el cliente: se genera el folio del servicio y solo entonces podrás marcar las actividades de ese cliente. Si el trabajo es de taller u oficina, elige el cliente “Blake Inc”.";
     btn.textContent = "Elegir cliente";
     btn.onclick = ()=>{ $("#actividadesPantalla").hidden = true; pedirOrden(); };
     bloqueo.hidden = false; $("#actContenido").hidden = true; return false;
@@ -1701,9 +1707,24 @@ function pintarActividades(){
   $("#actResumen").innerHTML = `<b>${lista.length}</b> pendiente(s)` +
     (atrasadas ? ` · <span class="atr">${atrasadas} atrasada(s)</span>` : "");
 
-  $("#actLista").innerHTML = lista.length ? lista.map(htmlActItem).join("")
+  /* Consulta aparte: todo lo pendiente, de todos los clientes, en solo lectura.
+     Con un servicio abierto se listan los pendientes de OTROS clientes, para no
+     repetir los que ya se pueden reportar arriba. */
+  const delCli = new Set(actividadesDelCliente().map(a=>String(a.id)));
+  const otros = listo ? lista.filter(a=>!delCli.has(String(a.id))) : lista;
+  $("#actConsultaTitulo").textContent = listo ? "Tus otros pendientes" : "Todos tus pendientes";
+  $("#actConsultaAyuda").textContent = listo
+    ? "Son de otros clientes. Para reportarlos abre el servicio con el cliente que les corresponde."
+    : "Consulta. Para reportar una actividad abre el servicio con su cliente.";
+  $("#actListaConsulta").innerHTML = otros.length ? otros.map(htmlActConsulta).join("")
+    : `<p class="pista act-vacio">${act.cargando ? "Cargando actividades…" : (listo ? "No tienes pendientes con otros clientes." : "No tienes actividades pendientes.")}</p>`;
+  $("#actConsulta").hidden = false;
+
+  /* Solo se pueden reportar las actividades asignadas para el cliente del servicio. */
+  const reportables = listo ? actividadesDelCliente() : [];
+  $("#actLista").innerHTML = reportables.length ? reportables.map(htmlActItem).join("")
     : `<p class="pista act-vacio">${act.cargando ? "Cargando actividades…"
-      : "No tienes actividades pendientes asignadas. Si realizaste trabajos, regístralos como actividad adicional."}</p>`;
+      : "No tienes actividades asignadas pendientes para este cliente. Si realizaste trabajos, regístralos como actividad adicional."}</p>`;
   enlazarActItems($("#actLista"));
 
   $("#actAdicLista").innerHTML = htmlAdicionales();
@@ -1724,19 +1745,32 @@ function normCliente(s){
     .replace(/\s+/g," ").trim().toLowerCase();
 }
 /* Actividades vigentes del colaborador para el cliente del servicio abierto.
-   Las asignaciones que todavía no traen cliente se muestran siempre. */
+   Regla dura: solo aparecen las que fueron asignadas a ESE cliente. Una
+   actividad sin cliente no se puede reportar dentro de un servicio; vive
+   únicamente en la pantalla "Mis actividades" como consulta. */
 function actividadesDelCliente(){
   const ocultas = idsEnCola();
   const cli = normCliente(estado.orden && (estado.orden.titulo || estado.orden.cliente));
+  if(!cli) return [];
   return act.lista.filter(a=>{
     if(ocultas.has(String(a.id))) return false;
-    const ac = normCliente(a.cliente);
-    return !ac || !cli || ac === cli;
+    return normCliente(a.cliente) === cli;
   });
 }
 function idsMarcadosCliente(){
   const vig = new Set(actividadesDelCliente().map(a=>String(a.id)));
   return Object.keys(act.marcas).filter(id=>vig.has(id));
+}
+
+/* Renglón de solo lectura para la consulta "Todos tus pendientes". */
+function htmlActConsulta(a){
+  const f = etiquetaFecha(a.fecha);
+  const cli = a.cliente ? esc(a.cliente) + (a.sitio ? " · " + esc(a.sitio) : "") : "Sin cliente asignado";
+  return `<div class="act-item" data-solo="1">
+    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span><span class="act-fecha">${cli}</span></div>
+    <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
+    ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
+  </div>`;
 }
 
 function htmlActItem(a){

@@ -448,6 +448,43 @@ body{
 #envio .btn-nuevo{background:transparent;border:1px solid var(--verde);color:var(--verde)}
 #envio .btn-nuevo:hover:not(:disabled){filter:none;background:rgba(47,181,124,.12)}
 #envio .btn[hidden],#envio .link-volver[hidden]{display:none}
+#envio .btn-pdf{margin-top:20px;background:transparent;border:1px solid var(--naranja);color:var(--naranja)}
+#envio .btn-pdf:hover:not(:disabled){filter:none;background:rgba(243,146,0,.12)}
+
+/* ---------- Hoja de servicio para el cliente (solo al imprimir / guardar en PDF) ---------- */
+#pdfHoja{display:none}
+@media print{
+  body[data-imprimiendo="1"] > *:not(#pdfHoja){display:none!important}
+  body[data-imprimiendo="1"]{background:#fff}
+  #pdfHoja{display:block;background:#fff;color:#111;font:12px/1.45 system-ui,Arial,sans-serif;padding:0}
+  #pdfHoja h1{font-size:19px;margin:0 0 3px;letter-spacing:.02em}
+  #pdfHoja h2{font-size:13px;margin:16px 0 6px;padding-bottom:3px;border-bottom:1.5px solid #F39200;
+              text-transform:uppercase;letter-spacing:.08em}
+  #pdfHoja p{margin:0}
+  .pdf-cab{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111;padding-bottom:10px}
+  .pdf-cab p{font-size:10.5px;color:#555}
+  .pdf-logo{height:42px;width:auto}
+  .pdf-folio{margin-left:auto;text-align:right;border:1.5px solid #111;padding:5px 10px}
+  .pdf-folio span{display:block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#555}
+  .pdf-folio b{font-size:16px}
+  .pdf-datos{width:100%;border-collapse:collapse;margin-top:8px}
+  .pdf-datos th{width:32%;text-align:left;font-weight:600;color:#444;padding:4px 8px 4px 0;
+                vertical-align:top;border-bottom:1px solid #ddd}
+  .pdf-datos td{padding:4px 0;border-bottom:1px solid #ddd}
+  .pdf-act{margin:4px 0 0 18px;padding:0}
+  .pdf-act li{margin-bottom:3px}
+  .pdf-vacio{color:#777;font-style:italic}
+  .pdf-detalle{white-space:normal;text-align:justify}
+  .pdf-fotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .pdf-fotos img{width:31%;border:1px solid #bbb;break-inside:avoid}
+  .pdf-firmas{display:flex;gap:40px;margin-top:34px;break-inside:avoid}
+  .pdf-firmas > div{flex:1;text-align:center}
+  .pdf-firmas span{display:block;min-height:46px}
+  .pdf-firmas p{border-top:1px solid #111;padding-top:4px;font-size:10.5px;color:#444}
+  .pdf-firma{max-height:58px;max-width:100%}
+  .pdf-pie{margin-top:20px;padding-top:8px;border-top:1px solid #ddd;font-size:9px;color:#666}
+  @page{size:A4;margin:14mm}
+}
 
 #modalConfirmar{z-index:140}
 .confirmar-texto{text-align:left!important;white-space:pre-line;margin:0 0 20px!important;font-size:13px!important}
@@ -714,10 +751,14 @@ body{
     <div class="env-barra"><i id="envBarra"></i></div>
     <div class="env-pct" id="envPct">0 %</div>
     <p class="env-detalle" id="envDetalle">—</p>
+    <button class="btn btn-pdf" id="btnEnvPdf" type="button" hidden>Reporte para el cliente (PDF)</button>
     <button class="btn btn-nuevo" id="btnEnvNuevo" type="button" hidden>Iniciar nuevo reporte de servicio técnico</button>
     <button class="link-volver link-centro" id="btnEnvMenu" type="button" hidden>Ir al menú</button>
   </div>
 </div>
+
+<!-- Hoja de servicio para imprimir o guardar como PDF (solo visible al imprimir) -->
+<div id="pdfHoja" aria-hidden="true"></div>
 
 <!-- Modal genérico de confirmación (reemplaza la ventana nativa del navegador, que algunos navegadores bloquean) -->
 <div class="portada" id="modalConfirmar" hidden role="dialog" aria-modal="true" aria-labelledby="mcTitulo">
@@ -912,6 +953,7 @@ function iniciarEnvio(origen, resumen){
   $("#envPct").textContent = "0 %";
   $("#btnEnvNuevo").hidden = true;
   $("#btnEnvMenu").hidden = true;
+  $("#btnEnvPdf").hidden = true;
   p.hidden = false;
   window.scrollTo(0,0);
   pintarEnvio();
@@ -928,6 +970,8 @@ function pintarEnvio(){
   const p = $("#envio");
   const asg = envio.origen === "asignacion";
   $("#btnEnvNuevo").textContent = asg ? "Asignar a otro colaborador" : "Iniciar nuevo reporte de servicio técnico";
+  /* El PDF no depende de la señal: la hoja ya quedó guardada en el teléfono. */
+  $("#btnEnvPdf").hidden = asg || !hojaGuardada();
 
   if(pend === 0){
     p.dataset.estado = "listo";
@@ -1171,6 +1215,42 @@ function registrar(){
   }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 }
 
+/* ---------- Sello de identidad quemado en la foto ----------
+   Se dibuja sobre los píxeles al momento de capturar, para que la evidencia
+   diga por sí sola de quién es, de qué servicio, cuándo y desde dónde.
+   No se puede quitar editando datos del archivo. */
+function datosSello(){
+  const o = estado.orden || {};
+  const ev = estado.eventos.regreso || estado.eventos.comida || estado.eventos.llegada || null;
+  const ubic = ev && ev.lat != null
+    ? `${(+ev.lat).toFixed(5)}, ${(+ev.lon).toFixed(5)}` + (ev.prec != null ? ` ±${ev.prec} m` : "")
+    : "Ubicación no registrada";
+  return [
+    "BLAKE INC · Folio " + (o.folio || "—"),
+    (o.titulo || o.cliente || "Sin cliente") + (o.sitio ? " · " + o.sitio : ""),
+    (estado.tecnico || "—") + (estado.usuario ? " · " + estado.usuario : ""),
+    hoy() + " " + ahora() + " · " + ubic
+  ];
+}
+function sellarLienzo(lienzo){
+  const ctx = lienzo.getContext("2d"), w = lienzo.width, h = lienzo.height;
+  const lineas = datosSello();
+  const f = Math.max(11, Math.round(w / 42));
+  const alto = f * 1.55, pad = Math.round(f * 0.7);
+  const banda = alto * lineas.length + pad * 2;
+  ctx.fillStyle = "rgba(0,0,0,.62)";
+  ctx.fillRect(0, h - banda, w, banda);
+  ctx.fillStyle = "#FF9E2C";
+  ctx.fillRect(0, h - banda, Math.round(f * 0.35), banda);
+  ctx.textBaseline = "top";
+  lineas.forEach((t, i)=>{
+    ctx.font = (i === 0 ? "bold " : "") + f + "px system-ui, sans-serif";
+    ctx.fillStyle = i === 0 ? "#FFB84D" : "#FFFFFF";
+    ctx.fillText(t, pad + f, h - banda + pad + alto * i);
+  });
+  return lienzo;
+}
+
 /* ---------- Captura y compresión de foto ---------- */
 $("#camara").addEventListener("change", e=>{
   const archivo = e.target.files && e.target.files[0];
@@ -1185,6 +1265,7 @@ $("#camara").addEventListener("change", e=>{
       lienzo.width = Math.round(img.width*escala);
       lienzo.height = Math.round(img.height*escala);
       lienzo.getContext("2d").drawImage(img,0,0,lienzo.width,lienzo.height);
+      sellarLienzo(lienzo);
       const url = lienzo.toDataURL("image/jpeg",0.7);
       const kb = Math.round(url.length*0.75/1024);
       const fase = faseActual();
@@ -1497,6 +1578,7 @@ $("#btnEnvNuevo").addEventListener("click", ()=>{
   limpiarServicio();
 });
 $("#btnEnvMenu").addEventListener("click", ()=>{ cerrarEnvio(); mostrarInicio(); });
+$("#btnEnvPdf").addEventListener("click", imprimirHoja);
 
 /* ---------- Conexión ---------- */
 function pintarRed(){
@@ -1843,13 +1925,98 @@ function agregarAdicionalCierre(){
 $("#btnCierreAdic").addEventListener("click", agregarAdicionalCierre);
 $("#cierreAdicInput").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); agregarAdicionalCierre(); } });
 
+/* ---------- Hoja de servicio en PDF para el cliente ----------
+   Se congela al cerrar el servicio, antes de que se limpie la pantalla, y se
+   guarda en el teléfono para poder imprimirla o guardarla como PDF y enviarla
+   al cliente en ese momento, con o sin señal. */
+function guardarHojaServicio(o, reporteId, ids){
+  const hechas = ids.filter(id=>act.marcas[id] === "TERMINADA")
+    .map(id=>{ const a = act.lista.find(x=>String(x.id) === id); return (a && (a.titulo || a.texto)) || ""; })
+    .filter(Boolean);
+  const ev = estado.eventos || {};
+  estado.hoja = {
+    reporteId, folio: o.folio || "", cliente: o.titulo || o.cliente || "", sitio: o.sitio || "",
+    orden: o.orden || "", fecha: hoy(),
+    tecnico: estado.tecnico || "", usuario: estado.usuario || "",
+    llegada: ev.llegada || null, comida: ev.comida || null, regreso: ev.regreso || null,
+    salida: { hora: ahora() },
+    hechas, adicionales: act.adicionales.slice(),
+    detalle: estado.actividades.trim(),
+    fotos: estado.fotos.despues.filter(f=>f.url).map(f=>f.url),
+    firma: estado.incluirFirma ? estado.firma : null
+  };
+  /* Si no cabe con las fotos, se guarda sin ellas: vale más conservar la hoja
+     que perderla entera. En la sesión actual el PDF sí sale con fotos. */
+  try{ localStorage.setItem("blakeHoja", JSON.stringify(estado.hoja)); }
+  catch(_){
+    try{ localStorage.setItem("blakeHoja", JSON.stringify(Object.assign({}, estado.hoja, {fotos:[]}))); }catch(__){}
+  }
+}
+function hojaGuardada(){
+  if(estado.hoja) return estado.hoja;
+  try{ return JSON.parse(localStorage.getItem("blakeHoja") || "null"); }catch(_){ return null; }
+}
+function filaHoja(et, v){ return v ? `<tr><th>${esc(et)}</th><td>${esc(v)}</td></tr>` : ""; }
+function armarHojaPDF(){
+  const h = hojaGuardada();
+  if(!h) return false;
+  const hr = e => e && e.hora ? e.hora : "—";
+  const gps = e => e && e.lat != null ? `${(+e.lat).toFixed(5)}, ${(+e.lon).toFixed(5)}` : "";
+  const lista = arr => arr.length
+    ? "<ol class='pdf-act'>" + arr.map(t=>`<li>${esc(t)}</li>`).join("") + "</ol>"
+    : "<p class='pdf-vacio'>Sin actividades registradas.</p>";
+  $("#pdfHoja").innerHTML = `
+    <div class="pdf-cab">
+      <img class="pdf-logo" data-logo alt="Blake Inc">
+      <div>
+        <h1>Reporte de servicio técnico</h1>
+        <p>Blake Inc. Latam · www.blakeinc.com.mx · +52 55 2900 3917</p>
+      </div>
+      <div class="pdf-folio"><span>Folio</span><b>${esc(h.folio || "—")}</b></div>
+    </div>
+    <table class="pdf-datos">
+      ${filaHoja("Cliente", h.cliente)}
+      ${filaHoja("Planta / sitio", h.sitio)}
+      ${filaHoja("Orden de servicio", h.orden)}
+      ${filaHoja("Fecha", h.fecha)}
+      ${filaHoja("Técnico responsable", h.tecnico + (h.usuario ? " · " + h.usuario : ""))}
+    </table>
+    <h2>Jornada</h2>
+    <table class="pdf-datos">
+      <tr><th>Llegada</th><td>${esc(hr(h.llegada))} ${esc(gps(h.llegada))}</td></tr>
+      <tr><th>Salida a comer</th><td>${esc(hr(h.comida))}</td></tr>
+      <tr><th>Regreso</th><td>${esc(hr(h.regreso))}</td></tr>
+      <tr><th>Salida</th><td>${esc(hr(h.salida))}</td></tr>
+    </table>
+    <h2>Actividades realizadas</h2>
+    ${lista(h.hechas.concat(h.adicionales))}
+    ${h.detalle ? `<h2>Detalle del trabajo</h2><p class="pdf-detalle">${esc(h.detalle).replace(/\n/g,"<br>")}</p>` : ""}
+    ${h.fotos.length ? `<h2>Evidencia fotográfica</h2><div class="pdf-fotos">${h.fotos.map(u=>`<img src="${u}" alt="Evidencia">`).join("")}</div>` : ""}
+    <div class="pdf-firmas">
+      <div><span>${esc(h.tecnico || "")}</span><p>Técnico Blake Inc</p></div>
+      <div>${h.firma ? `<img class="pdf-firma" src="${h.firma}" alt="Firma">` : "<span>&nbsp;</span>"}<p>Firma de conformidad del cliente</p></div>
+    </div>
+    <p class="pdf-pie">Documento generado por la aplicación de servicio de Blake Inc. Identificador interno ${esc(h.reporteId)}. Las fotografías incluidas llevan impresos el folio, la fecha, la hora, la ubicación y el técnico que las tomó.</p>`;
+  aplicarLogos();
+  return true;
+}
+function imprimirHoja(){
+  if(!armarHojaPDF()){
+    avisar("Sin reporte", "Todavía no hay un servicio cerrado para imprimir.", "error");
+    return;
+  }
+  document.body.dataset.imprimiendo = "1";
+  setTimeout(()=>{ window.print(); document.body.dataset.imprimiendo = ""; }, 120);
+}
+
 /* Al registrar la salida se manda también el reporte de actividades del día
    para ese cliente: asignadas marcadas + adicionales + el detalle escrito en
    "Actividades realizadas", con las fotos del cierre como evidencia. */
 function encolarReporteAct(o){
   const ids = idsMarcadosCliente();
-  if(!ids.length && !act.adicionales.length) return;
   const reporteId = "R" + idCorto();
+  guardarHojaServicio(o, reporteId, ids);
+  if(!ids.length && !act.adicionales.length) return;
   encolar({
     tipo:"reporte_act", token:estado.token, reporteId,
     cliente: o.titulo || o.cliente || "", folio: o.folio || "", sitio: o.sitio || "",
@@ -1894,6 +2061,7 @@ function comprimirImagen(archivo, listo){
       lienzo.width = Math.round(img.width * escala);
       lienzo.height = Math.round(img.height * escala);
       lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
+      sellarLienzo(lienzo);
       const url = lienzo.toDataURL("image/jpeg", 0.7);
       listo(url, Math.round(url.length * 0.75 / 1024));
     };
@@ -2205,10 +2373,12 @@ $("#btnAdmMenu").addEventListener("click", mostrarInicio);
 $("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAdmin(); });
 
 /* Logotipo en las pantallas nuevas (se reutiliza el de la portada) */
-document.querySelectorAll("img[data-logo]").forEach(i=>{
+function aplicarLogos(){
   const src = document.querySelector(".logo-mark--grande[src]");
-  if(src) i.src = src.getAttribute("src");
-});
+  if(!src) return;
+  document.querySelectorAll("img[data-logo]").forEach(i=>{ if(!i.getAttribute("src")) i.src = src.getAttribute("src"); });
+}
+aplicarLogos();
 
 /* ---------- Arranque ---------- */
 restaurar();

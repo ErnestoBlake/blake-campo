@@ -449,6 +449,25 @@ body{
 #envio .btn-nuevo:hover:not(:disabled){filter:none;background:rgba(47,181,124,.12)}
 #envio .btn[hidden],#envio .link-volver[hidden]{display:none}
 
+/* ---------- Cancelación del servicio ---------- */
+.cancela{margin-top:18px}
+.cancela[hidden]{display:none}
+.cancela-abrir{
+  width:100%;background:transparent;border:1px dashed rgba(224,65,58,.55);color:#E0413A;
+  border-radius:12px;padding:11px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+}
+.cancela-abrir:hover{background:rgba(224,65,58,.08)}
+.cancela-panel{margin-top:14px;padding:16px;border:1px solid rgba(224,65,58,.45);border-radius:14px;background:rgba(224,65,58,.05)}
+.cancela-panel[hidden]{display:none}
+.cancela-panel .pista{margin:6px 0 14px}
+.cancela-panel select,.cancela-panel textarea{
+  width:100%;background:var(--acero-800);color:#fff;border:1px solid var(--linea);
+  border-radius:10px;padding:11px;font:inherit;font-size:15px;
+}
+.cancela-panel textarea{min-height:96px;resize:vertical}
+.btn-cancela{margin-top:14px;background:var(--rojo);border:none;color:#fff}
+.btn-cancela:disabled{opacity:.45}
+
 </style>
 </head>
 <body>
@@ -521,6 +540,33 @@ body{
       <strong id="cierreTitulo">Servicio completado</strong>
       <p id="cierreTexto"></p>
       <button class="btn btn-nuevo" id="btnNuevo" type="button" hidden>Iniciar nuevo servicio</button>
+    </div>
+  </section>
+
+  <!-- Cancelación del servicio: genera folio propio y exige el motivo -->
+  <section class="cancela" id="cancelaCaja" hidden>
+    <button class="cancela-abrir" id="btnAbrirCancela" type="button">Cancelar este servicio</button>
+    <div class="cancela-panel" id="cancelaPanel" hidden>
+      <span class="etiqueta">Cancelación de servicio</span>
+      <p class="pista">Se genera un folio de cancelación y queda registrado con su nombre, la hora y su ubicación. El servicio no se borra.</p>
+      <label class="adm-campo" for="cancelaMotivo">Motivo</label>
+      <select id="cancelaMotivo">
+        <option value="">— Elige el motivo —</option>
+        <option>El cliente canceló o pospuso la visita</option>
+        <option>No hubo acceso a la planta</option>
+        <option>Falta de refacción, herramienta o material</option>
+        <option>El equipo estaba en operación y no se pudo intervenir</option>
+        <option>Condiciones inseguras para trabajar</option>
+        <option>Falla del vehículo o no se pudo llegar</option>
+        <option>Clima</option>
+        <option>Otro</option>
+      </select>
+      <label class="adm-campo" for="cancelaDetalle">Explicación</label>
+      <textarea id="cancelaDetalle" placeholder="Explica qué pasó, con quién se habló y qué se acordó. Mínimo 15 caracteres."></textarea>
+      <div class="act-conteo" id="cancelaConteo">0 caracteres</div>
+      <button class="btn btn-cancela" id="btnCancelaConfirmar" type="button" disabled>Confirmar cancelación</button>
+      <p class="nota-btn" id="cancelaNota">—</p>
+      <button class="link-volver link-centro" id="btnCancelaCerrar" type="button">No cancelar, regresar</button>
     </div>
   </section>
 
@@ -923,7 +969,34 @@ function pintarEnvio(){
   $("#envPct").textContent = (pend === 0 ? 100 : Math.min(pct, 99)) + " %";
   const p = $("#envio");
   const asg = envio.origen === "asignacion";
-  $("#btnEnvNuevo").textContent = asg ? "Asignar a otro colaborador" : "Iniciar nuevo reporte de servicio técnico";
+  const can = envio.origen === "cancelacion";
+  $("#btnEnvNuevo").textContent = asg ? "Asignar a otro colaborador"
+    : can ? "Iniciar otro servicio" : "Iniciar nuevo reporte de servicio técnico";
+
+  if(can){
+    if(pend === 0){
+      p.dataset.estado = "listo";
+      $("#envEtiqueta").textContent = "Servicio cancelado";
+      $("#envTitulo").textContent = "Servicio cancelado";
+      $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") +
+        "La cancelación quedó registrada con su folio, el motivo, la hora y su ubicación.";
+      $("#btnEnvNuevo").hidden = false; $("#btnEnvMenu").hidden = false;
+    } else if(!navigator.onLine){
+      p.dataset.estado = "pausa";
+      $("#envEtiqueta").textContent = "Sin conexión";
+      $("#envTitulo").textContent = "Cancelación guardada en el teléfono";
+      $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") +
+        "Se mandará sola al recuperar la señal.";
+      $("#btnEnvNuevo").hidden = true; $("#btnEnvMenu").hidden = false;
+    } else {
+      p.dataset.estado = "enviando";
+      $("#envEtiqueta").textContent = "Cancelando";
+      $("#envTitulo").textContent = "Registrando la cancelación…";
+      $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") + "Mantenga la aplicación abierta.";
+      $("#btnEnvNuevo").hidden = true; $("#btnEnvMenu").hidden = true;
+    }
+    return;
+  }
 
   if(pend === 0){
     p.dataset.estado = "listo";
@@ -1105,8 +1178,68 @@ function pintarCierre(){
 function pintar(){
   $("#tecnicoNombre").textContent = estado.tecnico || "—";
   pintarOrden(); pintarPasos(); pintarEvidencia(); pintarCierreForm();
-  pintarBoton(); pintarCola(); pintarCierre();
+  pintarBoton(); pintarCola(); pintarCierre(); pintarCancela();
 }
+
+/* ---------- Cancelación del servicio ----------
+   Disponible mientras el servicio esté abierto y todavía no se registre la
+   salida. No borra nada: genera su propio folio y deja el motivo asentado. */
+function pintarCancela(){
+  const activo = !!estado.orden && !estado.eventos.salida;
+  $("#cancelaCaja").hidden = !activo;
+  if(!activo){ $("#cancelaPanel").hidden = true; }
+  const t = $("#cancelaDetalle").value.trim();
+  $("#cancelaConteo").textContent = t.length + " caracteres";
+  const faltan = [];
+  if(!$("#cancelaMotivo").value) faltan.push("el motivo");
+  if(t.length < 15) faltan.push("la explicación (mínimo 15 caracteres)");
+  $("#btnCancelaConfirmar").disabled = faltan.length > 0;
+  $("#cancelaNota").textContent = faltan.length
+    ? "Falta " + faltan.join(" y ") + "."
+    : "Se generará el folio " + folioCancelacion() + ". No se puede deshacer.";
+}
+function folioCancelacion(){
+  const o = estado.orden || {};
+  return "CAN-" + (o.folio || "SF");
+}
+async function cancelarServicio(){
+  const o = estado.orden;
+  if(!o) return;
+  const motivo = $("#cancelaMotivo").value;
+  const detalle = $("#cancelaDetalle").value.trim();
+  if(!motivo || detalle.length < 15) return;
+  const folioCan = folioCancelacion();
+  const ok = await confirmar("¿Cancelar el servicio?",
+    `Folio de cancelación: ${folioCan}\nCliente: ${o.titulo || o.cliente}\nMotivo: ${motivo}\n\n` +
+    "Quedará registrado con su nombre, la hora y su ubicación. No se puede deshacer.", "Sí, cancelar");
+  if(!ok) return;
+  const ev = estado.eventos || {};
+  const ref = ev.regreso || ev.comida || ev.llegada || null;
+  encolar({
+    tipo:"cancelacion", token:estado.token,
+    folioCancelacion: folioCan, folio: o.folio || "",
+    cliente: o.titulo || o.cliente || "", sitio: o.sitio || "", orden: o.orden || "",
+    tecnico: estado.tecnico || "", usuario: estado.usuario || "",
+    fecha: hoy(), hora: ahora(),
+    motivo, detalle,
+    lat: ref && ref.lat != null ? +(+ref.lat).toFixed(6) : null,
+    lon: ref && ref.lon != null ? +(+ref.lon).toFixed(6) : null,
+    pasos: Object.keys(ev).map(k=>k + " " + (ev[k].hora || "")).join(", ")
+  });
+  $("#cancelaMotivo").value = ""; $("#cancelaDetalle").value = "";
+  $("#cancelaPanel").hidden = true;
+  iniciarEnvio("cancelacion", `${folioCan} · ${o.titulo || o.cliente} · ${motivo}`);
+  limpiarServicio();
+}
+$("#btnAbrirCancela").addEventListener("click", ()=>{
+  const p = $("#cancelaPanel");
+  p.hidden = !p.hidden;
+  if(!p.hidden){ pintarCancela(); p.scrollIntoView({behavior:"smooth", block:"center"}); }
+});
+$("#btnCancelaCerrar").addEventListener("click", ()=>{ $("#cancelaPanel").hidden = true; });
+$("#cancelaMotivo").addEventListener("change", pintarCancela);
+$("#cancelaDetalle").addEventListener("input", pintarCancela);
+$("#btnCancelaConfirmar").addEventListener("click", cancelarServicio);
 
 /* ---------- Registro de evento con GPS ---------- */
 function registrar(){

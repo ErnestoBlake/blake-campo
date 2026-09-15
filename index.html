@@ -514,6 +514,35 @@ body{
 .btn-cancela{margin-top:14px;background:var(--rojo);border:none;color:#fff}
 .btn-cancela:disabled{opacity:.45}
 
+
+/* ---------- Encabezados de sección RESALTADOS (16-sep) ---------- */
+/* Azul eléctrico: no se confunden con los botones (naranja) ni con
+   los avisos (rojo/ámbar/verde). No son tocables: sin cursor ni sombra de botón. */
+:root{--seccion:#2FA8FF;--seccion-texto:#8FD3FF;--seccion-fondo:rgba(47,168,255,.14)}
+.cierre-form > .etiqueta{
+  display:block;margin:10px -18px 18px;padding:14px 18px 12px;
+  background:linear-gradient(90deg,#0E3A5C 0%,#0A2238 100%);
+  border-left:8px solid var(--seccion);border-top:1px solid var(--seccion);border-bottom:1px solid var(--seccion);
+  font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:.12em;
+  color:#FFFFFF;text-shadow:0 0 12px rgba(47,168,255,.55);
+}
+.act-bloque,
+.cierre-form .act-bloque,
+.cierre-form .campo-lbl{
+  display:block;margin:26px 0 12px;padding:10px 12px 9px;
+  background:var(--seccion-fondo);
+  border-left:6px solid var(--seccion);border-bottom:2px solid var(--seccion);border-radius:0 3px 0 0;
+  font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--seccion-texto);line-height:1.15;
+}
+.cierre-form .campo-lbl b{color:#FFFFFF;font-weight:700}
+/* Aviso: el "Toque aqui para cerrar" va siempre en su propio renglón */
+.aviso .aviso-cerrar{
+  display:block;margin-top:14px;padding-top:10px;
+  border-top:1px solid rgba(255,255,255,.35);
+  font-family:var(--display);font-size:15px;letter-spacing:.14em;text-transform:uppercase;
+}
+.aviso[data-tipo="alerta"] .aviso-cerrar{color:#FFE2A8}
 </style>
 </head>
 <body>

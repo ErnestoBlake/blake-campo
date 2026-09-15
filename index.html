@@ -543,6 +543,22 @@ body{
   font-family:var(--display);font-size:15px;letter-spacing:.14em;text-transform:uppercase;
 }
 .aviso[data-tipo="alerta"] .aviso-cerrar{color:#FFE2A8}
+
+/* ---------- 16-sep: trabajo asignado visible y avisos de faltantes grandes ---------- */
+.trabajo-asig{padding:4px 18px 14px;border-bottom:1px solid var(--linea)}
+.trabajo-asig[hidden]{display:none}
+.trabajo-asig .pista{font-size:13px;color:var(--plata-alta);margin:0 0 10px;text-align:left}
+.ev-cab .conteo{font-size:17px;font-weight:700}
+.ev-cab .conteo[data-completo="0"]{color:#FFC24D}
+.ev-nota[data-falta="1"],
+.nota-btn.alerta{
+  display:block;margin:10px 0 14px;padding:14px 14px 13px;
+  background:#5A3A00;border:2px solid var(--ambar);border-left:8px solid var(--ambar);border-radius:4px;
+  font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:.04em;line-height:1.3;
+  color:#FFF3DC;text-align:left;text-transform:uppercase;
+}
+.ev-nota[data-falta="1"]::before,
+.nota-btn.alerta::before{content:"\26A0  ";color:#FFC24D}
 </style>
 </head>
 <body>
@@ -565,6 +581,13 @@ body{
       <span>Técnico: <b id="tecnicoNombre">—</b></span>
       <span class="acciones-sesion"><button id="btnMenu" type="button">Menú</button><button id="btnCambiarTecnico" type="button">Cerrar sesión</button></span>
     </div>
+  </section>
+
+  <!-- 16-sep: lo que el técnico tiene que hacer con este cliente, visible desde que lo elige -->
+  <section class="trabajo-asig" id="trabajoAsig" hidden>
+    <span class="etiqueta act-bloque">Trabajo asignado para este cliente</span>
+    <p class="pista" id="trabajoAsigAyuda">—</p>
+    <div id="trabajoAsigLista"></div>
   </section>
 
   <section class="escalera">
@@ -1257,9 +1280,11 @@ function pintarEvidencia(){
   const MAX = 12;
   $("#evTitulo").textContent = fase==="antes"
     ? "Evidencia — ANTES de iniciar" : "Evidencia — DESPUÉS (al terminar)";
+  const faltanF = Math.max(0, 3 - fotos.length);
   $("#evNota").textContent = bloqueado
     ? "Primero registra la llegada; luego podrás tomar las fotos."
-    : "Toma mínimo 3 fotos. Puedes agregar más con el botón +.";
+    : (faltanF ? `Faltan ${faltanF} foto(s). Mínimo 3. Usa el botón +.` : "Fotos completas. Puedes agregar más con el botón +.");
+  $("#evNota").dataset.falta = (!bloqueado && faltanF) ? "1" : "0";
   const c=$("#evConteo");
   c.textContent = fotos.length<3 ? `${fotos.length} / 3 mínimo` : `${fotos.length} fotos ✓`;
   c.dataset.completo = fotos.length>=3 ? "1" : "0";
@@ -1294,6 +1319,25 @@ function pintarCierreForm(){
 }
 
 /* La primera vez que se abre el cierre se bajan las actividades asignadas. */
+/* 16-sep: en cuanto hay cliente elegido se muestra, solo para leer, lo que tiene
+   asignado con ese cliente. Se marca después, en el cierre del servicio. */
+let trabajoAsigFolio = null;
+function pintarTrabajoAsig(){
+  const o = estado.orden;
+  const sec = $("#trabajoAsig");
+  if(!o || estado.eventos.salida){ sec.hidden = true; return; }
+  sec.hidden = false;
+  if(trabajoAsigFolio !== o.folio){
+    trabajoAsigFolio = o.folio;
+    if(!act.actualizado && !act.lista.length) cargarAct();
+    setTimeout(refrescarActividades, 0);
+  }
+  const lista = actividadesDelCliente();
+  $("#trabajoAsigAyuda").textContent = lista.length
+    ? `${lista.length} actividad(es). Se marcan como Terminada, Pendiente o Cancelada al cerrar el servicio.`
+    : (act.cargando ? "Cargando tus actividades…" : "No tienes actividades asignadas con este cliente. Si haces trabajos, regístralos al cerrar como actividad adicional.");
+  $("#trabajoAsigLista").innerHTML = lista.map(htmlActConsulta).join("");
+}
 let cierreActPedido = false;
 function prepararCierreAct(){
   if(cierreActPedido) return;
@@ -1375,7 +1419,7 @@ function pintarCierre(){
 
 function pintar(){
   $("#tecnicoNombre").textContent = estado.tecnico || "—";
-  pintarOrden(); pintarPasos(); pintarEvidencia(); pintarCierreForm();
+  pintarOrden(); pintarTrabajoAsig(); pintarPasos(); pintarEvidencia(); pintarCierreForm();
   pintarBoton(); pintarCola(); pintarCierre(); pintarCancela();
 }
 
@@ -2200,6 +2244,7 @@ function pintarActividades(){
   enlazarAdicionales($("#actAdicLista"));
 
   pintarFotosAct(); pintarEnvioAct();
+  pintarTrabajoAsig();
   if(!$("#cierreForm").hidden) pintarCierreAct();
 }
 

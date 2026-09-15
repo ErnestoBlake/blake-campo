@@ -1037,9 +1037,17 @@ function avisar(titulo, texto, tipo="info"){
     avisoTimer=setTimeout(()=>el.classList.remove("ver"),5200);
   }
 }
+/* Retira el aviso en pantalla. Una falla no se cierra sola por tiempo,
+   pero SI se retira cuando el problema quedo atras: al entrar, al volver
+   al menu o al abrir la pantalla de envio. Si no, el letrero rojo de un
+   intento fallido se queda encima de la pantalla siguiente y confunde. */
+function cerrarAviso(){
+  const el = $("#aviso");
+  if(el) el.classList.remove("ver");
+}
 document.addEventListener("DOMContentLoaded", function(){
   const el=$("#aviso");
-  if(el) el.addEventListener("click", ()=>el.classList.remove("ver"));
+  if(el) el.addEventListener("click", cerrarAviso);
 });
 
 /* ============================================================
@@ -1056,6 +1064,7 @@ const envio = { activo:false, total:0, hechos:0, origen:"", resumen:"", preparan
    no responde se vuelve a oprimir. El tercer parametro es el texto de esa
    espera; mientras exista, la barra no dice todavia "Reporte enviado". */
 function iniciarEnvio(origen, resumen, preparando){
+  cerrarAviso();
   envio.activo = true;
   envio.origen = origen || "";
   envio.resumen = resumen || "";
@@ -1658,6 +1667,7 @@ async function iniciarSesion(){
   estado.token = resp.token || "";
   estado.rol = resp.rol || "";
   persistir();
+  cerrarAviso();
   $("#portada").hidden = true;
   mostrarInicio();
   pintar();
@@ -1945,6 +1955,7 @@ function pintarEstadoInicio(){
   $("#inicioActDet").textContent = (pend === null ? "Consulta todos tus pendientes" : `${pend} pendiente(s)`) + " · " + servicio;
 }
 function mostrarInicio(){
+  cerrarAviso();
   $("#inicioNombre").textContent = estado.tecnico || "—";
   pintarEstadoInicio();
   $("#inicioServicioDet").textContent = estado.orden

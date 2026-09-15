@@ -697,6 +697,10 @@ body{
       <b>Asignar actividades</b>
       <span id="inicioAdminDet">Panel de administrador: asigna el trabajo del día por colaborador.</span>
     </button>
+    <button class="menu-op" id="btnIrCliente" type="button" hidden>
+      <b>Dar de alta un cliente</b>
+      <span id="inicioClienteDet">Panel de administrador: registra un cliente nuevo con su obra, correo y ubicación.</span>
+    </button>
     <p class="inicio-estado" id="inicioEstado">—</p>
     <button class="link-volver link-centro" id="btnInicioSalir" type="button">Cerrar sesión</button>
   </div>
@@ -794,9 +798,25 @@ body{
       <p class="nota-btn" id="admNota">—</p>
     </div>
 
-    <span class="etiqueta act-bloque">Alta de cliente</span>
-    <button class="firma-limpiar" id="btnAbrirAltaCli" type="button">+ Dar de alta un cliente nuevo</button>
-    <div id="altaCliPanel" hidden>
+    <span class="etiqueta act-bloque">Pendientes del equipo</span>
+    <div id="admEquipo"></div>
+    <p class="act-cola" id="admCola">—</p>
+  </div>
+</div>
+
+
+<!-- Pantalla: alta de cliente (solo administrador) -->
+<div class="pantalla" id="clientePantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnCliMenu" type="button">← Menú</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Alta de cliente</span>
+      <h2>Cliente nuevo</h2>
+      <p class="pista">Lo verán todos los técnicos en su lista de clientes.</p>
+    </div>
+
       <label class="adm-campo" for="cliNombre">Cliente</label>
       <input type="text" id="cliNombre" maxlength="80" autocapitalize="words" placeholder="Ejemplo: Holcim">
 
@@ -824,11 +844,7 @@ body{
         <button class="btn" id="btnAltaCli" type="button" disabled>Dar de alta</button>
         <p class="nota-btn" id="cliNota">—</p>
       </div>
-    </div>
-
-    <span class="etiqueta act-bloque">Pendientes del equipo</span>
-    <div id="admEquipo"></div>
-    <p class="act-cola" id="admCola">—</p>
+    
   </div>
 </div>
 
@@ -1965,6 +1981,8 @@ function mostrarInicio(){
   $("#actividadesPantalla").hidden = true;
   $("#adminPantalla").hidden = true;
   $("#btnIrAdmin").hidden = !esAdminApp();
+  $("#btnIrCliente").hidden = !esAdminApp();
+  $("#clientePantalla").hidden = true;
   $("#inicio").hidden = false;
 }
 async function cerrarSesion(){
@@ -1972,7 +1990,7 @@ async function cerrarSesion(){
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
   adm.usuarios = []; adm.actualizado = null;
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
-  $("#adminPantalla").hidden = true;
+  $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
   pedirLogin();
 }
 $("#btnIrServicio").addEventListener("click", ()=>{
@@ -2563,12 +2581,6 @@ function abrirEditorAdmin(id, accion){
    puede capturar con el GPS estando parado en el sitio, que es mas
    confiable que teclear coordenadas.
    ============================================================ */
-$("#btnAbrirAltaCli").addEventListener("click", ()=>{
-  const p = $("#altaCliPanel");
-  p.hidden = !p.hidden;
-  $("#btnAbrirAltaCli").textContent = p.hidden ? "+ Dar de alta un cliente nuevo" : "− Cerrar alta de cliente";
-  if(!p.hidden){ pintarAltaCli(); p.scrollIntoView({behavior:"smooth", block:"start"}); }
-});
 
 function correoValido(c){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c); }
 
@@ -2638,7 +2650,7 @@ async function altaCliente(){
   // La lista local se actualiza de inmediato para no esperar al servidor.
   ORDENES.push(normalizarCliente({ cliente:nombre, titulo:nombre, sitio, orden, correo, lat, lon, radio }));
   try{ localStorage.setItem(LS_CLIENTES, JSON.stringify(ORDENES)); }catch(e){}
-  pintarAdmin();
+  if(!$("#adminPantalla").hidden) pintarAdmin();
 
   ["#cliNombre","#cliSitio","#cliOrden","#cliCorreo","#cliLat","#cliLon"].forEach(sel=>{ const e=$(sel); if(e) e.value=""; });
   $("#cliRadio").value = 200;
@@ -2695,6 +2707,15 @@ async function asignarActividades(){
 $("#btnAsignar").addEventListener("click", asignarActividades);
 $("#btnAdmMenu").addEventListener("click", mostrarInicio);
 $("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAdmin(); });
+
+/* Alta de cliente: opcion propia del menu, no escondida dentro de otra pantalla. */
+function abrirAltaCliente(){
+  const p = $("#clientePantalla");
+  p.hidden = false; p.scrollTop = 0;
+  pintarAltaCli();
+}
+$("#btnIrCliente").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAltaCliente(); });
+$("#btnCliMenu").addEventListener("click", ()=>{ $("#clientePantalla").hidden = true; mostrarInicio(); });
 
 /* Logotipo en las pantallas nuevas (se reutiliza el de la portada) */
 function aplicarLogos(){

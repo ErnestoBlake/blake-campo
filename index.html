@@ -2025,7 +2025,7 @@ function mostrarInicio(){
   cerrarAviso();
   $("#inicioNombre").textContent = estado.tecnico || "—";
   pintarEstadoInicio();
-  $("#inicioServicioDet").textContent = estado.orden
+  $("#inicioServicioDet").textContent = (estado.orden && estado.eventos.llegada && !estado.eventos.salida)
     ? `En curso: ${estado.orden.titulo || estado.orden.cliente} · Folio ${estado.orden.folio || "—"}`
     : "Jornada con GPS, evidencia y firma del cliente.";
   $("#ordenes").hidden = true;
@@ -2044,7 +2044,35 @@ async function cerrarSesion(){
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
   pedirLogin();
 }
-$("#btnIrServicio").addEventListener("click", ()=>{
+/* 16-sep: "Servicio en campo" nunca entra solo a un cliente que el técnico no eligió.
+   - Sin servicio guardado            -> lista de clientes.
+   - Servicio ya cerrado y enviado    -> se limpia y se muestra la lista.
+   - Cliente elegido pero sin llegada -> no hay nada registrado: se descarta y se muestra la lista.
+   - Llegada registrada y sin salida  -> se pregunta; si no es suyo, se abre la cancelación (con folio y motivo).
+   - Salida registrada pero aún enviando -> se muestra para que termine de enviarse. */
+$("#btnIrServicio").addEventListener("click", async ()=>{
+  const o = estado.orden, ev = estado.eventos || {};
+  if(o && ev.salida && estado.cola.length === 0){
+    $("#inicio").hidden = true; limpiarServicio(); return;
+  }
+  if(o && !ev.llegada){
+    estado.orden = null; persistir();
+  }
+  if(estado.orden && ev.llegada && !ev.salida){
+    const cli = estado.orden.titulo || estado.orden.cliente || "cliente";
+    const seguir = await confirmar(
+      "Tienes un servicio abierto",
+      `${cli} · Folio ${estado.orden.folio || "—"} · llegada ${ev.llegada.hora || "registrada"}. ¿Es el servicio en el que estás trabajando?`,
+      "Sí, continuar");
+    $("#inicio").hidden = true;
+    pintar();
+    if(!seguir){
+      $("#cancelaPanel").hidden = false; pintarCancela();
+      $("#cancelaCaja").scrollIntoView({behavior:"smooth", block:"start"});
+      avisar("Servicio abierto sin cerrar", "Para dejarlo, cancélalo con el motivo. Así queda asentado y después podrás elegir otro cliente.", "alerta");
+    }
+    return;
+  }
   $("#inicio").hidden = true;
   if(!estado.orden) pedirOrden();
   pintar();

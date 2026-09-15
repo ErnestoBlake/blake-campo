@@ -1325,7 +1325,9 @@ let trabajoAsigFolio = null;
 function pintarTrabajoAsig(){
   const o = estado.orden;
   const sec = $("#trabajoAsig");
-  if(!o || estado.eventos.salida){ sec.hidden = true; return; }
+  /* Al llegar al cierre (regreso registrado) la lista ya aparece ahí para marcarse:
+     se oculta arriba para no mostrar las actividades dos veces. */
+  if(!o || estado.eventos.salida || estado.eventos.regreso){ sec.hidden = true; return; }
   sec.hidden = false;
   if(trabajoAsigFolio !== o.folio){
     trabajoAsigFolio = o.folio;

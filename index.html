@@ -621,7 +621,7 @@ body{
     <div id="cierreAdicLista"></div>
 
     <label class="campo-lbl" for="actividades">Actividades realizadas</label>
-    <textarea id="actividades" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
+    <textarea id="actividades" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
     <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
     <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
     <div class="firma-caja" id="firmaTecCaja">
@@ -800,7 +800,7 @@ body{
     <div id="actAdicLista"></div>
 
     <label class="etiqueta act-bloque" for="actDetalle">Detalle del reporte</label>
-    <textarea id="actDetalle" placeholder="Detalla las actividades programadas y adicionales que realizaste: qué se hizo, dónde, con qué equipo y cuál fue el resultado."></textarea>
+    <textarea id="actDetalle" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences" placeholder="Detalla las actividades programadas y adicionales que realizaste: qué se hizo, dónde, con qué equipo y cuál fue el resultado."></textarea>
     <div class="act-conteo" id="actDetalleConteo">0 caracteres</div>
 
     <div class="ev-cab" style="margin-top:22px">
@@ -1700,7 +1700,7 @@ function montarFirma(cfg){
   });
   const fin = ()=>{
     if(!api.dibujando) return; api.dibujando=false;
-    if(api.trazo){ cfg.guardar(cfg.sellar ? firmaSellada(c) : c.toDataURL("image/png")); pintarBoton(); }
+    if(api.trazo){ cfg.guardar(firmaDocumento(c, !!cfg.sellar)); pintarBoton(); }
   };
   c.addEventListener("pointerup", fin);
   c.addEventListener("pointercancel", fin);
@@ -1709,16 +1709,42 @@ function montarFirma(cfg){
   return api;
 }
 
-/* Copia la firma sobre fondo solido y le quema el sello de identidad. */
-function firmaSellada(c){
+/* 16-sep: la firma que va al documento se entrega como en papel: FONDO BLANCO y
+   tinta azul oscuro. En pantalla se sigue dibujando claro sobre oscuro.
+   El sello de identidad va en una franja clara DEBAJO de la firma, sin taparla. */
+function firmaDocumento(c, sellar){
+  const w = c.width, h = c.height;
+  const tinta = document.createElement("canvas");
+  tinta.width = w; tinta.height = h;
+  const ti = tinta.getContext("2d");
+  ti.drawImage(c, 0, 0);
+  ti.globalCompositeOperation = "source-in";
+  ti.fillStyle = "#0A2A5E"; ti.fillRect(0, 0, w, h);
+
+  let lineas = [], f = 0, alto = 0, pad = 0, banda = 0;
+  if(sellar){
+    try{ lineas = datosSello(); }catch(e){ lineas = []; }
+    f = Math.max(11, Math.round(w / 40)); alto = f * 1.5; pad = Math.round(f * 0.7);
+    banda = lineas.length ? Math.round(alto * lineas.length + pad * 2) : 0;
+  }
   const t = document.createElement("canvas");
-  t.width = c.width; t.height = c.height;
+  t.width = w; t.height = h + banda;
   const x = t.getContext("2d");
-  x.fillStyle = "#0B0D10"; x.fillRect(0,0,t.width,t.height);
-  x.drawImage(c,0,0);
-  try{ sellarLienzo(t); }catch(e){}
+  x.fillStyle = "#FFFFFF"; x.fillRect(0, 0, t.width, t.height);
+  x.drawImage(tinta, 0, 0);
+  if(banda){
+    x.fillStyle = "#F1F3F6"; x.fillRect(0, h, w, banda);
+    x.fillStyle = "#F39200"; x.fillRect(0, h, Math.round(f * 0.35), banda);
+    x.textBaseline = "top";
+    lineas.forEach((txt, i)=>{
+      x.font = (i === 0 ? "bold " : "") + f + "px system-ui, sans-serif";
+      x.fillStyle = i === 0 ? "#A35400" : "#1B1F24";
+      x.fillText(txt, pad + f, h + pad + alto * i);
+    });
+  }
   return t.toDataURL("image/png");
 }
+function firmaSellada(c){ return firmaDocumento(c, true); }
 
 const firmaCliente = montarFirma({
   canvas:"firma", pista:"firmaPista", limpiar:"btnLimpiarFirma", sellar:false,

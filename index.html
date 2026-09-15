@@ -2018,7 +2018,8 @@ function pintarEstadoInicio(){
   const servicio = o
     ? `${o.titulo || o.cliente} · folio ${o.folio || "—"}` + (estado.eventos.llegada ? "" : " · falta registrar llegada")
     : "de todos tus clientes";
-  $("#inicioActDet").textContent = (pend === null ? "Consulta todos tus pendientes" : `${pend} pendiente(s)`) + " · " + servicio;
+  void servicio;
+  $("#inicioActDet").textContent = (pend === null ? "Consulta todos tus pendientes" : `${pend} pendiente(s)`) + " · de todos tus clientes (solo consulta)";
 }
 function mostrarInicio(){
   cerrarAviso();
@@ -2100,6 +2101,15 @@ function etiquetaFecha(f){
 
 /* Para reportar actividades se exige servicio abierto (cliente + folio) y llegada con GPS. */
 function pintarCandadoAct(){
+  /* 16-sep: "Mis actividades" es SOLO CONSULTA. No muestra ningún servicio ni
+     cliente, aunque haya uno abierto en el teléfono. Las actividades se
+     reportan únicamente dentro de "Servicio en campo", en el cierre. */
+  $("#actServicio").hidden = true;
+  $("#actBloqueo").hidden = true;
+  $("#actContenido").hidden = true;
+  return false;
+}
+function pintarCandadoActAnterior(){
   const o = estado.orden;
   const s = $("#actServicio");
   s.hidden = !o;
@@ -2146,7 +2156,7 @@ function pintarActividades(){
   $("#actConsultaTitulo").textContent = listo ? "Tus otros pendientes" : "Todos tus pendientes";
   $("#actConsultaAyuda").textContent = listo
     ? "Son de otros clientes. Para reportarlos abre el servicio con el cliente que les corresponde."
-    : "Consulta. Para reportar una actividad abre el servicio con su cliente.";
+    : "Solo consulta. Para reportar una actividad entra a Servicio en campo con el cliente que le corresponde.";
   $("#actListaConsulta").innerHTML = otros.length ? otros.map(htmlActConsulta).join("")
     : `<p class="pista act-vacio">${act.cargando ? "Cargando actividades…" : (listo ? "No tienes pendientes con otros clientes." : "No tienes actividades pendientes.")}</p>`;
   $("#actConsulta").hidden = false;

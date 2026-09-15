@@ -550,7 +550,7 @@ body{
     </div>
     <p class="ev-nota" id="evNota">Toma mínimo 3 fotos. Puedes agregar más con el botón +.</p>
     <div class="rejilla" id="rejilla"></div>
-    <input type="file" id="camara" accept="image/*" capture="environment" hidden>
+    <input type="file" id="camara" accept="image/*" hidden>
   </section>
 
   <!-- Cierre del servicio: actividades + firma del cliente -->
@@ -756,7 +756,7 @@ body{
       <span class="conteo" id="actFotosConteo" data-completo="0">0 / 3</span>
     </div>
     <div class="rejilla" id="actRejilla"></div>
-    <input type="file" id="camaraAct" accept="image/*" capture="environment" hidden>
+    <input type="file" id="camaraAct" accept="image/*" hidden>
 
     <div style="margin-top:24px">
       <button class="btn" id="btnEnviarAct" type="button" disabled>Enviar reporte</button>
@@ -1496,9 +1496,24 @@ function datosSello(){
     hoy() + " " + ahora() + " · " + ubic
   ];
 }
-function sellarLienzo(lienzo){
+/* Distingue una foto recien tomada de una elegida de la galeria.
+   No hay forma de saberlo con certeza desde el navegador, pero la fecha
+   del archivo lo delata: si tiene mas de 5 minutos, no se tomo ahorita. */
+function origenArchivo(archivo){
+  const t = archivo && archivo.lastModified;
+  if(!t || !isFinite(t)) return { galeria:true, texto:"ARCHIVO SIN FECHA · origen no verificable" };
+  const min = (Date.now() - t) / 60000;
+  if(min <= 5) return { galeria:false, texto:"" };
+  const f = new Date(t);
+  const dd = String(f.getDate()).padStart(2,"0"), mm = String(f.getMonth()+1).padStart(2,"0");
+  const hh = String(f.getHours()).padStart(2,"0"), mi = String(f.getMinutes()).padStart(2,"0");
+  return { galeria:true, texto:`DE GALERIA · archivo del ${dd}/${mm}/${f.getFullYear()} ${hh}:${mi}` };
+}
+
+function sellarLienzo(lienzo, extra){
   const ctx = lienzo.getContext("2d"), w = lienzo.width, h = lienzo.height;
   const lineas = datosSello();
+  if(extra) lineas.push(extra);
   const f = Math.max(11, Math.round(w / 42));
   const alto = f * 1.55, pad = Math.round(f * 0.7);
   const banda = alto * lineas.length + pad * 2;
@@ -1529,16 +1544,22 @@ $("#camara").addEventListener("change", e=>{
       lienzo.width = Math.round(img.width*escala);
       lienzo.height = Math.round(img.height*escala);
       lienzo.getContext("2d").drawImage(img,0,0,lienzo.width,lienzo.height);
-      sellarLienzo(lienzo);
+      const org = origenArchivo(archivo);
+      sellarLienzo(lienzo, org.texto);
       const url = lienzo.toDataURL("image/jpeg",0.7);
       const kb = Math.round(url.length*0.75/1024);
       const fase = faseActual();
       const o = estado.orden || {};
       estado.fotos[fase].push({url, kb, enviada:false});
       encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
-                fase, fecha:hoy(), hora:ahora(), imagen:url, folio:o.folio||"" });
+                fase, fecha:hoy(), hora:ahora(), imagen:url, folio:o.folio||"",
+                origen: org.galeria ? "galeria" : "camara" });
       persistir(); pintar();
-      avisar("Evidencia guardada", `Comprimida a ${kb} KB. Se enviará al recuperar señal.`,"ok");
+      if(org.galeria){
+        avisar("Foto de galería", "Esta imagen no se tomó ahora: quedó marcada como tomada de la galería, con la fecha del archivo.", "alerta");
+      } else {
+        avisar("Evidencia guardada", `Comprimida a ${kb} KB. Se enviará al recuperar señal.`,"ok");
+      }
     };
     img.src = lector.result;
   };
@@ -2295,6 +2316,7 @@ $("#actDetalle").addEventListener("input", e=>{ act.detalle = e.target.value; gu
 
 /* Fotos del reporte de actividades */
 function comprimirImagen(archivo, listo){
+  const org = origenArchivo(archivo);
   const lector = new FileReader();
   lector.onload = ()=>{
     const img = new Image();
@@ -2304,9 +2326,9 @@ function comprimirImagen(archivo, listo){
       lienzo.width = Math.round(img.width * escala);
       lienzo.height = Math.round(img.height * escala);
       lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
-      sellarLienzo(lienzo);
+      sellarLienzo(lienzo, org.texto);
       const url = lienzo.toDataURL("image/jpeg", 0.7);
-      listo(url, Math.round(url.length * 0.75 / 1024));
+      listo(url, Math.round(url.length * 0.75 / 1024), org);
     };
     img.src = lector.result;
   };
@@ -2330,11 +2352,15 @@ function pintarFotosAct(){
 $("#camaraAct").addEventListener("change", e=>{
   const archivo = e.target.files && e.target.files[0];
   if(!archivo) return;
-  comprimirImagen(archivo, (url, kb)=>{
-    act.fotos.push({ url, kb });
+  comprimirImagen(archivo, (url, kb, org)=>{
+    act.fotos.push({ url, kb, galeria: !!(org && org.galeria) });
     guardarFotosAct();
     pintarFotosAct(); pintarEnvioAct();
-    avisar("Foto agregada", `Comprimida a ${kb} KB. Se enviará junto con el reporte.`, "ok");
+    if(org && org.galeria){
+      avisar("Foto de galería", "Esta imagen no se tomó ahora: quedó marcada como tomada de la galería, con la fecha del archivo.", "alerta");
+    } else {
+      avisar("Foto agregada", `Comprimida a ${kb} KB. Se enviará junto con el reporte.`, "ok");
+    }
   });
   e.target.value = "";
 });

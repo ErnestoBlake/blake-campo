@@ -559,6 +559,26 @@ body{
 }
 .ev-nota[data-falta="1"]::before,
 .nota-btn.alerta::before{content:"\26A0  ";color:#FFC24D}
+
+/* ---------- 16-sep: actividades realizadas en renglones, mínimo 100 caracteres ---------- */
+.renglon-ayuda{font-size:14px;line-height:1.5;color:var(--plata-alta);margin:0 0 12px}
+.renglon-ayuda b{color:#FFFFFF}
+.renglon{margin:0 0 12px;padding:12px;background:var(--acero-800);border:1px solid var(--linea);border-left:5px solid var(--seccion);border-radius:4px}
+.renglon[data-corto="1"]{border-left-color:var(--ambar)}
+.renglon-cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.renglon-num{font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--seccion-texto)}
+.renglon-quitar{background:none;border:0;color:#FF8A80;font-family:var(--dato);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px}
+.renglon textarea{width:100%;min-height:78px;resize:vertical;padding:10px 12px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px;line-height:1.45}
+.renglon textarea:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.renglon-aviso{font-family:var(--dato);font-size:12px;color:#FFC24D;margin-top:6px}
+.renglon-aviso[hidden]{display:none}
+.renglon-agregar{min-height:52px;font-size:17px;margin:2px 0 14px}
+.renglon-medidor{margin:0 0 6px}
+.renglon-barra{height:10px;background:var(--acero-700);border-radius:5px;overflow:hidden}
+.renglon-barra span{display:block;height:100%;width:0;background:var(--ambar);transition:width .2s}
+.renglon-medidor[data-ok="1"] .renglon-barra span{background:var(--verde)}
+.renglon-medidor b{display:block;margin-top:6px;font-family:var(--display);font-size:18px;letter-spacing:.06em;color:#FFC24D;text-align:right}
+.renglon-medidor[data-ok="1"] b{color:var(--verde)}
 </style>
 </head>
 <body>
@@ -620,8 +640,15 @@ body{
     </div>
     <div id="cierreAdicLista"></div>
 
-    <label class="campo-lbl" for="actividades">Actividades realizadas</label>
-    <textarea id="actividades" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences" placeholder="Describa de forma detallada TODAS las actividades realizadas durante el día: trabajos ejecutados, equipos revisados, refacciones utilizadas, observaciones del cliente, pendientes, etc."></textarea>
+    <label class="campo-lbl">Actividades realizadas <b>(mínimo 100 caracteres)</b></label>
+    <p class="renglon-ayuda">Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.</p>
+    <div id="actRenglones"></div>
+    <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar otra actividad</button>
+    <div class="renglon-medidor" id="renglonMedidor" data-ok="0">
+      <div class="renglon-barra"><span id="renglonBarra"></span></div>
+      <b id="renglonConteo">0 / 100 caracteres</b>
+    </div>
+    <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
     <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
     <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
     <div class="firma-caja" id="firmaTecCaja">
@@ -961,7 +988,7 @@ const SECUENCIA = [
 const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
-  actividades:"", firma:null, firmaTec:null, incluirFirma:false,
+  actividades:"", renglones:[""], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0   // sobres realmente entregados al conector en este servicio
 };
@@ -1009,7 +1036,7 @@ function persistir(){
       despues:estado.fotos.despues.map(f=>({kb:f.kb, enviada:!!f.enviada}))
     };
     localStorage.setItem(LS.estado, JSON.stringify({
-      orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades,
+      orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
       incluirFirma:estado.incluirFirma
     }));
     localStorage.setItem(LS.cola, JSON.stringify(estado.cola));
@@ -1027,6 +1054,8 @@ function restaurar(){
       estado.eventos = g.eventos || {};
       estado.fotos = g.fotos || {antes:[],despues:[]};
       estado.actividades = g.actividades || "";
+      estado.renglones = (Array.isArray(g.renglones) && g.renglones.length) ? g.renglones
+        : [estado.actividades || ""];
       estado.incluirFirma = !!g.incluirFirma;
     }
     estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
@@ -1307,7 +1336,7 @@ function pintarCierreForm(){
   const mostrar = estado.orden && estado.eventos.regreso && !estado.eventos.salida;
   $("#cierreForm").hidden = !mostrar;
   if(mostrar){
-    if($("#actividades").value !== estado.actividades) $("#actividades").value = estado.actividades;
+    pintarRenglones();
     if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
     $("#firmaCaja").hidden = !estado.incluirFirma;
     $("#btnLimpiarFirma").hidden = !estado.incluirFirma;
@@ -1359,7 +1388,8 @@ function pintarBoton(){
 
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
-  const faltanActiv = esSalida && !estado.actividades.trim();
+  const medAct = medirActividades();
+  const faltanActiv = esSalida && !medAct.ok;
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
   const faltanFirma = esSalida && !estado.firma;
@@ -1373,7 +1403,9 @@ function pintarBoton(){
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
-    if(faltanActiv) faltan.push("las actividades realizadas");
+    if(faltanActiv) faltan.push(medAct.total < MIN_ACT_TOTAL
+      ? `describir las actividades realizadas (llevas ${medAct.total} de ${MIN_ACT_TOTAL} caracteres)`
+      : `completar ${medAct.cortos} actividad(es) muy corta(s)`);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
@@ -1490,6 +1522,10 @@ $("#btnCancelaConfirmar").addEventListener("click", cancelarServicio);
 function registrar(){
   const paso = pasoPendiente();
   if(!paso || !estado.orden) return;
+  if(paso.id==="salida" && !medirActividades().ok){
+    avisar("Faltan actividades", `Describe lo que hiciste: mínimo ${MIN_ACT_TOTAL} caracteres y cada actividad de al menos ${MIN_ACT_RENGLON}.`, "error");
+    pintarBoton(); return;
+  }
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
   estado.leyendo = true; pintarBoton();
   // La salida cierra el servicio: la pantalla de envio se abre de inmediato,
@@ -1643,9 +1679,86 @@ $("#camara").addEventListener("change", e=>{
 });
 
 /* ---------- Actividades ---------- */
-$("#actividades").addEventListener("input", e=>{
-  estado.actividades = e.target.value;
+/* 16-sep: "Actividades realizadas" se captura en renglones (una actividad por
+   cuadro). Se exige un MÍNIMO DE 100 CARACTERES reales en total (sin contar
+   espacios repetidos) y que cada cuadro con texto tenga al menos 15, para que
+   no se pueda cerrar con "x" o "ok". Al conector se manda la lista numerada. */
+const MIN_ACT_TOTAL = 100, MIN_ACT_RENGLON = 15;
+const limpiaTxt = t => String(t||"").replace(/\s+/g," ").trim();
+function textoActividades(){
+  const llenos = estado.renglones.map(limpiaTxt).filter(Boolean);
+  if(llenos.length <= 1) return llenos[0] || "";
+  return llenos.map((t,i)=>`${i+1}. ${t}`).join("\n");
+}
+function medirActividades(){
+  const llenos = estado.renglones.map(limpiaTxt).filter(Boolean);
+  const total = llenos.reduce((n,t)=>n+t.length, 0);
+  const cortos = llenos.filter(t=>t.length < MIN_ACT_RENGLON).length;
+  return { total, cortos, ok: total >= MIN_ACT_TOTAL && cortos === 0 };
+}
+function sincronizarActividades(){
+  estado.actividades = textoActividades();
+  $("#actividades").value = estado.actividades;
+  const m = medirActividades();
+  const med = $("#renglonMedidor");
+  med.dataset.ok = m.ok ? "1" : "0";
+  $("#renglonBarra").style.width = Math.min(100, Math.round(m.total*100/MIN_ACT_TOTAL)) + "%";
+  $("#renglonConteo").textContent = m.ok ? `✓ ${m.total} caracteres` :
+    (m.total < MIN_ACT_TOTAL ? `${m.total} / ${MIN_ACT_TOTAL} caracteres · faltan ${MIN_ACT_TOTAL-m.total}` :
+     `Hay ${m.cortos} actividad(es) muy corta(s)`);
+  document.querySelectorAll("#actRenglones .renglon").forEach((r,i)=>{
+    const t = limpiaTxt(estado.renglones[i]);
+    const corto = t.length > 0 && t.length < MIN_ACT_RENGLON;
+    r.dataset.corto = corto ? "1" : "0";
+    const av = r.querySelector(".renglon-aviso");
+    av.hidden = !corto;
+    if(corto) av.textContent = `Muy corta: describe mejor esta actividad (mínimo ${MIN_ACT_RENGLON} caracteres).`;
+  });
   persistir(); pintarBoton();
+}
+function pintarRenglones(){
+  if(!Array.isArray(estado.renglones) || !estado.renglones.length) estado.renglones = [""];
+  const cont = $("#actRenglones");
+  const ejemplos = [
+    "Ej.: Calibré la báscula de cemento con pesas patrón de 20 kg; quedó con error de ±0.2 %.",
+    "Ej.: Cambié el contactor del motor del sinfín 2 porque estaba quemado; se probó y arrancó bien.",
+    "Ej.: Revisé el tablero de aditivos; apreté terminales flojas y quedó funcionando."
+  ];
+  cont.innerHTML = estado.renglones.map((t,i)=>`
+    <div class="renglon" data-i="${i}">
+      <div class="renglon-cab">
+        <span class="renglon-num">Actividad ${i+1}</span>
+        ${estado.renglones.length > 1 ? `<button type="button" class="renglon-quitar" data-i="${i}">Quitar</button>` : ""}
+      </div>
+      <textarea data-i="${i}" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences"
+        placeholder="${ejemplos[i % ejemplos.length]}">${esc(t)}</textarea>
+      <div class="renglon-aviso" hidden></div>
+    </div>`).join("");
+  cont.querySelectorAll("textarea").forEach(ta=>{
+    ta.addEventListener("input", ()=>{ estado.renglones[+ta.dataset.i] = ta.value; sincronizarActividades(); });
+  });
+  cont.querySelectorAll(".renglon-quitar").forEach(b=>{
+    b.addEventListener("click", async ()=>{
+      const i = +b.dataset.i;
+      if(limpiaTxt(estado.renglones[i]) &&
+         !await confirmar("¿Quitar esta actividad?", `Se borrará lo escrito en la Actividad ${i+1}.`, "Quitar")) return;
+      estado.renglones.splice(i,1);
+      pintarRenglones();
+    });
+  });
+  sincronizarActividades();
+}
+$("#btnRenglonAgregar").addEventListener("click", ()=>{
+  const vacio = estado.renglones.findIndex(t=>!limpiaTxt(t));
+  if(vacio >= 0){
+    const ta = document.querySelector(`#actRenglones textarea[data-i="${vacio}"]`);
+    if(ta){ ta.focus(); avisar("Usa el cuadro vacío", `Primero escribe en la Actividad ${vacio+1}.`, "info"); }
+    return;
+  }
+  estado.renglones.push("");
+  pintarRenglones();
+  const tas = document.querySelectorAll("#actRenglones textarea");
+  if(tas.length) tas[tas.length-1].focus();
 });
 
 /* ---------- Casilla: habilitar el recuadro de firma (la firma es obligatoria) ---------- */
@@ -1957,7 +2070,7 @@ async function reiniciarServicio(){
 function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
-  estado.actividades = ""; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
+  estado.actividades = ""; estado.renglones = [""]; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
   if(firmaTecnico) firmaTecnico.reiniciar();
@@ -1966,7 +2079,7 @@ function limpiarServicio(){
   persistir();
   $("#lectura").textContent = "Ubicación sin leer";
   const r=$("#rango"); r.textContent = "—"; r.dataset.fuera = "0";
-  $("#actividades").value = "";
+  $("#actividades").value = ""; $("#actRenglones").innerHTML = "";
   cierreActPedido = false;
   $("#cierreActLista").innerHTML = "";
   $("#cierreAdicLista").innerHTML = "";

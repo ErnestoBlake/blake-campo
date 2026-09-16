@@ -580,6 +580,14 @@ body{
 .renglon-medidor[data-ok="1"] .renglon-barra span{background:var(--verde)}
 .renglon-medidor b{display:block;margin-top:6px;font-family:var(--display);font-size:18px;letter-spacing:.06em;color:#FFC24D;text-align:right}
 .renglon-medidor[data-ok="1"] b{color:var(--verde)}
+
+/* ---------- 16-sep (v30): detalle por actividad y adicionales con título ---------- */
+.renglon input.renglon-tit{width:100%;min-height:48px;padding:10px 12px;margin-bottom:8px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:#FFFFFF;font-family:var(--texto);font-size:16px;font-weight:600}
+.renglon input.renglon-tit:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.renglon-cont,.act-nota-cont{font-family:var(--dato);font-size:12px;color:#FFC24D;text-align:right;margin-top:4px}
+.renglon-cont[data-ok="1"],.act-nota-cont[data-ok="1"]{color:var(--verde)}
+.act-nota-lbl{display:block;margin:12px 0 6px;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--seccion-texto)}
+.act-item .act-nota{font-size:16px;min-height:84px}
 </style>
 </head>
 <body>
@@ -630,25 +638,24 @@ body{
   <section class="cierre-form" id="cierreForm" hidden>
     <span class="etiqueta">Cierre del servicio</span>
 
+    <div id="cierreAsigBloque">
     <span class="etiqueta act-bloque">Actividades asignadas para este cliente</span>
     <p class="act-ayuda" id="cierreActAyuda">—</p>
     <div id="cierreActLista"></div>
+    </div>
 
-    <span class="etiqueta act-bloque">Actividades adicionales</span>
+    <div hidden aria-hidden="true">
     <div class="adic-fila">
       <input id="cierreAdicInput" type="text" placeholder="Describe la actividad adicional" autocapitalize="sentences" maxlength="300">
       <button class="btn" id="btnCierreAdic" type="button">+ Agregar</button>
     </div>
     <div id="cierreAdicLista"></div>
-
-    <label class="campo-lbl">Actividades realizadas <b id="actRealizadasReq">(mínimo 100 caracteres)</b></label>
-    <p class="renglon-ayuda" id="renglonAyuda">Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.</p>
-    <div id="actRenglones"></div>
-    <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar otra actividad</button>
-    <div class="renglon-medidor" id="renglonMedidor" data-ok="0">
-      <div class="renglon-barra"><span id="renglonBarra"></span></div>
-      <b id="renglonConteo">0 / 100 caracteres</b>
     </div>
+
+    <label class="campo-lbl" id="renglonTitulo">Actividades adicionales <b>(opcional)</b></label>
+    <p class="renglon-ayuda" id="renglonAyuda">—</p>
+    <div id="actRenglones"></div>
+    <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar actividad adicional</button>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
     <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
     <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
@@ -989,7 +996,7 @@ const SECUENCIA = [
 const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
-  actividades:"", renglones:[""], firma:null, firmaTec:null, incluirFirma:false,
+  actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0   // sobres realmente entregados al conector en este servicio
 };
@@ -1055,8 +1062,8 @@ function restaurar(){
       estado.eventos = g.eventos || {};
       estado.fotos = g.fotos || {antes:[],despues:[]};
       estado.actividades = g.actividades || "";
-      estado.renglones = (Array.isArray(g.renglones) && g.renglones.length) ? g.renglones
-        : [estado.actividades || ""];
+      estado.renglones = Array.isArray(g.renglones) ? g.renglones.map(r=> (r && typeof r==="object") ? r : {titulo:"", detalle:String(r||"")})
+        .filter(r=> String(r.titulo||"").trim() || String(r.detalle||"").trim()) : [];
       estado.incluirFirma = !!g.incluirFirma;
     }
     estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
@@ -1390,13 +1397,12 @@ function pintarBoton(){
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const medAct = medirActividades();
-  if(esSalida) pintarMedidor();
   const faltanActiv = esSalida && !medAct.ok;
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
   const faltanFirma = esSalida && !estado.firma;
   const faltanFirmaTec = esSalida && !estado.firmaTec;
-  const sinNota = esSalida ? idsMarcadosCliente().filter(id=>act.marcas[id]!=="TERMINADA" && !(act.notas[id]||"").trim()).length : 0;
+  const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
   btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || sinNota>0;
 
@@ -1405,9 +1411,7 @@ function pintarBoton(){
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
-    if(faltanActiv) faltan.push((!medAct.exento && medAct.total < MIN_ACT_TOTAL)
-      ? `marcar como Terminada una actividad asignada o describir lo realizado (llevas ${medAct.total} de ${MIN_ACT_TOTAL} caracteres)`
-      : `completar ${medAct.cortos} actividad(es) muy corta(s)`);
+    if(faltanActiv) medAct.faltan.forEach(t=>faltan.push(t));
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
@@ -1525,7 +1529,7 @@ function registrar(){
   const paso = pasoPendiente();
   if(!paso || !estado.orden) return;
   if(paso.id==="salida" && !medirActividades().ok){
-    avisar("Faltan actividades", `Marca como Terminada la actividad asignada que hiciste, o describe lo que hiciste (mínimo ${MIN_ACT_TOTAL} caracteres). Cada actividad escrita debe tener al menos ${MIN_ACT_RENGLON}.`, "error");
+    avisar("Faltan actividades", "Para registrar la salida falta: " + medirActividades().faltan.join(", ") + ".", "error");
     pintarBoton(); return;
   }
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
@@ -1681,101 +1685,150 @@ $("#camara").addEventListener("change", e=>{
 });
 
 /* ---------- Actividades ---------- */
-/* 16-sep: "Actividades realizadas" se captura en renglones (una actividad por
-   cuadro). Se exige un MÍNIMO DE 100 CARACTERES reales en total (sin contar
-   espacios repetidos) y que cada cuadro con texto tenga al menos 15, para que
-   no se pueda cerrar con "x" o "ok". Al conector se manda la lista numerada. */
-const MIN_ACT_TOTAL = 100, MIN_ACT_RENGLON = 15;
+/* ============================================================
+   16-sep (v30) — Cierre: qué hizo el técnico
+   - Asignada marcada TERMINADA  -> detalle obligatorio (mín. 50 caracteres).
+   - Asignada PENDIENTE/CANCELADA -> motivo obligatorio.
+   - No es obligatorio marcar TODAS las asignadas: solo las que trabajó.
+   - Con asignadas: "Actividades adicionales" es OPCIONAL (título + detalle).
+   - Sin asignadas: "Actividades realizadas", mínimo "Actividad 1" con título + detalle.
+   - Siempre debe quedar al menos UNA actividad (marcada o escrita).
+   ============================================================ */
+const MIN_DETALLE = 50, MIN_TITULO = 5;
 const limpiaTxt = t => String(t||"").replace(/\s+/g," ").trim();
+function normRenglon(r){
+  if(r && typeof r === "object") return { titulo: String(r.titulo||""), detalle: String(r.detalle||"") };
+  return { titulo:"", detalle: String(r||"") };
+}
+function renglonLleno(r){ return !!(limpiaTxt(r.titulo) || limpiaTxt(r.detalle)); }
+function hayAsignadasCliente(){
+  try{ return actividadesDelCliente().length > 0; }catch(_){ return false; }
+}
+function adicionalesCierre(){
+  return estado.renglones.map(normRenglon).filter(renglonLleno)
+    .map(r=> limpiaTxt(r.titulo) + (limpiaTxt(r.detalle) ? ": " + limpiaTxt(r.detalle) : ""));
+}
+function hechasCierre(){
+  return idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").map(id=>{
+    const a = act.lista.find(x=>String(x.id)===id);
+    const tit = (a && (a.titulo || a.texto)) || "";
+    const det = limpiaTxt(act.notas[id]);
+    return tit + (det ? ": " + det : "");
+  }).filter(Boolean);
+}
 function textoActividades(){
-  const llenos = estado.renglones.map(limpiaTxt).filter(Boolean);
-  if(llenos.length <= 1) return llenos[0] || "";
-  return llenos.map((t,i)=>`${i+1}. ${t}`).join("\n");
+  const todo = hechasCierre().concat(adicionalesCierre());
+  return todo.map((t,i)=>`${i+1}. ${t}`).join("\n");
 }
 function medirActividades(){
-  const llenos = estado.renglones.map(limpiaTxt).filter(Boolean);
-  const total = llenos.reduce((n,t)=>n+t.length, 0);
-  const cortos = llenos.filter(t=>t.length < MIN_ACT_RENGLON).length;
-  /* 16-sep: si marcó como TERMINADA al menos una actividad asignada, esas ya son
-     su reporte: "Actividades realizadas" deja de ser obligatorio (si escribe algo,
-     cada cuadro con texto sigue pidiendo 15 caracteres). */
-  let terminadas = 0;
-  try{ terminadas = idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").length; }catch(_){}
-  const exento = terminadas > 0;
-  return { total, cortos, terminadas, exento, ok: (exento || total >= MIN_ACT_TOTAL) && cortos === 0 };
+  const ids = idsMarcadosCliente();
+  const terminadasCortas = ids.filter(id=>act.marcas[id]==="TERMINADA" && limpiaTxt(act.notas[id]).length < MIN_DETALLE).length;
+  const sinMotivo = ids.filter(id=>act.marcas[id]!=="TERMINADA" && !limpiaTxt(act.notas[id])).length;
+  const llenos = estado.renglones.map(normRenglon).filter(renglonLleno);
+  const renglonesIncompletos = llenos.filter(r=>limpiaTxt(r.titulo).length < MIN_TITULO || limpiaTxt(r.detalle).length < MIN_DETALLE).length;
+  const conAsig = hayAsignadasCliente();
+  const ninguna = ids.length === 0 && llenos.length === 0;
+  const faltan = [];
+  if(terminadasCortas) faltan.push(`detallar ${terminadasCortas} actividad(es) terminada(s) (mínimo ${MIN_DETALLE} caracteres cada una)`);
+  if(sinMotivo) faltan.push(`explicar ${sinMotivo} actividad(es) pendiente(s) o cancelada(s)`);
+  if(renglonesIncompletos) faltan.push(`completar ${renglonesIncompletos} actividad(es) ${conAsig ? "adicional(es)" : ""} (título y detalle de mínimo ${MIN_DETALLE} caracteres)`.replace("  "," "));
+  if(ninguna) faltan.push(conAsig ? "marcar al menos una actividad asignada o agregar una adicional" : "describir la Actividad 1 (título y detalle)");
+  return { ok: faltan.length === 0, faltan };
 }
 function sincronizarActividades(){
   estado.actividades = textoActividades();
   $("#actividades").value = estado.actividades;
-  pintarMedidor();
+  pintarContadoresRenglon();
   persistir(); pintarBoton();
 }
-function pintarMedidor(){
-  const med = $("#renglonMedidor"); if(!med) return;
-  const m = medirActividades();
-  med.dataset.ok = m.ok ? "1" : "0";
-  $("#renglonBarra").style.width = (m.exento ? 100 : Math.min(100, Math.round(m.total*100/MIN_ACT_TOTAL))) + "%";
-  $("#actRealizadasReq").textContent = m.exento ? "(opcional)" : `(mínimo ${MIN_ACT_TOTAL} caracteres)`;
-  $("#renglonAyuda").innerHTML = m.exento
-    ? `Ya marcaste <b>${m.terminadas} actividad(es) asignada(s) como terminada(s)</b>; con eso basta. Escribe aquí solo si hiciste <b>algo más</b>.`
-    : `Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>. Si terminaste una actividad asignada, márcala arriba como <b>Terminada</b>.`;
-  $("#renglonConteo").textContent = m.exento && m.cortos === 0
-    ? `✓ No es obligatorio: ${m.terminadas} asignada(s) terminada(s)`
-    : m.ok ? `✓ ${m.total} caracteres` :
-    ((!m.exento && m.total < MIN_ACT_TOTAL) ? `${m.total} / ${MIN_ACT_TOTAL} caracteres · faltan ${MIN_ACT_TOTAL-m.total}` :
-     `Hay ${m.cortos} actividad(es) muy corta(s)`);
-  document.querySelectorAll("#actRenglones .renglon").forEach((r,i)=>{
-    const t = limpiaTxt(estado.renglones[i]);
-    const corto = t.length > 0 && t.length < MIN_ACT_RENGLON;
-    r.dataset.corto = corto ? "1" : "0";
-    const av = r.querySelector(".renglon-aviso");
-    av.hidden = !corto;
-    if(corto) av.textContent = `Muy corta: describe mejor esta actividad (mínimo ${MIN_ACT_RENGLON} caracteres).`;
+function pintarContadoresNota(){
+  document.querySelectorAll(".act-nota-cont").forEach(c=>{
+    const n = limpiaTxt(act.notas[c.dataset.id]).length;
+    c.dataset.ok = n >= MIN_DETALLE ? "1" : "0";
+    c.textContent = n >= MIN_DETALLE ? `✓ ${n} caracteres` : `${n} / ${MIN_DETALLE} caracteres · faltan ${MIN_DETALLE-n}`;
+  });
+  estado.actividades = textoActividades();
+}
+function pintarContadoresRenglon(){
+  document.querySelectorAll("#actRenglones .renglon").forEach((el,i)=>{
+    const r = normRenglon(estado.renglones[i]);
+    const n = limpiaTxt(r.detalle).length, t = limpiaTxt(r.titulo).length;
+    const c = el.querySelector(".renglon-cont");
+    const ok = n >= MIN_DETALLE && t >= MIN_TITULO;
+    c.dataset.ok = ok ? "1" : "0";
+    c.textContent = !renglonLleno(r) ? `Detalle: mínimo ${MIN_DETALLE} caracteres`
+      : (t < MIN_TITULO ? "Falta el título de la actividad" : (n >= MIN_DETALLE ? `✓ ${n} caracteres` : `${n} / ${MIN_DETALLE} caracteres · faltan ${MIN_DETALLE-n}`));
+    el.dataset.corto = (renglonLleno(r) && !ok) ? "1" : "0";
   });
 }
+let renglonModo = null, renglonUltimoConAsig = null;
 function pintarRenglones(){
-  if(!Array.isArray(estado.renglones) || !estado.renglones.length) estado.renglones = [""];
-  const cont = $("#actRenglones");
-  const ejemplos = [
-    "Ej.: Calibré la báscula de cemento con pesas patrón de 20 kg; quedó con error de ±0.2 %.",
-    "Ej.: Cambié el contactor del motor del sinfín 2 porque estaba quemado; se probó y arrancó bien.",
-    "Ej.: Revisé el tablero de aditivos; apreté terminales flojas y quedó funcionando."
-  ];
-  cont.innerHTML = estado.renglones.map((t,i)=>`
+  const cont = $("#actRenglones"); if(!cont) return;
+  const conAsig = hayAsignadasCliente();
+  estado.renglones = (Array.isArray(estado.renglones) ? estado.renglones : []).map(normRenglon);
+  if(conAsig && renglonUltimoConAsig === false){
+    estado.renglones = estado.renglones.filter(renglonLleno);           // al pasar a "con asignadas" no queda "Actividad 1" vacía
+  }
+  renglonUltimoConAsig = conAsig;
+  if(!conAsig && !estado.renglones.length){
+    estado.renglones = [{titulo:"", detalle:""}];                       // siempre la Actividad 1
+  }
+  $("#cierreAsigBloque").hidden = !conAsig && !act.cargando;
+  $("#renglonTitulo").innerHTML = conAsig ? 'Actividades adicionales <b>(opcional)</b>' : 'Actividades realizadas <b>(obligatorio)</b>';
+  $("#renglonAyuda").innerHTML = conAsig
+    ? 'Solo si hiciste <b>algo que no estaba asignado</b>. Escribe un título corto y el detalle de lo que hiciste.'
+    : 'No tienes actividades asignadas con este cliente. Escribe <b>qué hiciste</b>: un título corto y el detalle. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.';
+  $("#btnRenglonAgregar").textContent = conAsig ? "+ Agregar actividad adicional" : "+ Agregar otra actividad";
+
+  // No se reconstruye mientras el técnico escribe dentro, salvo que cambie el modo.
+  const f = document.activeElement;
+  const modo = (conAsig ? "A" : "S") + estado.renglones.length;
+  if(f && cont.contains(f) && renglonModo === modo){ pintarContadoresRenglon(); return; }
+  renglonModo = modo;
+
+  const nombre = conAsig ? "Adicional" : "Actividad";
+  cont.innerHTML = estado.renglones.map((r,i)=>`
     <div class="renglon" data-i="${i}">
       <div class="renglon-cab">
-        <span class="renglon-num">Actividad ${i+1}</span>
-        ${estado.renglones.length > 1 ? `<button type="button" class="renglon-quitar" data-i="${i}">Quitar</button>` : ""}
+        <span class="renglon-num">${nombre} ${i+1}</span>
+        ${(conAsig || estado.renglones.length > 1) ? `<button type="button" class="renglon-quitar" data-i="${i}">Quitar</button>` : ""}
       </div>
+      <input class="renglon-tit" data-i="${i}" type="text" maxlength="120" autocapitalize="sentences" spellcheck="true" lang="es"
+        placeholder="Título. Ej.: Cambio de contactor del sinfín 2" value="${esc(r.titulo)}">
       <textarea data-i="${i}" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences"
-        placeholder="${ejemplos[i % ejemplos.length]}">${esc(t)}</textarea>
-      <div class="renglon-aviso" hidden></div>
+        placeholder="Detalle: qué hiciste, en qué equipo y cómo quedó (mínimo ${MIN_DETALLE} caracteres).">${esc(r.detalle)}</textarea>
+      <div class="renglon-cont"></div>
     </div>`).join("");
+  cont.querySelectorAll("input.renglon-tit").forEach(inp=>{
+    inp.addEventListener("input", ()=>{ estado.renglones[+inp.dataset.i].titulo = inp.value; sincronizarActividades(); });
+  });
   cont.querySelectorAll("textarea").forEach(ta=>{
-    ta.addEventListener("input", ()=>{ estado.renglones[+ta.dataset.i] = ta.value; sincronizarActividades(); });
+    ta.addEventListener("input", ()=>{ estado.renglones[+ta.dataset.i].detalle = ta.value; sincronizarActividades(); });
   });
   cont.querySelectorAll(".renglon-quitar").forEach(b=>{
     b.addEventListener("click", async ()=>{
       const i = +b.dataset.i;
-      if(limpiaTxt(estado.renglones[i]) &&
-         !await confirmar("¿Quitar esta actividad?", `Se borrará lo escrito en la Actividad ${i+1}.`, "Quitar")) return;
+      if(renglonLleno(estado.renglones[i]) &&
+         !await confirmar("¿Quitar esta actividad?", "Se borrará lo escrito en esta actividad.", "Quitar")) return;
       estado.renglones.splice(i,1);
-      pintarRenglones();
+      renglonModo = null; pintarRenglones(); sincronizarActividades();
     });
   });
-  sincronizarActividades();
+  pintarContadoresRenglon();
 }
 $("#btnRenglonAgregar").addEventListener("click", ()=>{
-  const vacio = estado.renglones.findIndex(t=>!limpiaTxt(t));
+  estado.renglones = estado.renglones.map(normRenglon);
+  const vacio = estado.renglones.findIndex(r=>!renglonLleno(r));
   if(vacio >= 0){
-    const ta = document.querySelector(`#actRenglones textarea[data-i="${vacio}"]`);
-    if(ta){ ta.focus(); avisar("Usa el cuadro vacío", `Primero escribe en la Actividad ${vacio+1}.`, "info"); }
+    const inp = document.querySelector(`#actRenglones input.renglon-tit[data-i="${vacio}"]`);
+    if(inp){ inp.focus(); avisar("Usa el cuadro vacío", "Primero llena la actividad que ya está abierta.", "info"); }
     return;
   }
-  estado.renglones.push("");
-  pintarRenglones();
-  const tas = document.querySelectorAll("#actRenglones textarea");
-  if(tas.length) tas[tas.length-1].focus();
+  estado.renglones.push({titulo:"", detalle:""});
+  renglonModo = null; pintarRenglones();
+  const ins = document.querySelectorAll("#actRenglones input.renglon-tit");
+  if(ins.length) ins[ins.length-1].focus();
+  persistir(); pintarBoton();
 });
 
 /* ---------- Casilla: habilitar el recuadro de firma (la firma es obligatoria) ---------- */
@@ -2087,7 +2140,7 @@ async function reiniciarServicio(){
 function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
-  estado.actividades = ""; estado.renglones = [""]; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
+  estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
   if(firmaTecnico) firmaTecnico.reiniciar();
@@ -2449,14 +2502,16 @@ function htmlActItem(a){
   const id = String(a.id), f = etiquetaFecha(a.fecha), m = act.marcas[id] || "";
   const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
     .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
-  const pideNota = m==="PENDIENTE" || m==="CANCELADA";
+  const pideNota = m==="PENDIENTE" || m==="CANCELADA" || m==="TERMINADA";
   const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
   return `<div class="act-item" data-marca="${m}">
     <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${origen}</div>
     <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     <div class="act-ops">${ops}</div>
-    ${pideNota ? `<textarea class="act-nota" data-id="${esc(id)}" placeholder="${m==="PENDIENTE" ? "¿Por qué quedó pendiente? ¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?"}">${esc(act.notas[id] || "")}</textarea>` : ""}
+    ${pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
+    <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
+    ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : ""}
   </div>`;
 }
 function enlazarActItems(cont){
@@ -2465,13 +2520,13 @@ function enlazarActItems(cont){
       const id = b.dataset.id, v = b.dataset.v;
       if(act.marcas[id] === v) delete act.marcas[id]; else act.marcas[id] = v;
       guardarAct(); repintarAct();
-      if(v!=="TERMINADA" && act.marcas[id]===v){
+      if(act.marcas[id]===v){
         const t = cont.querySelector(`.act-nota[data-id="${CSS.escape(id)}"]`); if(t) t.focus();
       }
     };
   });
   cont.querySelectorAll(".act-nota").forEach(t=>{
-    t.oninput = ()=>{ act.notas[t.dataset.id] = t.value; guardarAct(); pintarEnvioAct(); pintarBoton(); };
+    t.oninput = ()=>{ act.notas[t.dataset.id] = t.value; guardarAct(); pintarContadoresNota(); pintarEnvioAct(); pintarBoton(); };
   });
 }
 function htmlAdicionales(){
@@ -2484,7 +2539,7 @@ function enlazarAdicionales(cont){
   });
 }
 /* Repinta las dos vistas que comparten el borrador de actividades. */
-function repintarAct(){ pintarActividades(); pintarBoton(); }
+function repintarAct(){ pintarActividades(); if(!$("#cierreForm").hidden){ renglonModo = null; pintarRenglones(); pintarContadoresNota(); } pintarBoton(); }
 
 function pintarCierreAct(){
   const cont = $("#cierreActLista"), adic = $("#cierreAdicLista");
@@ -2493,14 +2548,16 @@ function pintarCierreAct(){
   $("#cierreActAyuda").textContent = act.cargando
     ? "Cargando tus actividades asignadas…"
     : (lista.length
-        ? `Marca cómo quedó cada actividad asignada para ${cli}. Si quedó pendiente o se canceló, explica por qué.`
-        : "No tienes actividades asignadas pendientes para este cliente. Registra lo que hiciste como actividad adicional.");
+        ? `Marca solo las que trabajaste. Terminada: detalla qué hiciste. Pendiente o Cancelada: explica por qué.`
+        : "No tienes actividades asignadas pendientes para este cliente.");
   // No se reconstruye la lista mientras el técnico está escribiendo dentro de ella.
   const f = document.activeElement;
   const escribiendo = f && /^(TEXTAREA|INPUT)$/.test(f.tagName) && (cont.contains(f) || adic.contains(f));
   if(escribiendo) return;
   cont.innerHTML = lista.map(htmlActItem).join("");
   enlazarActItems(cont);
+  pintarContadoresNota();
+  pintarRenglones();
   adic.innerHTML = htmlAdicionales();
   enlazarAdicionales(adic);
 }
@@ -2520,9 +2577,7 @@ $("#cierreAdicInput").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.pr
    reporte" se manda este sobre al conector, que arma el PDF y lo envía por
    correo al cliente. El teléfono no conserva copia. */
 function encolarHojaCliente(o, reporteId, ids){
-  const hechas = ids.filter(id=>act.marcas[id] === "TERMINADA")
-    .map(id=>{ const a = act.lista.find(x=>String(x.id) === id); return (a && (a.titulo || a.texto)) || ""; })
-    .filter(Boolean);
+  const hechas = hechasCierre();
   const ev = estado.eventos || {};
   const punto = e => e && e.hora ? { hora:e.hora, lat:(e.lat != null ? +(+e.lat).toFixed(6) : null), lon:(e.lon != null ? +(+e.lon).toFixed(6) : null) } : null;
   encolar({
@@ -2532,8 +2587,8 @@ function encolarHojaCliente(o, reporteId, ids){
     tecnico: estado.tecnico || "", usuario: estado.usuario || "",
     llegada: punto(ev.llegada), comida: punto(ev.comida), regreso: punto(ev.regreso),
     salida: { hora: ahora(), lat:null, lon:null },
-    hechas, adicionales: act.adicionales.slice(),
-    detalle: estado.actividades.trim(),
+    hechas, adicionales: adicionalesCierre(),
+    detalle: "",
     firma: estado.incluirFirma && estado.firma ? estado.firma : "",
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
@@ -2548,12 +2603,13 @@ function encolarHojaCliente(o, reporteId, ids){
 function encolarReporteAct(o){
   const ids = idsMarcadosCliente();
   const reporteId = "R" + idCorto();
-  if(!ids.length && !act.adicionales.length){ encolarHojaCliente(o, reporteId, ids); return; }
+  const adicC = adicionalesCierre();
+  if(!ids.length && !adicC.length){ encolarHojaCliente(o, reporteId, ids); return; }
   encolar({
     tipo:"reporte_act", token:estado.token, reporteId,
     cliente: o.titulo || o.cliente || "", folio: o.folio || "", sitio: o.sitio || "",
     items: ids.map(id=>({ id, estado:act.marcas[id], nota:(act.notas[id] || "").trim() })),
-    adicionales: act.adicionales.slice(),
+    adicionales: adicC,
     detalle: estado.actividades.trim()
   });
   estado.fotos.despues.filter(f=>f.url).forEach((f,i)=> encolar({

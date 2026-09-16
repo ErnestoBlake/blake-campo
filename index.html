@@ -381,7 +381,7 @@ body{
   padding:10px 0;border-bottom:1px dashed var(--linea);margin-bottom:6px;
 }
 .act-meta b{color:var(--plata-alta);font-weight:500}
-.act-meta .atr{color:var(--rojo)}
+.act-meta .atr{color:#F2D29B}
 .act-bloque{display:block;margin:22px 0 10px}
 .act-item{background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;padding:14px;margin-bottom:10px}
 .act-item[data-marca="TERMINADA"]{border-color:var(--verde)}
@@ -393,7 +393,8 @@ body{
   color:var(--plata);border:1px solid var(--linea);padding:2px 6px;border-radius:2px;
 }
 .act-fecha.hoy{color:var(--naranja-glow);border-color:var(--naranja)}
-.act-fecha.atrasada{color:var(--rojo);border-color:var(--rojo)}
+/* 16-sep: sin rojo (cansa la vista); ámbar suave sobre fondo oscuro */
+.act-fecha.atrasada{color:#F2D29B;background:rgba(242,168,28,.14);border-color:rgba(242,168,28,.55)}
 .act-titulo{font-size:15.5px;line-height:1.4;color:var(--plata-alta);overflow-wrap:anywhere}
 .act-nota-previa{margin-top:8px;font-family:var(--dato);font-size:11px;color:var(--ambar);line-height:1.5;overflow-wrap:anywhere}
 .act-ops{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
@@ -567,7 +568,7 @@ body{
 .renglon[data-corto="1"]{border-left-color:var(--ambar)}
 .renglon-cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .renglon-num{font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--seccion-texto)}
-.renglon-quitar{background:none;border:0;color:#FF8A80;font-family:var(--dato);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px}
+.renglon-quitar{background:none;border:0;color:var(--plata);font-family:var(--dato);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px}
 .renglon textarea{width:100%;min-height:78px;resize:vertical;padding:10px 12px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px;line-height:1.45}
 .renglon textarea:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
 .renglon-aviso{font-family:var(--dato);font-size:12px;color:#FFC24D;margin-top:6px}
@@ -640,8 +641,8 @@ body{
     </div>
     <div id="cierreAdicLista"></div>
 
-    <label class="campo-lbl">Actividades realizadas <b>(mínimo 100 caracteres)</b></label>
-    <p class="renglon-ayuda">Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.</p>
+    <label class="campo-lbl">Actividades realizadas <b id="actRealizadasReq">(mínimo 100 caracteres)</b></label>
+    <p class="renglon-ayuda" id="renglonAyuda">Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.</p>
     <div id="actRenglones"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar otra actividad</button>
     <div class="renglon-medidor" id="renglonMedidor" data-ok="0">
@@ -1389,6 +1390,7 @@ function pintarBoton(){
   const esSalida = p.id==="salida";
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const medAct = medirActividades();
+  if(esSalida) pintarMedidor();
   const faltanActiv = esSalida && !medAct.ok;
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
@@ -1403,8 +1405,8 @@ function pintarBoton(){
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
-    if(faltanActiv) faltan.push(medAct.total < MIN_ACT_TOTAL
-      ? `describir las actividades realizadas (llevas ${medAct.total} de ${MIN_ACT_TOTAL} caracteres)`
+    if(faltanActiv) faltan.push((!medAct.exento && medAct.total < MIN_ACT_TOTAL)
+      ? `marcar como Terminada una actividad asignada o describir lo realizado (llevas ${medAct.total} de ${MIN_ACT_TOTAL} caracteres)`
       : `completar ${medAct.cortos} actividad(es) muy corta(s)`);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
@@ -1523,7 +1525,7 @@ function registrar(){
   const paso = pasoPendiente();
   if(!paso || !estado.orden) return;
   if(paso.id==="salida" && !medirActividades().ok){
-    avisar("Faltan actividades", `Describe lo que hiciste: mínimo ${MIN_ACT_TOTAL} caracteres y cada actividad de al menos ${MIN_ACT_RENGLON}.`, "error");
+    avisar("Faltan actividades", `Marca como Terminada la actividad asignada que hiciste, o describe lo que hiciste (mínimo ${MIN_ACT_TOTAL} caracteres). Cada actividad escrita debe tener al menos ${MIN_ACT_RENGLON}.`, "error");
     pintarBoton(); return;
   }
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
@@ -1694,17 +1696,33 @@ function medirActividades(){
   const llenos = estado.renglones.map(limpiaTxt).filter(Boolean);
   const total = llenos.reduce((n,t)=>n+t.length, 0);
   const cortos = llenos.filter(t=>t.length < MIN_ACT_RENGLON).length;
-  return { total, cortos, ok: total >= MIN_ACT_TOTAL && cortos === 0 };
+  /* 16-sep: si marcó como TERMINADA al menos una actividad asignada, esas ya son
+     su reporte: "Actividades realizadas" deja de ser obligatorio (si escribe algo,
+     cada cuadro con texto sigue pidiendo 15 caracteres). */
+  let terminadas = 0;
+  try{ terminadas = idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").length; }catch(_){}
+  const exento = terminadas > 0;
+  return { total, cortos, terminadas, exento, ok: (exento || total >= MIN_ACT_TOTAL) && cortos === 0 };
 }
 function sincronizarActividades(){
   estado.actividades = textoActividades();
   $("#actividades").value = estado.actividades;
+  pintarMedidor();
+  persistir(); pintarBoton();
+}
+function pintarMedidor(){
+  const med = $("#renglonMedidor"); if(!med) return;
   const m = medirActividades();
-  const med = $("#renglonMedidor");
   med.dataset.ok = m.ok ? "1" : "0";
-  $("#renglonBarra").style.width = Math.min(100, Math.round(m.total*100/MIN_ACT_TOTAL)) + "%";
-  $("#renglonConteo").textContent = m.ok ? `✓ ${m.total} caracteres` :
-    (m.total < MIN_ACT_TOTAL ? `${m.total} / ${MIN_ACT_TOTAL} caracteres · faltan ${MIN_ACT_TOTAL-m.total}` :
+  $("#renglonBarra").style.width = (m.exento ? 100 : Math.min(100, Math.round(m.total*100/MIN_ACT_TOTAL))) + "%";
+  $("#actRealizadasReq").textContent = m.exento ? "(opcional)" : `(mínimo ${MIN_ACT_TOTAL} caracteres)`;
+  $("#renglonAyuda").innerHTML = m.exento
+    ? `Ya marcaste <b>${m.terminadas} actividad(es) asignada(s) como terminada(s)</b>; con eso basta. Escribe aquí solo si hiciste <b>algo más</b>.`
+    : `Escribe <b>una actividad en cada cuadro</b>: qué hiciste, en qué equipo y cómo quedó. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>. Si terminaste una actividad asignada, márcala arriba como <b>Terminada</b>.`;
+  $("#renglonConteo").textContent = m.exento && m.cortos === 0
+    ? `✓ No es obligatorio: ${m.terminadas} asignada(s) terminada(s)`
+    : m.ok ? `✓ ${m.total} caracteres` :
+    ((!m.exento && m.total < MIN_ACT_TOTAL) ? `${m.total} / ${MIN_ACT_TOTAL} caracteres · faltan ${MIN_ACT_TOTAL-m.total}` :
      `Hay ${m.cortos} actividad(es) muy corta(s)`);
   document.querySelectorAll("#actRenglones .renglon").forEach((r,i)=>{
     const t = limpiaTxt(estado.renglones[i]);
@@ -1714,7 +1732,6 @@ function sincronizarActividades(){
     av.hidden = !corto;
     if(corto) av.textContent = `Muy corta: describe mejor esta actividad (mínimo ${MIN_ACT_RENGLON} caracteres).`;
   });
-  persistir(); pintarBoton();
 }
 function pintarRenglones(){
   if(!Array.isArray(estado.renglones) || !estado.renglones.length) estado.renglones = [""];

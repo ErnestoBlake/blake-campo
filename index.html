@@ -594,6 +594,7 @@ body{
 .renglon-medidor b{display:block;margin-top:6px;font-family:var(--display);font-size:18px;letter-spacing:.06em;color:#FFC24D;text-align:right}
 .renglon-medidor[data-ok="1"] b{color:var(--verde)}
 
+/* ---------- 17-sep (v32): aclaraciones separadas de las actividades pendientes ---------- */
 /* ---------- 17-sep (v31): aclaraciones cerradas desde la oficina ---------- */
 /* ---------- 16-sep (v30): detalle por actividad y adicionales con título ---------- */
 .renglon input.renglon-tit{width:100%;min-height:48px;padding:10px 12px;margin-bottom:8px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:#FFFFFF;font-family:var(--texto);font-size:16px;font-weight:600}
@@ -2314,7 +2315,7 @@ function pintarEstadoInicio(){
     ? (navigator.onLine ? `Enviando ${n} registro(s)… no cierres la app.` : `${n} registro(s) guardados en el teléfono; se enviarán al recuperar señal.`)
     : (estado.enviados ? "✓ Todo enviado" : "Aún no se ha enviado ningún reporte.");
   let pend = null;
-  try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id))).length; }catch(_){}
+  try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id)) && !esAclaracion(a)).length; }catch(_){}
   const o = estado.orden;
   const servicio = o
     ? `${o.titulo || o.cliente} · folio ${o.folio || "—"}` + (estado.eventos.llegada ? "" : " · falta registrar llegada")
@@ -2468,7 +2469,9 @@ function pintarCandadoActAnterior(){
 function pintarActividades(){
   const ocultas = idsEnCola();
   const listo = pintarCandadoAct();
-  const lista = act.lista.filter(a=>!ocultas.has(String(a.id)));
+  /* 17-sep (v32): las aclaraciones NO son pendientes de trabajo. Viven en su
+     propia pantalla y no cuentan aquí. */
+  const lista = act.lista.filter(a=>!ocultas.has(String(a.id)) && !esAclaracion(a));
   $("#actNombre").textContent = estado.tecnico || "—";
   $("#actFecha").textContent = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long" });
   const hora = act.actualizado
@@ -2527,6 +2530,7 @@ function actividadesDelCliente(){
   if(!cli) return [];
   return act.lista.filter(a=>{
     if(ocultas.has(String(a.id))) return false;
+    if(esAclaracion(a)) return false;   /* v32: se cierran en su propia pantalla */
     return normCliente(a.cliente) === cli;
   });
 }

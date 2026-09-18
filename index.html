@@ -360,6 +360,19 @@ body{
 .menu-op:focus-visible{outline:2px solid var(--naranja-glow);outline-offset:2px}
 .menu-op b{font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
 .menu-op span{font-size:13px;color:var(--plata);line-height:1.4}
+/* ---------- 17-sep (v31): Aclaraciones ---------- */
+.menu-op--acl b{color:#FFC24D}
+.acl-intro{margin:0 0 6px;line-height:1.5}
+.acl-item{border:1px solid rgba(255,255,255,.12);border-left:5px solid #FFC24D;border-radius:10px;padding:14px;margin-bottom:16px;background:rgba(255,255,255,.03)}
+.acl-item[data-listo="1"]{border-left-color:var(--verde)}
+.acl-item .acl-texto{font-size:16px;line-height:1.45;margin:0 0 6px;font-weight:600}
+.acl-item .acl-meta{font-size:12px;color:var(--plata);margin:0 0 12px}
+.acl-item label{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--plata);margin:10px 0 4px}
+.acl-item select,.acl-item input,.acl-item textarea{width:100%}
+.acl-item textarea{min-height:96px}
+.acl-conteo{font-size:12px;color:var(--plata);text-align:right;margin:4px 0 0}
+.acl-conteo[data-ok="0"]{color:var(--rojo);font-weight:700}
+.acl-sello{font-size:12px;color:var(--plata);margin:10px 0 0}
 .link-centro{margin:18px auto 0}
 .inicio-estado{font-family:var(--dato);font-size:11.5px;color:var(--plata);text-align:center;margin-top:6px;line-height:1.5}
 .inicio-estado[data-pend="1"]{color:var(--ambar)}
@@ -581,6 +594,7 @@ body{
 .renglon-medidor b{display:block;margin-top:6px;font-family:var(--display);font-size:18px;letter-spacing:.06em;color:#FFC24D;text-align:right}
 .renglon-medidor[data-ok="1"] b{color:var(--verde)}
 
+/* ---------- 17-sep (v31): aclaraciones cerradas desde la oficina ---------- */
 /* ---------- 16-sep (v30): detalle por actividad y adicionales con título ---------- */
 .renglon input.renglon-tit{width:100%;min-height:48px;padding:10px 12px;margin-bottom:8px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:#FFFFFF;font-family:var(--texto);font-size:16px;font-weight:600}
 .renglon input.renglon-tit:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
@@ -776,6 +790,10 @@ body{
       <b>Mis actividades</b>
       <span id="inicioActDet">Consulta todos tus pendientes, de todos los clientes.</span>
     </button>
+    <button class="menu-op menu-op--acl" id="btnIrAclaraciones" type="button" hidden>
+      <b>Aclaraciones</b>
+      <span id="inicioAclDet">La oficina está revisando tu trabajo. Cierra cada duda con su estatus verdadero.</span>
+    </button>
     <button class="menu-op" id="btnIrServicio" type="button">
       <b>Servicio en campo</b>
       <span id="inicioServicioDet">Jornada con GPS, evidencia y firma del cliente.</span>
@@ -850,6 +868,29 @@ body{
       <p class="nota-btn" id="actNotaEnvio">—</p>
       <p class="act-cola" id="actCola">—</p>
     </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pantalla: Aclaraciones (cierre desde la oficina) -->
+<div class="pantalla" id="aclaracionesPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnAclMenu" type="button">&larr; Men&uacute;</button>
+      <button class="link-volver" id="btnAclRefrescar" type="button">&#8635; Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Aclaraciones</span>
+      <h2 id="aclFecha">&mdash;</h2>
+      <p class="pista" id="aclNombre">&mdash;</p>
+    </div>
+    <p class="pista acl-intro">Estas actividades se est&aacute;n revisando desde la oficina (Blake Inc &middot; Ecatepec). Aqu&iacute; no se manda nada al cliente: solo di qu&eacute; pas&oacute; realmente con cada una. <b>Plazo: antes de las 9:00 del d&iacute;a siguiente.</b></p>
+    <div class="act-meta"><span id="aclResumen">&mdash;</span><span id="aclSync">&mdash;</span></div>
+    <div id="aclLista"></div>
+    <div style="margin-top:24px">
+      <button class="btn" id="btnEnviarAcl" type="button" disabled>Enviar aclaraciones</button>
+      <p class="nota-btn" id="aclNotaEnvio">&mdash;</p>
+      <p class="acl-sello" id="aclSello">&mdash;</p>
     </div>
   </div>
 </div>
@@ -2174,6 +2215,11 @@ $("#btnEnvNuevo").addEventListener("click", ()=>{
     refrescarEquipo();
     return;
   }
+  if(envio.origen === "aclaracion"){
+    cerrarEnvio();
+    abrirAclaraciones();
+    return;
+  }
   cerrarEnvio();
   $("#inicio").hidden = true;
   $("#actividadesPantalla").hidden = true;
@@ -2289,6 +2335,8 @@ function mostrarInicio(){
   $("#btnIrAdmin").hidden = !esAdminApp();
   $("#btnIrCliente").hidden = !esAdminApp();
   $("#clientePantalla").hidden = true;
+  $("#aclaracionesPantalla").hidden = true;
+  pintarBotonAclaraciones();
   $("#inicio").hidden = false;
 }
 async function cerrarSesion(){
@@ -3068,6 +3116,265 @@ function abrirAltaCliente(){
 }
 $("#btnIrCliente").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAltaCliente(); });
 $("#btnCliMenu").addEventListener("click", ()=>{ $("#clientePantalla").hidden = true; mostrarInicio(); });
+
+/* ============================================================
+   ACLARACIONES  —  cierre desde la oficina   (17-sep-2026, v31)
+
+   Qué son: actividades que la oficina cargó con ORIGEN "Aclaración"
+   porque lo que se planeó y lo que se reportó no coinciden. Van
+   dirigidas al cliente interno Blake Inc · Ecatepec.
+
+   Cómo se cierran: en esta pantalla, desde la oficina o desde donde
+   esté el colaborador. NO abre servicio, NO pide firma del cliente,
+   NO genera PDF y NO manda correo al cliente.
+
+   Qué se manda: el mismo sobre "reporte_act" que ya entiende el
+   conector — items [{id, estado, nota}] — sin tocarle nada. El
+   estatus verdadero viaja como etiqueta al principio de la nota:
+     [ACL: HECHA / REPORTE AMBIGUO] …
+     [ACL: PENDIENTE / CAUSA PROPIA] …
+     [ACL: PENDIENTE / CAUSA EXTERNA -> Fulano] …
+   Así la calificación se puede leer después sin adivinar.
+   ============================================================ */
+const ACL_OFICINA = { cliente:"Blake Inc", sitio:"Ecatepec" };
+const ACL_ESTATUS = [
+  { v:"HECHA_MAL_REPORTADA", t:"Sí la hice — se reportó mal", estado:"TERMINADA",
+    etq:"HECHA / REPORTE AMBIGUO", quien:"", compromiso:false },
+  { v:"HECHA_OTRO_RENGLON", t:"Sí la hice — está en otro renglón", estado:"TERMINADA",
+    etq:"HECHA / DUPLICADA", quien:"¿En qué fecha o folio la reportaste?", compromiso:false },
+  { v:"PEND_PROPIA", t:"Pendiente — por mí", estado:"PENDIENTE",
+    etq:"PENDIENTE / CAUSA PROPIA", quien:"", compromiso:true },
+  { v:"PEND_EXTERNA", t:"Pendiente — causa externa", estado:"PENDIENTE",
+    etq:"PENDIENTE / CAUSA EXTERNA", quien:"¿Quién o qué lo detuvo? (nombre completo)", compromiso:true },
+  { v:"NO_ERA_MIA", t:"No era mía", estado:"CANCELADA",
+    etq:"NO ERA MIA", quien:"¿A quién le correspondía? (nombre completo)", compromiso:false },
+  { v:"CANCELADA_INSTRUCCION", t:"Cancelada por instrucción", estado:"CANCELADA",
+    etq:"CANCELADA POR INSTRUCCION", quien:"¿Quién la canceló? (nombre completo)", compromiso:false }
+];
+const ACL_MIN_QUIEN = 4;
+const acl = { marcas:{}, detalles:{}, quienes:{}, compromisos:{}, geo:null, geoTxt:"" };
+
+function aclDef(v){ return ACL_ESTATUS.find(e=>e.v===v) || null; }
+function esAclaracion(a){ return /aclaraci/i.test(String((a && a.origen) || "")); }
+function aclPendientes(){
+  const ocultas = idsEnCola();
+  return act.lista.filter(a=>esAclaracion(a) && !ocultas.has(String(a.id)));
+}
+
+/* Punto de referencia de la oficina, para sellar si se cerró ahí o fuera. */
+function aclRefOficina(){
+  return ORDENES.find(o =>
+    normCliente(o.cliente || o.titulo) === normCliente(ACL_OFICINA.cliente) &&
+    normCliente(o.sitio) === normCliente(ACL_OFICINA.sitio)) || null;
+}
+function aclLeerGeo(){
+  if(!navigator.geolocation){ acl.geoTxt = "sin GPS en este equipo"; pintarSelloAcl(); return; }
+  $("#aclSello").textContent = "Leyendo la ubicación…";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const la = +pos.coords.latitude.toFixed(6), lo = +pos.coords.longitude.toFixed(6);
+    const ref = aclRefOficina();
+    let donde = "ubicación registrada";
+    if(ref && ref.lat != null && ref.lon != null){
+      const d = Math.round(metros(la, lo, ref.lat, ref.lon));
+      donde = (d <= (ref.radio || 200)) ? "CERRADA EN OFICINA" : ("CERRADA FUERA DE OFICINA · a " + d + " m");
+    }
+    acl.geo = { lat:la, lon:lo };
+    acl.geoTxt = donde + " · " + la + "," + lo;
+    pintarSelloAcl();
+  }, ()=>{
+    acl.geo = null;
+    acl.geoTxt = "SIN UBICACIÓN (el GPS no respondió)";
+    pintarSelloAcl();
+  }, { enableHighAccuracy:true, timeout:12000, maximumAge:60000 });
+}
+function pintarSelloAcl(){
+  const e = $("#aclSello"); if(!e) return;
+  e.textContent = "Sello del cierre: " + (acl.geoTxt || "leyendo la ubicación…");
+}
+
+/* ---------- Pintado ---------- */
+function htmlAcl(a){
+  const id = String(a.id);
+  const v = acl.marcas[id] || "";
+  const d = aclDef(v);
+  const det = acl.detalles[id] || "";
+  const n = limpiaTxt(det).length;
+  const f = a.fecha ? etiquetaFecha(a.fecha) : null;
+  const listo = aclCompleta(id) ? "1" : "0";
+  const opciones = ['<option value="">— Elige el estatus verdadero —</option>']
+    .concat(ACL_ESTATUS.map(e=>`<option value="${e.v}"${e.v===v?" selected":""}>${esc(e.t)}</option>`)).join("");
+  let extra = "";
+  if(d && d.quien){
+    extra += `<label for="aclq-${esc(id)}">${esc(d.quien)}</label>
+      <input id="aclq-${esc(id)}" class="acl-quien" data-id="${esc(id)}" type="text" maxlength="120"
+        value="${esc(acl.quienes[id] || "")}" autocapitalize="words" placeholder="Escríbelo completo">`;
+  }
+  if(d && d.compromiso){
+    extra += `<label for="aclf-${esc(id)}">¿Para cuándo queda?</label>
+      <input id="aclf-${esc(id)}" class="acl-fecha" data-id="${esc(id)}" type="date"
+        value="${esc(acl.compromisos[id] || "")}" min="${hoyISO()}">`;
+  }
+  return `<div class="acl-item" data-listo="${listo}">
+    <p class="acl-texto">${esc(a.titulo || a.texto || "(sin texto)")}</p>
+    <p class="acl-meta">${f ? esc(f.txt) + " · " : ""}${esc(a.cliente || ACL_OFICINA.cliente)}${a.sitio ? " · " + esc(a.sitio) : ""} · ID ${esc(id)}</p>
+    <label for="acls-${esc(id)}">¿Qué pasó realmente?</label>
+    <select id="acls-${esc(id)}" class="acl-sel" data-id="${esc(id)}">${opciones}</select>
+    ${extra}
+    <label for="acld-${esc(id)}">Explícalo (mínimo ${MIN_DETALLE} caracteres)</label>
+    <textarea id="acld-${esc(id)}" class="acl-det" data-id="${esc(id)}" spellcheck="true" lang="es"
+      autocorrect="on" autocapitalize="sentences"
+      placeholder="Qué se hizo o por qué no se hizo, con qué equipo, dónde y cuál fue el resultado.">${esc(det)}</textarea>
+    <p class="acl-conteo" data-ok="${n >= MIN_DETALLE ? "1" : "0"}">${n >= MIN_DETALLE ? "✓ " + n + " caracteres" : n + " / " + MIN_DETALLE + " caracteres · faltan " + (MIN_DETALLE - n)}</p>
+  </div>`;
+}
+
+function aclCompleta(id){
+  const v = acl.marcas[id]; if(!v) return false;
+  const d = aclDef(v); if(!d) return false;
+  if(limpiaTxt(acl.detalles[id] || "").length < MIN_DETALLE) return false;
+  if(d.quien && limpiaTxt(acl.quienes[id] || "").length < ACL_MIN_QUIEN) return false;
+  if(d.compromiso && !acl.compromisos[id]) return false;
+  return true;
+}
+
+function pintarAclaraciones(){
+  const lista = aclPendientes();
+  $("#aclNombre").textContent = estado.tecnico || "—";
+  $("#aclFecha").textContent = new Date().toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long" });
+  const hora = act.actualizado
+    ? new Date(act.actualizado).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit", hour12:false }) : "";
+  $("#aclSync").textContent = (act.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar"))
+    + (navigator.onLine ? "" : " · sin conexión");
+  const listas = lista.filter(a=>aclCompleta(String(a.id))).length;
+  $("#aclResumen").innerHTML = `<b>${lista.length}</b> aclaración(es)` + (listas ? ` · ${listas} lista(s) para enviar` : "");
+  $("#aclLista").innerHTML = lista.length ? lista.map(htmlAcl).join("")
+    : `<p class="pista act-vacio">${act.cargando ? "Cargando…" : "No tienes aclaraciones pendientes. Nada que contestar."}</p>`;
+  enlazarAcl();
+  const btn = $("#btnEnviarAcl");
+  btn.disabled = !listas;
+  $("#aclNotaEnvio").textContent = !lista.length
+    ? "—"
+    : (listas
+        ? `Se enviarán ${listas} de ${lista.length}. Las que dejes incompletas se quedan aquí.`
+        : `Elige el estatus y explica cada una con mínimo ${MIN_DETALLE} caracteres para poder enviarlas.`);
+  pintarSelloAcl();
+}
+
+function enlazarAcl(){
+  const cont = $("#aclLista");
+  cont.querySelectorAll(".acl-sel").forEach(el=>{
+    el.addEventListener("change", e=>{
+      acl.marcas[e.target.dataset.id] = e.target.value;
+      pintarAclaraciones();
+    });
+  });
+  cont.querySelectorAll(".acl-det").forEach(el=>{
+    el.addEventListener("input", e=>{
+      acl.detalles[e.target.dataset.id] = e.target.value;
+      const caja = e.target.closest(".acl-item");
+      const n = limpiaTxt(e.target.value).length;
+      const c = caja.querySelector(".acl-conteo");
+      c.dataset.ok = n >= MIN_DETALLE ? "1" : "0";
+      c.textContent = n >= MIN_DETALLE ? "✓ " + n + " caracteres"
+        : n + " / " + MIN_DETALLE + " caracteres · faltan " + (MIN_DETALLE - n);
+      caja.dataset.listo = aclCompleta(e.target.dataset.id) ? "1" : "0";
+      const listas = aclPendientes().filter(a=>aclCompleta(String(a.id))).length;
+      $("#btnEnviarAcl").disabled = !listas;
+      $("#aclResumen").innerHTML = `<b>${aclPendientes().length}</b> aclaración(es)` + (listas ? ` · ${listas} lista(s) para enviar` : "");
+    });
+  });
+  cont.querySelectorAll(".acl-quien").forEach(el=>{
+    el.addEventListener("input", e=>{
+      acl.quienes[e.target.dataset.id] = e.target.value;
+      e.target.closest(".acl-item").dataset.listo = aclCompleta(e.target.dataset.id) ? "1" : "0";
+      const listas = aclPendientes().filter(a=>aclCompleta(String(a.id))).length;
+      $("#btnEnviarAcl").disabled = !listas;
+    });
+  });
+  cont.querySelectorAll(".acl-fecha").forEach(el=>{
+    el.addEventListener("change", e=>{
+      acl.compromisos[e.target.dataset.id] = e.target.value;
+      e.target.closest(".acl-item").dataset.listo = aclCompleta(e.target.dataset.id) ? "1" : "0";
+      const listas = aclPendientes().filter(a=>aclCompleta(String(a.id))).length;
+      $("#btnEnviarAcl").disabled = !listas;
+    });
+  });
+}
+
+function pintarBotonAclaraciones(){
+  const b = $("#btnIrAclaraciones"); if(!b) return;
+  /* Al volver al menú la lista puede no estar en memoria todavía: se lee la
+     copia guardada en el teléfono para no esconder el botón por descuido. */
+  if(!act.lista.length) cargarAct();
+  const n = aclPendientes().length;
+  b.hidden = !n;
+  const d = $("#inicioAclDet");
+  if(d && n) d.textContent = `${n} duda(s) de la oficina sobre tu trabajo · antes de las 9:00`;
+}
+
+/* ---------- Envío ---------- */
+function notaAcl(id){
+  const d = aldDefSeguro(id);
+  const partes = [];
+  let etq = d.etq;
+  const quien = limpiaTxt(acl.quienes[id] || "");
+  if(d.quien && quien) etq += " -> " + quien;
+  partes.push("[ACL: " + etq + "]");
+  partes.push(limpiaTxt(acl.detalles[id] || ""));
+  if(d.compromiso && acl.compromisos[id]) partes.push("Compromiso: " + acl.compromisos[id]);
+  partes.push(acl.geoTxt || "SIN UBICACIÓN");
+  partes.push("Cerrada " + new Date().toLocaleString("es-MX", { day:"2-digit", month:"2-digit", year:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false }));
+  return partes.join(" · ");
+}
+function aldDefSeguro(id){ return aclDef(acl.marcas[id]) || ACL_ESTATUS[0]; }
+
+async function enviarAclaraciones(){
+  const listas = aclPendientes().filter(a=>aclCompleta(String(a.id)));
+  if(!listas.length) return;
+  const resumenTxt = listas.map((a,i)=>`${i+1}. ${aldDefSeguro(String(a.id)).t}`).join("\n");
+  const ok = await confirmar("¿Enviar tus aclaraciones?",
+    `Se registran ${listas.length} aclaración(es) con el estatus que elegiste:\n\n${resumenTxt}\n\n` +
+    "Esto no manda nada al cliente. Queda asentado a tu nombre y la oficina lo revisa.",
+    "Enviar");
+  if(!ok) return;
+  const reporteId = "ACL" + idCorto();
+  encolar({
+    tipo:"reporte_act", token:estado.token, reporteId,
+    cliente: ACL_OFICINA.cliente, sitio: ACL_OFICINA.sitio, folio: "",
+    items: listas.map(a=>({ id:String(a.id), estado: aldDefSeguro(String(a.id)).estado, nota: notaAcl(String(a.id)) })),
+    adicionales: [],
+    detalle: ""
+  });
+  /* Salen de la lista local; las que quedaron incompletas siguen aquí. */
+  const ids = new Set(listas.map(a=>String(a.id)));
+  ids.forEach(id=>{ delete acl.marcas[id]; delete acl.detalles[id]; delete acl.quienes[id]; delete acl.compromisos[id]; });
+  act.lista = act.lista.filter(a=>!ids.has(String(a.id)));
+  guardarAct();
+  $("#aclaracionesPantalla").hidden = true;
+  iniciarEnvio("aclaracion", `${listas.length} aclaración(es) · ${estado.tecnico || ""}`, "Registrando tus aclaraciones…");
+  listoEnvio();
+}
+
+/* ---------- Apertura ---------- */
+function abrirAclaraciones(){
+  cargarAct();
+  const p = $("#aclaracionesPantalla");
+  $("#inicio").hidden = true;
+  p.hidden = false; p.scrollTop = 0;
+  acl.geoTxt = "";
+  pintarAclaraciones();
+  aclLeerGeo();
+  refrescarAclaraciones();
+}
+async function refrescarAclaraciones(){
+  await refrescarActividades();
+  pintarAclaraciones();
+  pintarBotonAclaraciones();
+}
+$("#btnIrAclaraciones").addEventListener("click", abrirAclaraciones);
+$("#btnAclMenu").addEventListener("click", ()=>{ $("#aclaracionesPantalla").hidden = true; mostrarInicio(); });
+$("#btnAclRefrescar").addEventListener("click", refrescarAclaraciones);
+$("#btnEnviarAcl").addEventListener("click", enviarAclaraciones);
 
 /* Logotipo en las pantallas nuevas (se reutiliza el de la portada) */
 function aplicarLogos(){

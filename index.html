@@ -1098,6 +1098,11 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v39 (22-sep-2026) — Fase 2 sin señal: se puede empezar un servicio sin señal con un
+     FOLIO PROVISIONAL (P-...). Al volver la señal la app pide el folio definitivo, lo pone
+     en todo lo pendiente y deja en Registros el renglón "Folio provisional P-… → 2026-…".
+     Ya no se bloquea iniciar otro servicio mientras quedan envíos. Las fotos del cierre
+     sobreviven si se cierra la app.
    v38 (22-sep-2026): GPS sin señal — el GPS se enciende al abrir el servicio, espera hasta
      60 s con contador, acepta una lectura de hasta 2 min, y si no se ubica permite
      registrar marcado "SIN UBICACIÓN GPS" (decisión B del Sr. Ernesto).
@@ -1235,7 +1240,7 @@ function restaurar(){
    IndexedDB da cientos de MB. Cada sobre se guarda aparte con su _qid
    (el orden de envío es el orden de _qid).
    ============================================================ */
-const BD = { nombre:"blake-campo", version:1, db:null, sinBD:false };
+const BD = { nombre:"blake-campo", version:2, db:null, sinBD:false };
 let _qseq = 0;
 function nuevoQid(){ return String(Date.now()).padStart(15,"0") + "-" + String(++_qseq).padStart(5,"0"); }
 function bdAbrir(){
@@ -1247,6 +1252,7 @@ function bdAbrir(){
       const db = r.result;
       if(!db.objectStoreNames.contains("cola")) db.createObjectStore("cola", { keyPath:"_qid" });
       if(!db.objectStoreNames.contains("rechazados")) db.createObjectStore("rechazados", { keyPath:"_qid" });
+      if(!db.objectStoreNames.contains("servicio")) db.createObjectStore("servicio", { keyPath:"k" });   // v39
     };
     r.onsuccess = ()=>{
       BD.db = r.result;
@@ -1305,6 +1311,7 @@ async function cargarCola(){
     const nuevos = estado.cola.filter(x=> x._qid && !ya.has(x._qid));
     estado.cola = enBD.concat(nuevos).sort((a,b)=> a._qid < b._qid ? -1 : 1);
     estado.rechazados = await bdTodos("rechazados");
+    await cargarFotosServicio();
   }catch(e){
     BD.sinBD = true;                                 // teléfono sin IndexedDB: método viejo
   }
@@ -1366,6 +1373,10 @@ async function enviarCola(){
   try{
     while(estado.cola.length){
       const sobre = estado.cola[0];
+      if(esFolioProv(sobre.folio)){
+        const ok = await resolverFolio(sobre.folio);
+        if(!ok){ estado.ultimoError = "Falta señal para obtener el folio definitivo"; break; }
+      }
       const res = await enviarUno(sobre);
 
       if(res.tipo === "red"){ estado.ultimoError = res.error; break; }   // se reintenta solo
@@ -1405,7 +1416,7 @@ async function enviarCola(){
       if(!BD.sinBD) bdDel("cola", sobre._qid).catch(()=>{});
       estado.enviados++;
       if(envio.activo) envio.hechos++;
-      if(sobre.tipo==="foto" && sobre.fase!=="firma") marcarFotoEnviada(sobre.fase);
+      if(sobre.tipo==="foto" && sobre.fase!=="firma" && estado.orden && sobre.folio === estado.orden.folio) marcarFotoEnviada(sobre.fase);
       persistir();
       pintar();
       if(!$("#actividadesPantalla").hidden) pintarEnvioAct();
@@ -1435,6 +1446,25 @@ function renovarSesionEnCola(){
   estado.sesionVencida = false;
   enviarCola();
 }
+
+/* v39: las fotos "después" se conservan con imagen hasta la salida, porque
+   se reenvían como evidencia del reporte de actividades. Antes vivían solo en
+   memoria: si la app se cerraba sin señal, se perdían. Ahora van a IndexedDB. */
+function guardarFotosServicio(){
+  if(BD.sinBD) return;
+  const d = (estado.fotos.despues || []).map(f=>({ url:f.url || null, kb:f.kb, enviada:!!f.enviada }));
+  bdPut("servicio", { k:"fotosDespues", folio:(estado.orden && estado.orden.folio) || "", d }).catch(fallaGuardado);
+}
+async function cargarFotosServicio(){
+  try{
+    const r = await bdOp("servicio", "readonly", st => st.get("fotosDespues"));
+    if(!r || !estado.orden || r.folio !== estado.orden.folio) return;
+    const meta = estado.fotos.despues || [];
+    r.d.forEach((f, i)=>{ if(meta[i]){ if(!meta[i].url && f.url) meta[i].url = f.url; } else meta.push(f); });
+    estado.fotos.despues = meta;
+  }catch(e){}
+}
+function borrarFotosServicio(){ if(!BD.sinBD) bdDel("servicio", "fotosDespues").catch(()=>{}); }
 
 function marcarFotoEnviada(fase){
   const f = (estado.fotos[fase]||[]).find(x=>!x.enviada);
@@ -1584,7 +1614,7 @@ function pintarEnvio(){
       $("#envTitulo").textContent = "Cancelación guardada en el teléfono";
       $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") +
         motivoPausa("Se mandará sola al recuperar la señal.");
-      $("#btnEnvNuevo").hidden = true; $("#btnEnvMenu").hidden = false;
+      $("#btnEnvNuevo").hidden = false; $("#btnEnvMenu").hidden = false;
     } else {
       p.dataset.estado = "enviando";
       $("#envEtiqueta").textContent = "Cancelando";
@@ -1613,7 +1643,7 @@ function pintarEnvio(){
         "Hasta entonces el colaborador todavía no la ve."
       : motivoPausa(`Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados en el teléfono y se enviarán solos al recuperar la señal. ` +
         "Puede cerrar la app: al abrirla con señal se terminan de enviar.");
-    $("#btnEnvNuevo").hidden = true;
+    $("#btnEnvNuevo").hidden = asg;
     $("#btnEnvMenu").hidden = false;
   } else {
     p.dataset.estado = "enviando";
@@ -1635,7 +1665,8 @@ function cerrarEnvio(){
 /* ---------- Pintado ---------- */
 function pintarOrden(){
   const o=estado.orden; if(!o) return;
-  $("#ordenEtiqueta").textContent = o.folio ? `Folio ${o.folio}` : "Folio pendiente";
+  $("#ordenEtiqueta").textContent = !o.folio ? "Folio pendiente"
+    : esFolioProv(o.folio) ? `Folio provisional ${o.folio} · sin señal` : `Folio ${o.folio}`;
   $("#ordenTitulo").textContent = (o.titulo || o.cliente || "—");
   $("#ordenSitio").textContent = o.sitio || "—";
 }
@@ -2121,6 +2152,7 @@ $("#camara").addEventListener("change", async e=>{
     n++; if(r.org && r.org.galeria) galeria++;
     persistir(); pintar();
   }
+  if(fase === "despues") guardarFotosServicio();
   avisoLote(n, galeria, fallidas, archivos.length - tomar.length, "guardadas; se envían solas");
 });
 
@@ -2679,18 +2711,44 @@ function esClienteInterno(o){
   const n = String((o && (o.cliente || o.titulo)) || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
   return n.indexOf("blake inc") === 0 || n === "interno";
 }
-async function pedirFolio(interno){
-  const resp = await llamarJSONP("folio=1" + (interno ? "&interno=1" : ""));
+async function pedirFolio(interno, espera){
+  const resp = await llamarJSONP("folio=1" + (interno ? "&interno=1" : ""), espera || 12000);
   return (resp && resp.ok && resp.folio) ? resp.folio : null;
 }
+/* ============================================================
+   v39 · Folio provisional (servicios sin señal)
+   Formato: P-AAMMDD-HHMMSS-XXX  (INT: P-INT-...)  XXX = 3 letras del correo.
+   Es único por técnico y segundo. Al volver la señal, enviarCola() pide el
+   folio definitivo ANTES de mandar cualquier registro con folio provisional,
+   lo sustituye en todo lo pendiente y deja constancia en Registros.
+   Las fotos ya selladas conservan el provisional quemado en la imagen: el
+   renglón de constancia une ambos números.
+   ============================================================ */
+const LS_FOLIOS = "blake.folios";
+const esFolioProv = f => /^P-/.test(String(f || ""));
+function nuevoFolioProvisional(interno){
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  const quien = (String(estado.usuario || "XXX").replace(/[^a-z]/gi, "").slice(0, 3) || "XXX").toUpperCase();
+  return "P-" + (interno ? "INT-" : "") + String(d.getFullYear()).slice(2) + p(d.getMonth()+1) + p(d.getDate()) +
+         "-" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + "-" + quien;
+}
+function leerFolios(){ try{ return JSON.parse(localStorage.getItem(LS_FOLIOS) || "{}") || {}; }catch(e){ return {}; } }
 async function comenzarServicio(o){
   if(generandoFolio) return;
   generandoFolio = true;
-  avisar("Generando folio…","Un momento, se está asignando el número de servicio.","info");
-  const folio = await pedirFolio(esClienteInterno(o));
+  const interno = esClienteInterno(o);
+  let folio = null;
+  if(navigator.onLine){
+    avisar("Generando folio…","Un momento, se está asignando el número de servicio.","info");
+    folio = await pedirFolio(interno, 8000);
+  }
   generandoFolio = false;
   if(!folio){
-    avisar("No se pudo generar el folio","Revisa tu conexión e intenta de nuevo.","error");
+    folio = nuevoFolioProvisional(interno);
+    o.folio = folio;
+    elegirOrden(o);
+    avisar("Servicio abierto SIN SEÑAL",
+      `Folio provisional ${folio}. Puede trabajar normal: al recuperar la señal se asigna el folio definitivo y se envía todo solo.`, "alerta");
     return;
   }
   o.folio = folio;
@@ -2700,7 +2758,42 @@ function elegirOrden(o){
   estado.orden = o; persistir();
   $("#ordenes").hidden = true;
   pintar();
-  avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio} · Folio ${o.folio}`, "ok");
+  if(!esFolioProv(o.folio)) avisar("Servicio seleccionado", `${o.titulo||o.cliente} — ${o.sitio} · Folio ${o.folio}`, "ok");
+}
+
+/* Cambia un folio provisional por el definitivo en TODO lo pendiente. */
+async function resolverFolio(prov){
+  const mapa = leerFolios();
+  let real = mapa[prov];
+  if(!real){
+    real = await pedirFolio(/^P-INT-/.test(prov), 15000);
+    if(!real) return false;
+    mapa[prov] = real;
+    try{ localStorage.setItem(LS_FOLIOS, JSON.stringify(mapa)); }catch(e){}
+    /* Constancia en la pestaña Registros */
+    const o = estado.orden && estado.orden.folio === prov ? estado.orden : {};
+    const primero = estado.cola.find(s => s.folio === prov) || {};
+    encolar({ tipo:"evento", tecnico: primero.tecnico || estado.tecnico, cliente: primero.cliente || o.cliente || "",
+              orden: primero.orden || o.orden || "", sitio: primero.sitio || o.sitio || "",
+              evento: "Folio provisional " + prov + " → " + real, fecha: hoy(), hora: ahora(),
+              actividades: "Servicio abierto sin señal; folio definitivo asignado al recuperar la señal.",
+              lat:"", lon:"", distancia:"", estatus:"FOLIO ASIGNADO", precision:"", folio: real });
+  }
+  const cambia = s=>{
+    let t = false;
+    if(s.folio === prov){ s.folio = real; t = true; }
+    if(typeof s.folioCancelacion === "string" && s.folioCancelacion.indexOf(prov) >= 0){
+      s.folioCancelacion = s.folioCancelacion.split(prov).join(real); t = true;
+    }
+    return t;
+  };
+  estado.cola.forEach(s=>{ if(cambia(s) && !BD.sinBD) bdPut("cola", s).catch(fallaGuardado); });
+  estado.rechazados.forEach(s=>{ if(cambia(s) && !BD.sinBD) bdPut("rechazados", s).catch(()=>{}); });
+  if(estado.orden && estado.orden.folio === prov){ estado.orden.folio = real; guardarFotosServicio(); }
+  persistir();
+  try{ pintar(); }catch(e){}
+  avisar("Folio asignado", `El servicio ${prov} quedó con el folio definitivo ${real}.`, "ok");
+  return true;
 }
 let mLat=null, mLon=null;
 $("#btnOtro").addEventListener("click", ()=>{
@@ -2740,11 +2833,14 @@ $("#btnComenzar").addEventListener("click", ()=>{
 
 /* ---------- Iniciar un nuevo servicio ---------- */
 async function reiniciarServicio(){
-  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que todo se envíe antes de iniciar otro servicio.","error"); return; }
-  if(!await confirmar("¿Iniciar un nuevo servicio?", "El servicio actual ya quedó guardado en la hoja.", "Iniciar nuevo servicio")) return;
+  const pendN = estado.cola.length;
+  if(!await confirmar("¿Iniciar un nuevo servicio?",
+      pendN ? `El servicio actual quedó guardado en el teléfono. ${pendN} registro(s) se enviarán solos al haber señal.`
+            : "El servicio actual ya quedó guardado en la hoja.", "Iniciar nuevo servicio")) return;
   limpiarServicio();
 }
 function limpiarServicio(){
+  borrarFotosServicio();
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
@@ -2770,7 +2866,7 @@ $("#btnNuevo").addEventListener("click", reiniciarServicio);
 
 /* Botones de la pantalla de envío */
 $("#btnEnvNuevo").addEventListener("click", ()=>{
-  if(estado.cola.length > 0){ avisar("Aún enviando","Espera a que termine de subirse.","error"); return; }
+  /* v39: ya no se exige que la cola esté vacía; lo pendiente se envía solo. */
   if(envio.origen === "asignacion"){
     // Regresa al panel para seguir asignando, con la lista del equipo ya actualizada.
     cerrarEnvio();
@@ -2927,7 +3023,7 @@ async function cerrarSesion(){
    - Salida registrada pero aún enviando -> se muestra para que termine de enviarse. */
 $("#btnIrServicio").addEventListener("click", async ()=>{
   const o = estado.orden, ev = estado.eventos || {};
-  if(o && ev.salida && estado.cola.length === 0){
+  if(o && ev.salida){
     $("#inicio").hidden = true; limpiarServicio(); return;
   }
   if(o && !ev.llegada){

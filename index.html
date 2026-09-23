@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0D10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Blake Campo">
 <title>Reporte de Servicio Blake Inc</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -418,6 +424,10 @@ body{
 .link-centro{margin:18px auto 0}
 .inicio-estado{font-family:var(--dato);font-size:11.5px;color:var(--plata);text-align:center;margin-top:6px;line-height:1.5}
 .inicio-estado[data-pend="1"]{color:var(--ambar)}
+.inicio-estado[data-pend="2"]{color:#ff4d4d;font-weight:600}
+/* v36: instalar la app en el telefono */
+#btnInstalar{display:block;width:100%;margin:10px 0 2px;padding:12px 14px;border-radius:10px;border:1px solid var(--naranja-glow, #ff8a1f);background:transparent;color:var(--plata);font-family:var(--dato);font-size:12.5px;letter-spacing:.04em;cursor:pointer}
+#btnInstalar[hidden]{display:none}
 .tecnico-linea .acciones-sesion{display:flex;gap:14px}
 
 .pantalla{position:fixed;inset:0;z-index:100;background:var(--acero-900);overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -883,6 +893,7 @@ body{
       <span id="inicioClienteDet">Panel de administrador: registra un cliente nuevo con su obra, correo y ubicación.</span>
     </button>
     <p class="inicio-estado" id="inicioEstado">—</p>
+    <button id="btnInstalar" type="button" hidden>Instalar la app en este teléfono</button>
     <button class="link-volver link-centro" id="btnMiClave" type="button">Cambiar mi contraseña</button>
     <button class="link-volver link-centro" id="btnInicioSalir" type="button">Cerrar sesión</button>
   </div>
@@ -1086,8 +1097,17 @@ body{
    Reporte de Servicio Blake Inc — pantalla de jornada
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
-   Funciona sin internet: guarda en el teléfono y reintenta solo
-   (excepto iniciar sesión y comenzar un servicio nuevo, que sí piden señal).
+   Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v36 (22-sep-2026) — Fase 1 sin señal:
+     · La app se guarda en el teléfono (sw.js) y abre aunque no haya señal.
+     · Los registros pendientes viven en IndexedDB (mucho más espacio que
+       localStorage). Si algo no se puede guardar, alerta roja.
+     · Un registro sale de la cola SOLO cuando el servidor confirma que lo
+       guardó (antes se enviaba "a ciegas" con no-cors).
+     · Se puede entrar sin señal si ya se entró antes con señal en ese
+       teléfono (la contraseña se comprueba contra una huella local).
+   Sigue pidiendo señal: el primer acceso, el cambio de contraseña y
+   comenzar un servicio nuevo (el folio lo da el servidor; Fase 2).
    ============================================================ */
 
 const CONFIG = {
@@ -1116,12 +1136,17 @@ const estado = {
   eventos:{}, fotos:{ antes:[], despues:[] },
   actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
-  enviados:0   // sobres realmente entregados al conector en este servicio
+  enviados:0,   // sobres realmente entregados al conector en este servicio
+  rechazados:[],        // v36: sobres que el servidor rechazó 3 veces (apartados en el teléfono)
+  sesionVencida:false,  // v36: el servidor dijo "sesión vencida": se espera un nuevo acceso
+  ultimoError:"",       // v36: último motivo por el que no se pudo enviar
+  sinSenal:false        // v36: entró con la huella local, sin validar en el servidor
 };
 
 /* Texto honesto del estado de envio: "Todo enviado" SOLO si de verdad ya
    se envio algo. Con la cola vacia y nada enviado aun, decirlo confunde. */
 function textoCola(){
+  if(estado.sesionVencida && estado.cola.length) return estado.cola.length + " registro(s) esperando que inicie sesión con señal";
   if(estado.cola.length) return estado.cola.length + " registro(s) sin enviar en el teléfono";
   return estado.enviados ? "✓ Todo enviado" : "Nada pendiente · el reporte aún no se envía";
 }
@@ -1165,8 +1190,13 @@ function persistir(){
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
       incluirFirma:estado.incluirFirma
     }));
-    localStorage.setItem(LS.cola, JSON.stringify(estado.cola));
-  }catch(e){ /* almacenamiento lleno: no bloqueamos la jornada */ }
+    /* v36: la cola ya NO vive aquí sino en IndexedDB (ver "Almacén del
+       teléfono"). Solo si el teléfono no tiene IndexedDB se usa el método viejo. */
+    if(BD.sinBD) localStorage.setItem(LS.cola, JSON.stringify(estado.cola));
+  }catch(e){
+    if(BD.sinBD && estado.cola.length) fallaGuardado(e);
+    /* resto: almacenamiento lleno, no bloqueamos la jornada */
+  }
 }
 function restaurar(){
   try{
@@ -1184,32 +1214,191 @@ function restaurar(){
         .filter(r=> String(r.titulo||"").trim() || String(r.detalle||"").trim()) : [];
       estado.incluirFirma = !!g.incluirFirma;
     }
+    /* Cola vieja (v35 y anteriores) guardada en localStorage: se toma aquí y
+       cargarCola() la pasa a IndexedDB sin perder nada. */
     estado.cola = JSON.parse(localStorage.getItem(LS.cola) || "[]");
+    estado.cola.forEach(s=>{ if(!s._qid) s._qid = nuevoQid(); if(!s._u) s._u = estado.usuario || ""; });
   }catch(e){ /* datos corruptos: empezamos limpio */ }
 }
 
 /* ============================================================
    Cola de envío al conector de Google
    ============================================================ */
-function encolar(sobre){ estado.cola.push(sobre); persistir(); enviarCola(); }
-
-async function enviarUno(sobre){
-  await fetch(CONFIG.url, {
-    method:"POST", mode:"no-cors",
-    headers:{ "Content-Type":"text/plain;charset=utf-8" },
-    body: JSON.stringify(sobre)
+/* ============================================================
+   v36 · Almacén del teléfono (IndexedDB)
+   localStorage da ~5 MB y, lleno, fallaba EN SILENCIO: un técnico con
+   varias fotos sin señal podía perder el reporte sin enterarse.
+   IndexedDB da cientos de MB. Cada sobre se guarda aparte con su _qid
+   (el orden de envío es el orden de _qid).
+   ============================================================ */
+const BD = { nombre:"blake-campo", version:1, db:null, sinBD:false };
+let _qseq = 0;
+function nuevoQid(){ return String(Date.now()).padStart(15,"0") + "-" + String(++_qseq).padStart(5,"0"); }
+function bdAbrir(){
+  if(BD.db) return Promise.resolve(BD.db);
+  return new Promise((res, rej)=>{
+    let r;
+    try{ r = indexedDB.open(BD.nombre, BD.version); }catch(e){ rej(e); return; }
+    r.onupgradeneeded = ()=>{
+      const db = r.result;
+      if(!db.objectStoreNames.contains("cola")) db.createObjectStore("cola", { keyPath:"_qid" });
+      if(!db.objectStoreNames.contains("rechazados")) db.createObjectStore("rechazados", { keyPath:"_qid" });
+    };
+    r.onsuccess = ()=>{
+      BD.db = r.result;
+      BD.db.onversionchange = ()=>{ try{ BD.db.close(); }catch(e){} BD.db = null; };
+      res(BD.db);
+    };
+    r.onerror = ()=> rej(r.error || new Error("IndexedDB no abrió"));
+    r.onblocked = ()=> rej(new Error("IndexedDB bloqueado"));
   });
+}
+function bdOp(almacen, modo, fn){
+  return bdAbrir().then(db => new Promise((res, rej)=>{
+    const tx = db.transaction(almacen, modo);
+    let out;
+    const q = fn(tx.objectStore(almacen));
+    if(q) q.onsuccess = ()=>{ out = q.result; };
+    tx.oncomplete = ()=> res(out);
+    tx.onerror = ()=> rej(tx.error || new Error("Error de IndexedDB"));
+    tx.onabort = ()=> rej(tx.error || new Error("IndexedDB abortó (¿memoria llena?)"));
+  }));
+}
+/* Todas las escrituras van en fila: un borrado nunca se adelanta a su alta. */
+let _bdFila = Promise.resolve();
+function bdEnFila(tarea){
+  const p = _bdFila.then(tarea);
+  _bdFila = p.catch(()=>{});
+  return p;
+}
+const bdPut   = (a, v) => bdEnFila(()=> bdOp(a, "readwrite", st => st.put(v)));
+const bdDel   = (a, k) => bdEnFila(()=> bdOp(a, "readwrite", st => st.delete(k)));
+const bdTodos = a => bdOp(a, "readonly", st => st.getAll());
+
+/* Falla al guardar en el teléfono: alerta roja que no se cierra sola. */
+let _fallaAvisada = 0;
+function fallaGuardado(e){
+  estado.ultimoError = "No se pudo guardar en el teléfono: " + (e && e.message || e || "");
+  if(Date.now() - _fallaAvisada < 15000) return;   // no ametrallar
+  _fallaAvisada = Date.now();
+  avisar("NO SE GUARDÓ EN EL TELÉFONO",
+    "La memoria del teléfono no aceptó el registro. Sigue en la app, pero se pierde si la cierra o la recarga. " +
+    "NO cierre la app: busque señal para que se envíe, o libere espacio en el teléfono.", "error");
+  try{ pintarCola(); pintarEstadoInicio(); }catch(_){}
+}
+
+/* Arranque: abre IndexedDB, pasa ahí la cola vieja de localStorage y carga lo pendiente. */
+let _colaLista = false;
+async function cargarCola(){
+  try{
+    await bdAbrir();
+    const deLS = estado.cola.slice();              // lo que restaurar() leyó de localStorage (v35)
+    for(const s of deLS) await bdPut("cola", s);
+    try{ localStorage.removeItem(LS.cola); }catch(e){}
+    const enBD = await bdTodos("cola");
+    const ya = new Set(enBD.map(x=>x._qid));
+    /* lo que se haya encolado mientras cargaba */
+    const nuevos = estado.cola.filter(x=> x._qid && !ya.has(x._qid));
+    estado.cola = enBD.concat(nuevos).sort((a,b)=> a._qid < b._qid ? -1 : 1);
+    estado.rechazados = await bdTodos("rechazados");
+  }catch(e){
+    BD.sinBD = true;                                 // teléfono sin IndexedDB: método viejo
+  }
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  _colaLista = true;
+}
+
+function encolar(sobre){
+  sobre._qid = nuevoQid();
+  sobre._u = estado.usuario || "";
+  sobre._intentos = 0;
+  estado.cola.push(sobre);
+  persistir();
+  if(!BD.sinBD) bdPut("cola", sobre).catch(fallaGuardado);
+  enviarCola();
+}
+
+/* v36 · Envío CON RECIBO. Antes era mode:"no-cors": la app no podía leer la
+   respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
+   sobre sale de la cola solo si el conector contesta { ok:true }.
+   Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
+async function enviarUno(sobre){
+  const limpio = Object.assign({}, sobre);
+  delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
+  const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  const reloj = ctrl ? setTimeout(()=> ctrl.abort(), 120000) : null;
+  let r, txt;
+  try{
+    r = await fetch(CONFIG.url, {
+      method:"POST",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify(limpio),
+      redirect:"follow",
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    txt = await r.text();
+  }catch(e){
+    return { tipo:"red", error: (e && e.name === "AbortError") ? "El servidor tardó más de 2 minutos" : "Sin señal o sin respuesta del servidor" };
+  }finally{ if(reloj) clearTimeout(reloj); }
+  let j = null;
+  try{ j = JSON.parse(txt); }catch(e){}
+  if(!j) return { tipo:"red", error:"El servidor no entregó recibo (HTTP " + (r && r.status) + ")" };
+  if(j.ok === false) return { tipo:"rechazo", error:String(j.error || "Rechazado por el servidor") };
+  return { tipo:"ok", resp:j };
+}
+
+const esErrorSesion = t => /sesi[oó]n\s+(no\s+v[aá]lida|vencida)/i.test(String(t||""));
+function nombreSobre(s){
+  const n = { foto:"Foto", foto_act:"Foto de actividad", reporte_act:"Reporte de actividades", hoja:"Correo del reporte al cliente",
+              cancelacion:"Cancelación", asignar:"Asignación", cliente:"Alta de cliente", evento:"Registro de jornada" };
+  return (n[s.tipo] || "Registro") + (s.folio ? " · folio " + s.folio : "") + (s.cliente ? " · " + s.cliente : "");
 }
 
 let enviando = false;
 async function enviarCola(){
-  if(enviando || !navigator.onLine || estado.cola.length===0) return;
+  if(enviando || !_colaLista || estado.cola.length===0) return;
+  if(estado.sesionVencida) return;           // espera a que vuelva a iniciar sesión con señal
   enviando = true;
   try{
     while(estado.cola.length){
       const sobre = estado.cola[0];
-      await enviarUno(sobre);
+      const res = await enviarUno(sobre);
+
+      if(res.tipo === "red"){ estado.ultimoError = res.error; break; }   // se reintenta solo
+
+      if(res.tipo === "rechazo"){
+        estado.ultimoError = res.error;
+        if(esErrorSesion(res.error)){
+          estado.sesionVencida = true;
+          avisar("Inicie sesión de nuevo, con señal",
+            `El servidor ya no reconoce la sesión${sobre._u ? " de " + esc(sobre._u) : ""}. ` +
+            `${estado.cola.length} registro(s) siguen a salvo en el teléfono y se enviarán en cuanto entre otra vez con su contraseña.`, "error");
+          break;
+        }
+        sobre._intentos = (sobre._intentos || 0) + 1;
+        sobre._ultimoError = res.error;
+        if(sobre._intentos < 3){
+          if(!BD.sinBD) bdPut("cola", sobre).catch(fallaGuardado);
+          break;                               // se reintenta en el siguiente ciclo
+        }
+        /* Tercer rechazo: se aparta para no frenar todo lo demás. No se borra. */
+        estado.cola.shift();
+        estado.rechazados.push(sobre);
+        if(!BD.sinBD){
+          bdPut("rechazados", sobre).catch(fallaGuardado);
+          bdDel("cola", sobre._qid).catch(()=>{});
+        }
+        persistir();
+        avisar("El servidor rechazó un registro",
+          `${esc(nombreSobre(sobre))}: ${esc(res.error)}. Quedó apartado en el teléfono. Avise a la oficina.`, "error");
+        pintarCola(); pintarEstadoInicio();
+        continue;
+      }
+
+      /* Recibido y confirmado por el servidor */
       estado.cola.shift();
+      estado.ultimoError = "";
+      if(!BD.sinBD) bdDel("cola", sobre._qid).catch(()=>{});
       estado.enviados++;
       if(envio.activo) envio.hechos++;
       if(sobre.tipo==="foto" && sobre.fase!=="firma") marcarFotoEnviada(sobre.fase);
@@ -1220,8 +1409,27 @@ async function enviarCola(){
       if(!$("#adminPantalla").hidden) pintarBotonAsignar();
       pintarEnvio();
     }
-  }catch(e){ /* sin señal: se reintenta al reconectar */ }
-  finally{ enviando = false; pintarEnvio(); }
+  }catch(e){ estado.ultimoError = String(e && e.message || e); }
+  finally{ enviando = false; pintarEnvio(); try{ pintarCola(); pintarEstadoInicio(); }catch(_){} }
+}
+/* navigator.onLine miente a veces (dice "en línea" sin datos): se reintenta cada 30 s. */
+setInterval(()=>{ if(estado.cola.length && !enviando) enviarCola(); }, 30000);
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible") enviarCola(); });
+
+/* Tras un acceso con señal: los sobres de ESE usuario toman la sesión nueva
+   (los que traían una vencida) y la cola se reanuda. */
+function renovarSesionEnCola(){
+  const u = estado.usuario, t = estado.token;
+  if(!u || !t) return;
+  estado.cola.forEach(s=>{
+    if(s._u === u && Object.prototype.hasOwnProperty.call(s, "token") && s.token !== t){
+      s.token = t;
+      if(!BD.sinBD) bdPut("cola", s).catch(fallaGuardado);
+    }
+  });
+  persistir();
+  estado.sesionVencida = false;
+  enviarCola();
 }
 
 function marcarFotoEnviada(fase){
@@ -1316,6 +1524,22 @@ function listoEnvio(){
   enviarCola();
 }
 
+/* v36: el envío está "en pausa" si no hay señal, si la sesión venció, o si
+   el último intento no obtuvo recibo y no hay otro intento en curso. */
+function enPausa(){
+  return !navigator.onLine || estado.sesionVencida || (!enviando && !!estado.ultimoError);
+}
+function etiquetaPausa(){
+  if(estado.sesionVencida) return "Sesión vencida";
+  return navigator.onLine ? "Sin recibo del servidor" : "Sin conexión";
+}
+function motivoPausa(normal){
+  if(estado.sesionVencida)
+    return "Todo quedó guardado en el teléfono. Para enviarlo, <b>inicie sesión de nuevo con señal</b> (menú → Cerrar sesión → entrar).";
+  if(navigator.onLine && estado.ultimoError)
+    return esc(estado.ultimoError) + ". Quedó guardado en el teléfono; se reintenta solo cada 30 segundos.";
+  return normal;
+}
 function pintarEnvio(){
   if(!envio.activo) return;
   const pend = estado.cola.length;
@@ -1350,12 +1574,12 @@ function pintarEnvio(){
       $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") +
         "La cancelación quedó registrada con su folio, el motivo, la hora y su ubicación.";
       $("#btnEnvNuevo").hidden = false; $("#btnEnvMenu").hidden = false;
-    } else if(!navigator.onLine){
+    } else if(enPausa()){
       p.dataset.estado = "pausa";
-      $("#envEtiqueta").textContent = "Sin conexión";
+      $("#envEtiqueta").textContent = etiquetaPausa();
       $("#envTitulo").textContent = "Cancelación guardada en el teléfono";
       $("#envDetalle").innerHTML = (envio.resumen ? esc(envio.resumen) + ".<br>" : "") +
-        "Se mandará sola al recuperar la señal.";
+        motivoPausa("Se mandará sola al recuperar la señal.");
       $("#btnEnvNuevo").hidden = true; $("#btnEnvMenu").hidden = false;
     } else {
       p.dataset.estado = "enviando";
@@ -1376,15 +1600,15 @@ function pintarEnvio(){
       : "Todo se guardó en la hoja de Google: registros, actividades y fotografías. <b>Ya puede cerrar la aplicación.</b>";
     $("#btnEnvNuevo").hidden = false;
     $("#btnEnvMenu").hidden = false;
-  } else if(!navigator.onLine){
+  } else if(enPausa()){
     p.dataset.estado = "pausa";
-    $("#envEtiqueta").textContent = "Sin conexión";
+    $("#envEtiqueta").textContent = etiquetaPausa();
     $("#envTitulo").textContent = "Guardado en el teléfono";
     $("#envDetalle").innerHTML = asg
       ? `La asignación quedó guardada en el teléfono y se mandará sola al recuperar la señal. ` +
         "Hasta entonces el colaborador todavía no la ve."
-      : `Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados y se enviarán solos al recuperar la señal. ` +
-        "No cierre la aplicación si puede evitarlo.";
+      : motivoPausa(`Faltan <b>${pend}</b> archivo(s) por subir. Quedaron guardados en el teléfono y se enviarán solos al recuperar la señal. ` +
+        "Puede cerrar la app: al abrirla con señal se terminan de enviar.");
     $("#btnEnvNuevo").hidden = true;
     $("#btnEnvMenu").hidden = false;
   } else {
@@ -1548,8 +1772,12 @@ function pintarCola(){
       ? '<b data-cero="1">✓ Todo enviado</b>'
       : '<b data-cero="0">Aún sin enviar</b>';
   } else {
-    et.textContent = "Registros sin enviar";
+    et.textContent = estado.sesionVencida ? "Sin enviar · inicie sesión" : "Registros sin enviar";
     val.innerHTML = `<b data-cero="0">${estado.cola.length}</b> en el teléfono`;
+  }
+  if(estado.rechazados.length){
+    et.textContent = "Rechazados por el servidor";
+    val.innerHTML = `<b data-cero="0" style="color:#ff4d4d">${estado.rechazados.length}</b> apartados · ${estado.cola.length} por enviar`;
   }
 }
 
@@ -2098,10 +2326,21 @@ async function iniciarSesion(){
   }
   const btn = $("#btnEntrar");
   btn.disabled = true; btn.textContent = "Validando…";
-  const resp = await llamarJSONP("login=1&usuario="+encodeURIComponent(usuario)+"&clave="+encodeURIComponent(clave));
+  /* Sin señal declarada no se esperan 12 s: se va directo a la huella local. */
+  const resp = navigator.onLine
+    ? await llamarJSONP("login=1&usuario="+encodeURIComponent(usuario)+"&clave="+encodeURIComponent(clave))
+    : null;
   btn.disabled = false; btn.textContent = "Entrar";
   if(!resp){
-    avisar("Sin conexión","No se pudo validar el usuario. Revisa tu señal e intenta de nuevo.","error"); return;
+    const r = await entrarSinSenal(usuario, clave);
+    if(r === "ok") return;
+    const msj = {
+      "sin-registro": "No hay señal y este correo nunca ha entrado con señal en este teléfono. Para usar la app sin señal, primero hay que entrar una vez con señal.",
+      "clave": "Usuario o contraseña incorrectos (revisado en el teléfono, sin señal).",
+      "vencido": "Hace más de 30 días que no entra con señal en este teléfono. Busque señal para iniciar sesión.",
+      "sin-cripto": "Este navegador no permite entrar sin señal. Busque señal para iniciar sesión."
+    }[r] || "No se pudo validar el usuario. Revisa tu señal e intenta de nuevo.";
+    avisar("Sin conexión", msj, "error"); return;
   }
   if(!resp.ok){
     avisar("No se pudo iniciar sesión", resp.error || "Usuario o contraseña incorrectos.","error"); return;
@@ -2110,9 +2349,12 @@ async function iniciarSesion(){
   estado.usuario = String(resp.usuario || usuario).toLowerCase();
   estado.token = resp.token || "";
   estado.rol = resp.rol || "";
+  estado.sinSenal = false;
   persistir();
   cerrarAviso();
   $("#portada").hidden = true;
+  if(!resp.debeCambiar) guardarHuellaLocal(estado.usuario, clave, resp);   // para poder entrar sin señal
+  renovarSesionEnCola();
   if(resp.debeCambiar){
     /* Clave de alta o restablecida: no se entra sin crear una propia. */
     _claveDeEntrada = clave;
@@ -2123,6 +2365,60 @@ async function iniciarSesion(){
   mostrarInicio();
   pintar();
 }
+/* ---------- v36 · Acceso sin señal ----------
+   Tras cada acceso CON señal se guarda en el teléfono una huella de la
+   contraseña (PBKDF2-SHA256, 120 000 vueltas, sal aleatoria). La contraseña
+   en sí nunca se guarda. Sin señal, se compara contra esa huella.
+   Límite: 30 días desde el último acceso con señal (igual que la sesión
+   del servidor). Lo capturado se envía con la sesión guardada; si el
+   servidor ya no la reconoce, la cola espera al siguiente acceso con señal. */
+const LS_HUELLAS = "blake.huellas";
+const HUELLA_DIAS = 30;
+function b64(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
+function deB64(s){ return Uint8Array.from(atob(s), c=>c.charCodeAt(0)); }
+async function huellaDe(usuario, clave, sal){
+  const enc = new TextEncoder();
+  const llave = await crypto.subtle.importKey("raw", enc.encode(String(usuario).toLowerCase() + "\n" + clave), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name:"PBKDF2", hash:"SHA-256", salt:sal, iterations:120000 }, llave, 256);
+  return b64(bits);
+}
+function leerHuellas(){ try{ return JSON.parse(localStorage.getItem(LS_HUELLAS) || "{}") || {}; }catch(e){ return {}; } }
+async function guardarHuellaLocal(usuario, clave, resp){
+  try{
+    if(!(window.crypto && crypto.subtle)) return;
+    const sal = crypto.getRandomValues(new Uint8Array(16));
+    const h = leerHuellas();
+    h[String(usuario).toLowerCase()] = {
+      sal: b64(sal), huella: await huellaDe(usuario, clave, sal),
+      nombre: resp.nombre || "", rol: resp.rol || "", token: resp.token || "", t: Date.now()
+    };
+    localStorage.setItem(LS_HUELLAS, JSON.stringify(h));
+  }catch(e){ /* sin huella solo se pierde el acceso sin señal */ }
+}
+async function entrarSinSenal(usuario, clave){
+  if(!(window.crypto && crypto.subtle)) return "sin-cripto";
+  const u = String(usuario).toLowerCase();
+  const v = leerHuellas()[u];
+  if(!v || !v.huella) return "sin-registro";
+  let h;
+  try{ h = await huellaDe(u, clave, deB64(v.sal)); }catch(e){ return "sin-cripto"; }
+  if(h !== v.huella) return "clave";
+  if(Date.now() - (v.t || 0) > HUELLA_DIAS * 864e5) return "vencido";
+  estado.tecnico = v.nombre || u;
+  estado.usuario = u;
+  estado.token = v.token || "";
+  estado.rol = v.rol || "";
+  estado.sinSenal = true;
+  _claveDeEntrada = "";
+  persistir();
+  cerrarAviso();
+  $("#portada").hidden = true;
+  mostrarInicio();
+  pintar();
+  avisar("Entró sin señal", "Puede capturar su trabajo: todo se guarda en el teléfono y se envía solo cuando haya señal. Para comenzar un servicio nuevo sí necesita señal.", "info");
+  return "ok";
+}
+
 $("#btnEntrar").addEventListener("click", iniciarSesion);
 $("#inClave").addEventListener("keydown", e=>{ if(e.key==="Enter") iniciarSesion(); });
 $("#btnCambiarTecnico").addEventListener("click", ()=> cerrarSesion());
@@ -2194,7 +2490,10 @@ async function guardarClaveNueva(){
   estado.token = resp.token || estado.token;
   estado.rol = resp.rol || estado.rol;
   estado.tecnico = resp.nombre || estado.tecnico;
+  estado.sinSenal = false;
   persistir();
+  guardarHuellaLocal(estado.usuario, n1, { nombre:estado.tecnico, rol:estado.rol, token:estado.token });
+  renovarSesionEnCola();
   _claveDeEntrada = "";
   $("#claveActual").value = ""; $("#claveNueva").value = ""; $("#claveNueva2").value = "";
   $("#portadaClave").hidden = true;
@@ -2482,10 +2781,14 @@ function idsEnCola(){
 function pintarEstadoInicio(){
   const e = $("#inicioEstado"); if(!e) return;
   const n = estado.cola.length;
-  e.dataset.pend = n ? "1" : "0";
-  e.textContent = n
-    ? (navigator.onLine ? `Enviando ${n} registro(s)… no cierres la app.` : `${n} registro(s) guardados en el teléfono; se enviarán al recuperar señal.`)
+  e.dataset.pend = (estado.rechazados.length || estado.sesionVencida) ? "2" : (n ? "1" : "0");
+  e.textContent = estado.sesionVencida && n
+    ? `${n} registro(s) guardados en el teléfono. Inicie sesión de nuevo con señal para enviarlos.`
+    : n
+    ? (navigator.onLine && !estado.ultimoError ? `Enviando ${n} registro(s)…` : `${n} registro(s) guardados en el teléfono; se enviarán solos al recuperar señal.`)
     : (estado.enviados ? "✓ Todo enviado" : "Aún no se ha enviado ningún reporte.");
+  if(estado.rechazados.length) e.textContent += ` · ${estado.rechazados.length} rechazado(s) por el servidor: avise a la oficina.`;
+  if(estado.sinSenal) e.textContent += " · Entró sin señal.";
   let pend = null;
   try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id)) && !esAclaracion(a)).length; }catch(_){}
   const o = estado.orden;
@@ -3570,8 +3873,28 @@ pintar();
 /* El login siempre es la primera pantalla al abrir la app, aunque haya
    una sesión de técnico guardada del uso anterior. */
 pedirLogin();
-enviarCola();
+cargarCola().then(()=>{ pintar(); try{ pintarEstadoInicio(); }catch(e){} enviarCola(); });
 actualizarClientes();   // pide la lista fresca de clientes al conector
+
+/* ---------- v36 · La app se guarda en el teléfono ----------
+   sw.js guarda una copia de la app. Con señal siempre baja la versión nueva
+   (por eso se actualiza sola); sin señal abre la copia guardada. */
+if("serviceWorker" in navigator){
+  addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+/* Botón "Instalar la app en este teléfono" (Chrome/Android lo permite). */
+let _instalar = null;
+addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault(); _instalar = e;
+  const b = $("#btnInstalar"); if(b) b.hidden = false;
+});
+addEventListener("appinstalled", ()=>{ _instalar = null; const b = $("#btnInstalar"); if(b) b.hidden = true; });
+$("#btnInstalar").addEventListener("click", async ()=>{
+  if(!_instalar) return;
+  _instalar.prompt();
+  try{ await _instalar.userChoice; }catch(e){}
+  _instalar = null; $("#btnInstalar").hidden = true;
+});
 </script>
 </body>
 </html>

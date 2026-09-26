@@ -1098,6 +1098,11 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v40 (26-sep-2026) — Sesión vencida sin perder el lugar: si el servidor ya no reconoce
+     la sesión mientras se consulta Aclaraciones, Mis actividades o el panel, la app pide
+     entrar de nuevo y, al entrar, REGRESA A ESA MISMA PANTALLA (antes caía al menú).
+     Los registros rechazados ahora se pueden ver (motivo de cada uno) tocando el letrero
+     rojo del menú, y reintentar tras volver a entrar.
    v39 (22-sep-2026) — Fase 2 sin señal: se puede empezar un servicio sin señal con un
      FOLIO PROVISIONAL (P-...). Al volver la señal la app pide el folio definitivo, lo pone
      en todo lo pendiente y deja en Registros el renglón "Folio provisional P-… → 2026-…".
@@ -2434,6 +2439,30 @@ function llamarJSONP(query, timeoutMs){
 }
 
 /* ---------- Inicio de sesión del técnico (usuario/contraseña) ---------- */
+/* v40: a qué pantalla regresar después de volver a entrar por sesión vencida. */
+let _volverA = "";
+const PANTALLAS_RETORNO = {
+  aclaraciones: "#aclaracionesPantalla",
+  actividades:  "#actividadesPantalla",
+  admin:        "#adminPantalla"
+};
+function sesionVencidaEn(pantalla){
+  _volverA = pantalla || "";
+  estado.sesionVencida = true;
+  Object.values(PANTALLAS_RETORNO).forEach(sel=>{ const p = $(sel); if(p) p.hidden = true; });
+  $("#inicio").hidden = true;
+  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador" }[_volverA] || "donde estaba";
+  avisar("Entre de nuevo, con señal",
+    `El servidor ya no reconoce la sesión de este teléfono. Escriba su correo y contraseña: al entrar regresará a ${nombre}. No se perdió nada.`, "error");
+  pedirLogin();
+}
+function volverTrasLogin(){
+  const destino = _volverA; _volverA = "";
+  if(destino === "aclaraciones"){ $("#inicio").hidden = true; abrirAclaraciones(); return true; }
+  if(destino === "actividades"){ $("#inicio").hidden = true; abrirActividades(); return true; }
+  if(destino === "admin" && esAdminApp()){ $("#inicio").hidden = true; abrirAdmin(); return true; }
+  return false;
+}
 function pedirLogin(){
   $("#inUsuario").value = ""; $("#inClave").value = "";
   $("#portada").hidden = false;
@@ -2490,6 +2519,7 @@ async function iniciarSesion(){
   _claveDeEntrada = "";
   mostrarInicio();
   pintar();
+  volverTrasLogin();   /* v40 */
 }
 /* ---------- v36 · Acceso sin señal ----------
    Tras cada acceso CON señal se guarda en el teléfono una huella de la
@@ -2977,7 +3007,8 @@ function pintarEstadoInicio(){
     : n
     ? (navigator.onLine && !estado.ultimoError ? `Enviando ${n} registro(s)…` : `${n} registro(s) guardados en el teléfono; se enviarán solos al recuperar señal.`)
     : (estado.enviados ? "✓ Todo enviado" : "Aún no se ha enviado ningún reporte.");
-  if(estado.rechazados.length) e.textContent += ` · ${estado.rechazados.length} rechazado(s) por el servidor: avise a la oficina.`;
+  if(estado.rechazados.length) e.textContent += ` · ${estado.rechazados.length} rechazado(s) por el servidor. Toque aquí para ver el motivo.`;
+  e.style.cursor = estado.rechazados.length ? "pointer" : "";
   if(estado.sinSenal) e.textContent += " · Entró sin señal.";
   let pend = null;
   try{ const g = JSON.parse(localStorage.getItem(claveAct()) || "null"); if(g && Array.isArray(g.lista)) pend = g.lista.filter(a=>!idsEnCola().has(String(a.id)) && !esAclaracion(a)).length; }catch(_){}
@@ -3009,7 +3040,7 @@ function mostrarInicio(){
 async function cerrarSesion(){
   if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
-  _claveDeEntrada = ""; $("#portadaClave").hidden = true;
+  _claveDeEntrada = ""; _volverA = ""; $("#portadaClave").hidden = true;
   adm.usuarios = []; adm.actualizado = null;
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
@@ -3076,8 +3107,10 @@ async function refrescarActividades(){
   }
   if(!resp.ok){
     if(/sesi[oó]n|autorizado/i.test(resp.error || "")){
-      avisar("Sesión vencida", "Inicia sesión de nuevo para ver tus actividades.", "error");
-      $("#actividadesPantalla").hidden = true; pedirLogin(); return;
+      /* v40: antes solo escondía "Mis actividades"; si se venía de Aclaraciones,
+         al entrar de nuevo se caía al menú. Ahora se recuerda y se regresa. */
+      sesionVencidaEn(!$("#aclaracionesPantalla").hidden ? "aclaraciones" : "actividades");
+      return;
     }
     avisar("No se pudieron cargar", resp.error || "Error del conector.", "error");
     pintarActividades(); return;
@@ -3536,8 +3569,7 @@ async function refrescarEquipo(){
   if(!resp){ avisar("Sin conexión", "No se pudo leer el equipo. Se muestra lo último cargado.", "info"); pintarAdmin(); return; }
   if(!resp.ok){
     if(/sesi[oó]n|autorizado/i.test(resp.error || "")){
-      avisar("Sesión vencida", "Inicia sesión de nuevo.", "error");
-      $("#adminPantalla").hidden = true; pedirLogin(); return;
+      sesionVencidaEn("admin"); return;
     }
     avisar("No se pudo cargar el equipo", resp.error || "Error del conector.", "error");
     pintarAdmin(); return;
@@ -4007,6 +4039,30 @@ function pintarBotonAclaraciones(){
   const d = $("#inicioAclDet");
   if(d && n) d.textContent = `${n} duda(s) de la oficina sobre tu trabajo · antes de las 9:00`;
 }
+
+/* ---------- v40 · Registros rechazados: ver motivo y reintentar ---------- */
+async function verRechazados(){
+  if(!estado.rechazados.length) return;
+  const lista = estado.rechazados.map((r,i)=>`${i+1}. ${nombreSobre(r)}\n   Motivo: ${r._ultimoError || "sin motivo registrado"}`).join("\n\n");
+  const ok = await confirmar(`${estado.rechazados.length} registro(s) rechazado(s)`,
+    `Siguen guardados en este teléfono (no se borraron):\n\n${lista}\n\n` +
+    "¿Volver a intentar enviarlos con la sesión actual? Si el servidor los vuelve a rechazar, regresan a esta lista.",
+    "Reintentar envío");
+  if(!ok) return;
+  if(!navigator.onLine){ avisar("Sin señal", "Busque señal y vuelva a intentarlo.", "error"); return; }
+  const u = estado.usuario, t = estado.token;
+  const regresan = estado.rechazados.splice(0);
+  regresan.forEach(sobre=>{
+    sobre._intentos = 0;
+    if(sobre._u === u && Object.prototype.hasOwnProperty.call(sobre, "token")) sobre.token = t;
+    estado.cola.push(sobre);
+    if(!BD.sinBD){ bdPut("cola", sobre).catch(fallaGuardado); bdDel("rechazados", sobre._qid).catch(()=>{}); }
+  });
+  persistir(); pintarCola(); pintarEstadoInicio();
+  avisar("Reintentando", `${regresan.length} registro(s) regresaron a la cola de envío.`, "info");
+  enviarCola();
+}
+$("#inicioEstado").addEventListener("click", verRechazados);
 
 /* ---------- Envío ---------- */
 function notaAcl(id){

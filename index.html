@@ -1098,6 +1098,13 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v41 (26-sep-2026) — Las aclaraciones ya se pueden enviar: el conector exige un folio
+     de servicio y el cierre de aclaraciones mandaba el folio vacío ("Falta el folio de
+     servicio", 17 errores el 25 y 26-sep). Ahora la aclaración lleva como folio su propio
+     número de reporte (ACL…), sin consumir folios de servicio. Los envíos de aclaraciones
+     que ya estaban trabados o rechazados en el teléfono por esa causa se reparan y se
+     reenvían solos. La pantalla de envío ya no dice "Reporte enviado 100 %" cuando el
+     servidor rechazó el registro: dice NO SE REGISTRÓ y el motivo.
    v40 (26-sep-2026) — Sesión vencida sin perder el lugar: si el servidor ya no reconoce
      la sesión mientras se consulta Aclaraciones, Mis actividades o el panel, la app pide
      entrar de nuevo y, al entrar, REGRESA A ESA MISMA PANTALLA (antes caía al menú).
@@ -1370,8 +1377,33 @@ function nombreSobre(s){
   return (n[s.tipo] || "Registro") + (s.folio ? " · folio " + s.folio : "") + (s.cliente ? " · " + s.cliente : "");
 }
 
+/* v41: aclaraciones enviadas con folio vacío (antes de v41). Se les pone su propio
+   número de reporte como folio; las que el servidor ya había apartado por
+   "Falta el folio de servicio" regresan a la cola. No se pierde ni se duplica nada:
+   el conector ignora un reporteId que ya registró. */
+const esAclSinFolio = s => s && s.tipo === "reporte_act" && /^ACL/.test(String(s.reporteId || "")) && !String(s.folio || "").trim();
+function repararAclSinFolio(){
+  let n = 0;
+  estado.cola.forEach(s=>{
+    if(esAclSinFolio(s)){ s.folio = s.reporteId; n++; if(!BD.sinBD) bdPut("cola", s).catch(fallaGuardado); }
+  });
+  const regresan = estado.rechazados.filter(esAclSinFolio);
+  if(regresan.length){
+    estado.rechazados = estado.rechazados.filter(s=>!esAclSinFolio(s));
+    regresan.forEach(s=>{
+      s.folio = s.reporteId; s._intentos = 0;
+      if(s._u === estado.usuario && estado.token && Object.prototype.hasOwnProperty.call(s, "token")) s.token = estado.token;
+      estado.cola.push(s); n++;
+      if(!BD.sinBD){ bdPut("cola", s).catch(fallaGuardado); bdDel("rechazados", s._qid).catch(()=>{}); }
+    });
+  }
+  if(n){ estado.ultimoError = ""; persistir(); try{ pintarCola(); pintarEstadoInicio(); }catch(e){} }
+  return n;
+}
+
 let enviando = false;
 async function enviarCola(){
+  try{ repararAclSinFolio(); }catch(e){}
   if(enviando || !_colaLista || estado.cola.length===0) return;
   if(estado.sesionVencida) return;           // espera a que vuelva a iniciar sesión con señal
   enviando = true;
@@ -1402,6 +1434,7 @@ async function enviarCola(){
           break;                               // se reintenta en el siguiente ciclo
         }
         /* Tercer rechazo: se aparta para no frenar todo lo demás. No se borra. */
+        if(envio.activo){ envio.rechazos++; envio.motivo = res.error; }   /* v41 */
         estado.cola.shift();
         estado.rechazados.push(sobre);
         if(!BD.sinBD){
@@ -1527,7 +1560,7 @@ document.addEventListener("DOMContentLoaded", function(){
    la pantalla de captura: al terminar aparece la opción de iniciar un
    nuevo reporte de servicio técnico.
    ============================================================ */
-const envio = { activo:false, total:0, hechos:0, origen:"", resumen:"", preparando:"" };
+const envio = { activo:false, total:0, hechos:0, origen:"", resumen:"", preparando:"", rechazos:0, motivo:"" };
 
 /* La pantalla de envio se abre EN CUANTO el tecnico da la orden, aunque
    todavia falte leer el GPS o guardar las fotos: en planta, un boton que
@@ -1539,7 +1572,7 @@ function iniciarEnvio(origen, resumen, preparando){
   envio.origen = origen || "";
   envio.resumen = resumen || "";
   envio.preparando = preparando || "";
-  envio.hechos = 0;
+  envio.hechos = 0; envio.rechazos = 0; envio.motivo = "";
   envio.total = Math.max(1, estado.cola.length);
   const p = $("#envio");
   p.dataset.estado = "enviando";
@@ -1557,7 +1590,7 @@ function iniciarEnvio(origen, resumen, preparando){
 function listoEnvio(){
   if(!envio.activo) return;
   envio.preparando = "";
-  envio.hechos = 0;
+  envio.hechos = 0; envio.rechazos = 0; envio.motivo = "";
   envio.total = Math.max(1, estado.cola.length);
   pintarEnvio();
   enviarCola();
@@ -1602,8 +1635,9 @@ function pintarEnvio(){
   const p = $("#envio");
   const asg = envio.origen === "asignacion";
   const can = envio.origen === "cancelacion";
+  const aclO = envio.origen === "aclaracion";
   $("#btnEnvNuevo").textContent = asg ? "Asignar a otro colaborador"
-    : can ? "Iniciar otro servicio" : "Iniciar nuevo reporte de servicio técnico";
+    : can ? "Iniciar otro servicio" : aclO ? "Volver a Aclaraciones" : "Iniciar nuevo reporte de servicio técnico";
 
   if(can){
     if(pend === 0){
@@ -1630,12 +1664,22 @@ function pintarEnvio(){
     return;
   }
 
-  if(pend === 0){
+  if(pend === 0 && envio.rechazos){
+    /* v41: antes decía "Reporte enviado 100 %" aunque el servidor lo hubiera rechazado. */
+    p.dataset.estado = "pausa";
+    $("#envEtiqueta").textContent = "Rechazado por el servidor";
+    $("#envTitulo").textContent = "NO SE REGISTRÓ";
+    $("#envBarra").style.width = "0%"; $("#envPct").textContent = "0 %";
+    $("#envDetalle").innerHTML = `${envio.rechazos} registro(s) rechazado(s): <b>${esc(envio.motivo || "sin motivo")}</b>. ` +
+      "Siguen guardados en el teléfono (no se borraron). Avise a la oficina; desde el menú puede tocar el letrero rojo para ver el motivo y reintentar.";
+    $("#btnEnvNuevo").hidden = false; $("#btnEnvMenu").hidden = false;
+  } else if(pend === 0){
     p.dataset.estado = "listo";
-    $("#envEtiqueta").textContent = asg ? "Actividades asignadas" : "Reporte enviado";
-    $("#envTitulo").textContent = asg ? "Actividades asignadas" : "Reporte enviado";
+    $("#envEtiqueta").textContent = asg ? "Actividades asignadas" : aclO ? "Aclaraciones registradas" : "Reporte enviado";
+    $("#envTitulo").textContent = asg ? "Actividades asignadas" : aclO ? "Aclaraciones registradas" : "Reporte enviado";
     $("#envDetalle").innerHTML = asg
       ? (envio.resumen ? esc(envio.resumen) + ".<br>" : "") + "Ya le aparecen en su teléfono la próxima vez que abra la app."
+      : aclO ? (envio.resumen ? esc(envio.resumen) + ".<br>" : "") + "Quedaron asentadas a su nombre en la hoja de Google. La oficina las revisa. <b>No se envió nada al cliente.</b>"
       : "Todo se guardó en la hoja de Google: registros, actividades y fotografías. <b>Ya puede cerrar la aplicación.</b>";
     $("#btnEnvNuevo").hidden = false;
     $("#btnEnvMenu").hidden = false;
@@ -4092,7 +4136,8 @@ async function enviarAclaraciones(){
   const reporteId = "ACL" + idCorto();
   encolar({
     tipo:"reporte_act", token:estado.token, reporteId,
-    cliente: ACL_OFICINA.cliente, sitio: ACL_OFICINA.sitio, folio: "",
+    /* v41: el conector exige folio; la aclaración usa su propio número (no es servicio). */
+    cliente: ACL_OFICINA.cliente, sitio: ACL_OFICINA.sitio, folio: reporteId,
     items: listas.map(a=>({ id:String(a.id), estado: aldDefSeguro(String(a.id)).estado, nota: notaAcl(String(a.id)) })),
     adicionales: [],
     detalle: ""

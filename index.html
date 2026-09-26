@@ -1098,6 +1098,10 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v42 (26-sep-2026) — Cada petición al conector dice quién la hace y con qué versión de la
+     app (_quien/_ver en los envíos, quien/ver en las consultas). El conector lo anota en la
+     pestaña Errores (columnas Usuario, Versión app, Cómo se supo) para saber A QUIÉN le
+     falló la app y distinguir una falla de la app de un mal uso.
    v41 (26-sep-2026) — Las aclaraciones ya se pueden enviar: el conector exige un folio
      de servicio y el cierre de aclaraciones mandaba el folio vacío ("Falta el folio de
      servicio", 17 errores el 25 y 26-sep). Ahora la aclaración lleva como folio su propio
@@ -1345,9 +1349,12 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
+const APP_VER = "v42";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
+  limpio._quien = String(sobre._u || estado.usuario || "");   /* v42: para la pestaña Errores */
+  limpio._ver = APP_VER;
   const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
   const reloj = ctrl ? setTimeout(()=> ctrl.abort(), 120000) : null;
   let r, txt;
@@ -2476,7 +2483,8 @@ function llamarJSONP(query, timeoutMs){
     window[cb] = function(resp){
       if(listo) return; listo=true; clearTimeout(temporizador); limpiar(); resolve(resp);
     };
-    s.src = CONFIG.url + "?" + query + "&callback=" + cb + "&t=" + Date.now();
+    const quien = /(^|&)login=1/.test(query) ? "" : "&quien=" + encodeURIComponent(estado.usuario || "");
+    s.src = CONFIG.url + "?" + query + quien + "&ver=" + APP_VER + "&callback=" + cb + "&t=" + Date.now();
     s.onerror = function(){ if(listo) return; listo=true; clearTimeout(temporizador); limpiar(); resolve(null); };
     document.head.appendChild(s);
   });

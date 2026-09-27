@@ -311,6 +311,11 @@ body{
   opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
 }
 .aviso.ver{opacity:1;transform:translateX(-50%) translateY(0)}
+/* v44: un aviso cerrado queda invisible pero ENCIMA de la pantalla. El de falla
+   (rojo) tenía pointer-events:auto y se tragaba los toques de la parte de arriba:
+   "← Menú" y "Actualizar" en Aclaraciones, y "Mis actividades" en el menú.
+   Cerrado = no recibe toques ni anima. */
+.aviso:not(.ver){pointer-events:none !important;animation:none !important;visibility:hidden}
 .aviso[data-tipo="ok"]{border-left-color:var(--verde)}
 .aviso strong{
   display:block;font-family:var(--display);font-size:15px;
@@ -1098,6 +1103,10 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v44 (27-sep-2026) — La app se "trababa": el letrero rojo de falla, ya cerrado, seguía
+     invisible encima de la parte superior de la pantalla y se comía los toques (no
+     funcionaban "← Menú", "Actualizar" ni "Mis actividades"). Ahora un aviso cerrado no
+     recibe toques.
    v43 (26-sep-2026) — (1) El detalle mínimo sube de 50 a 100 caracteres (actividades
      terminadas, adicionales y aclaraciones), a petición del Sr. Ernesto. (2) El correo al
      cliente lleva la lista separada título/descripción (actividadesDet) para que el PDF y el
@@ -1353,7 +1362,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v43";
+const APP_VER = "v44";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;

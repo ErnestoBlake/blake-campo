@@ -550,6 +550,23 @@ body{
 .adm-editor[hidden]{display:none}
 .adm-editor .adm-acciones{margin-top:8px}
 .adm-vacio{font-family:var(--dato);font-size:11px;color:var(--verde)}
+/* v45 · Actividades del equipo (solo consulta) */
+.eq-filtros{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 6px}
+.eq-filtros button{
+  flex:1 1 auto;min-height:40px;padding:0 10px;border:1px solid var(--linea);background:transparent;
+  color:var(--plata);border-radius:3px;cursor:pointer;font-family:var(--dato);
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+}
+.eq-filtros button[aria-pressed="true"]{color:var(--plata-alta);border-color:var(--naranja);background:rgba(243,146,0,.14)}
+.eq-resumen{font-family:var(--dato);font-size:11.5px;color:var(--plata);margin:8px 0 12px;line-height:1.5}
+.eq-persona{cursor:pointer}
+.eq-persona:hover{background:rgba(243,146,0,.06)}
+.eq-cifras{display:flex;gap:6px;flex-wrap:wrap}
+.eq-tarea{background:var(--acero-800);border:1px solid var(--linea);border-left:3px solid var(--naranja);border-radius:3px;padding:12px 14px;margin-bottom:10px}
+.eq-tarea[data-acl="1"]{border-left-color:#FFC24D}
+.eq-tarea[data-atr="1"] .act-titulo{color:#F2D29B}
+.eq-id{font-family:var(--dato);font-size:10px;color:var(--plata);margin-top:6px;overflow-wrap:anywhere}
+.eq-nota{margin-top:14px}
 
 /* ---------- Pantalla de envío del reporte ---------- */
 #envio{z-index:130}
@@ -893,6 +910,10 @@ body{
       <b>Asignar actividades</b>
       <span id="inicioAdminDet">Panel de administrador: asigna el trabajo del día por colaborador.</span>
     </button>
+    <button class="menu-op" id="btnIrEquipo" type="button" hidden>
+      <b>Actividades del equipo</b>
+      <span id="inicioEquipoDet">Administrador: consulta los pendientes y aclaraciones de cada colaborador (solo consulta).</span>
+    </button>
     <button class="menu-op" id="btnIrCliente" type="button" hidden>
       <b>Dar de alta un cliente</b>
       <span id="inicioClienteDet">Panel de administrador: registra un cliente nuevo con su obra, correo y ubicación.</span>
@@ -1026,6 +1047,36 @@ body{
 </div>
 
 
+<!-- Pantalla: actividades del equipo (v45, solo administrador, SOLO CONSULTA) -->
+<div class="pantalla" id="equipoPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnEqMenu" type="button">← Menú</button>
+      <button class="link-volver" id="btnEqRefrescar" type="button">↻ Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Actividades del equipo</span>
+      <h2 id="eqTitulo">Todo el equipo</h2>
+      <p class="pista" id="eqSync">—</p>
+    </div>
+
+    <label class="adm-campo" for="eqPersona">Colaborador</label>
+    <select id="eqPersona"></select>
+
+    <div class="eq-filtros" id="eqFiltros">
+      <button type="button" data-f="todas" aria-pressed="true">Todas</button>
+      <button type="button" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
+      <button type="button" data-f="asignadas" aria-pressed="false">Asignadas</button>
+      <button type="button" data-f="aclaraciones" aria-pressed="false">Aclaraciones</button>
+    </div>
+
+    <p class="eq-resumen" id="eqResumen">—</p>
+    <div id="eqLista"></div>
+    <p class="pista eq-nota">Solo consulta: desde aquí no se envía, firma, cierra ni modifica nada. Para reasignar, cambiar la fecha o cancelar una actividad use «Asignar actividades».</p>
+  </div>
+</div>
+
+
 <!-- Pantalla: alta de cliente (solo administrador) -->
 <div class="pantalla" id="clientePantalla" hidden>
   <div class="pantalla-caja">
@@ -1103,6 +1154,12 @@ body{
    Envía cada evento, foto y firma al conector de Google (Apps Script),
    que los guarda en una Hoja de Google y una carpeta de Drive.
    Funciona sin internet: guarda en el teléfono y reintenta solo.
+   v45 (27-sep-2026) — Menú "Actividades del equipo" para administradores (Sr. Ernesto,
+     Jorge, Daniel, Brandon): consulta, por colaborador o de todo el equipo, sus pendientes
+     asignados y sus aclaraciones, con filtros Atrasadas / Asignadas / Aclaraciones. SOLO
+     CONSULTA: no envía, firma, cierra ni modifica nada. Usa la misma consulta del panel
+     (equipo=1); el conector NO cambia. Sustituye la idea de una clave universal, que
+     habría quitado valor probatorio a la firma y al sello del técnico.
    v44 (27-sep-2026) — La app se "trababa": el letrero rojo de falla, ya cerrado, seguía
      invisible encima de la parte superior de la pantalla y se comía los toques (no
      funcionaban "← Menú", "Actualizar" ni "Mis actividades"). Ahora un aviso cerrado no
@@ -1362,7 +1419,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v44";
+const APP_VER = "v45";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2519,14 +2576,15 @@ let _volverA = "";
 const PANTALLAS_RETORNO = {
   aclaraciones: "#aclaracionesPantalla",
   actividades:  "#actividadesPantalla",
-  admin:        "#adminPantalla"
+  admin:        "#adminPantalla",
+  equipo:       "#equipoPantalla"
 };
 function sesionVencidaEn(pantalla){
   _volverA = pantalla || "";
   estado.sesionVencida = true;
   Object.values(PANTALLAS_RETORNO).forEach(sel=>{ const p = $(sel); if(p) p.hidden = true; });
   $("#inicio").hidden = true;
-  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador" }[_volverA] || "donde estaba";
+  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo" }[_volverA] || "donde estaba";
   avisar("Entre de nuevo, con señal",
     `El servidor ya no reconoce la sesión de este teléfono. Escriba su correo y contraseña: al entrar regresará a ${nombre}. No se perdió nada.`, "error");
   pedirLogin();
@@ -2536,6 +2594,7 @@ function volverTrasLogin(){
   if(destino === "aclaraciones"){ $("#inicio").hidden = true; abrirAclaraciones(); return true; }
   if(destino === "actividades"){ $("#inicio").hidden = true; abrirActividades(); return true; }
   if(destino === "admin" && esAdminApp()){ $("#inicio").hidden = true; abrirAdmin(); return true; }
+  if(destino === "equipo" && esAdminApp()){ $("#inicio").hidden = true; abrirEquipo(); return true; }
   return false;
 }
 function pedirLogin(){
@@ -3106,6 +3165,8 @@ function mostrarInicio(){
   $("#adminPantalla").hidden = true;
   $("#btnIrAdmin").hidden = !esAdminApp();
   $("#btnIrCliente").hidden = !esAdminApp();
+  $("#btnIrEquipo").hidden = !esAdminApp();
+  $("#equipoPantalla").hidden = true;
   $("#clientePantalla").hidden = true;
   $("#aclaracionesPantalla").hidden = true;
   $("#portadaClave").hidden = true;
@@ -3119,6 +3180,7 @@ async function cerrarSesion(){
   adm.usuarios = []; adm.actualizado = null;
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
+  $("#equipoPantalla").hidden = true;
   pedirLogin();
 }
 /* 16-sep: "Servicio en campo" nunca entra solo a un cliente que el técnico no eligió.
@@ -3638,21 +3700,21 @@ function abrirAdmin(){
 
 async function refrescarEquipo(){
   if(adm.cargando) return;
-  if(!navigator.onLine){ pintarAdmin(); return; }
-  adm.cargando = true; pintarAdmin();
+  if(!navigator.onLine){ pintarAdmin(); pintarVerEquipo(); return; }
+  adm.cargando = true; pintarAdmin(); pintarVerEquipo();
   const resp = await llamarJSONP("equipo=1&token=" + encodeURIComponent(estado.token || ""), 25000);
   adm.cargando = false;
-  if(!resp){ avisar("Sin conexión", "No se pudo leer el equipo. Se muestra lo último cargado.", "info"); pintarAdmin(); return; }
+  if(!resp){ avisar("Sin conexión", "No se pudo leer el equipo. Se muestra lo último cargado.", "info"); pintarAdmin(); pintarVerEquipo(); return; }
   if(!resp.ok){
     if(/sesi[oó]n|autorizado/i.test(resp.error || "")){
-      sesionVencidaEn("admin"); return;
+      sesionVencidaEn(!$("#equipoPantalla").hidden ? "equipo" : "admin"); return;
     }
     avisar("No se pudo cargar el equipo", resp.error || "Error del conector.", "error");
-    pintarAdmin(); return;
+    pintarAdmin(); pintarVerEquipo(); return;
   }
   adm.usuarios = Array.isArray(resp.usuarios) ? resp.usuarios : [];
   adm.actualizado = new Date().toISOString();
-  pintarAdmin();
+  pintarAdmin(); pintarVerEquipo();
 }
 $("#btnAdmRefrescar").addEventListener("click", refrescarEquipo);
 
@@ -3910,6 +3972,129 @@ async function asignarActividades(){
 }
 $("#btnAsignar").addEventListener("click", asignarActividades);
 $("#btnAdmMenu").addEventListener("click", mostrarInicio);
+
+/* ============================================================
+   v45 · Actividades del equipo — SOLO CONSULTA (administradores)
+   Petición del Sr. Ernesto (27-sep): ver las actividades de cada
+   colaborador sin entrar con la clave del colaborador. Se descartó una
+   "clave universal": la firma y el sello del técnico dejarían de probar
+   quién hizo cada registro. Esta pantalla reutiliza la misma consulta
+   del panel (equipo=1, que el conector solo contesta a Administradores)
+   y no tiene ningún botón que escriba en la hoja.
+   ============================================================ */
+const eqv = { persona:"", filtro:"todas" };
+function diasDesde(f){
+  if(!f) return null;
+  const p = f.split("-").map(Number), h = hoyISO().split("-").map(Number);
+  return Math.round((Date.UTC(h[0],h[1]-1,h[2]) - Date.UTC(p[0],p[1]-1,p[2])) / 86400000);
+}
+function filtrarEq(lista){
+  const h = hoyISO();
+  if(eqv.filtro === "atrasadas")    return lista.filter(a=>a.fecha && a.fecha < h);
+  if(eqv.filtro === "asignadas")    return lista.filter(a=>!esAclaracion(a));
+  if(eqv.filtro === "aclaraciones") return lista.filter(a=>esAclaracion(a));
+  return lista;
+}
+function cifrasEq(pend){
+  const h = hoyISO();
+  const acl = pend.filter(a=>esAclaracion(a)).length;
+  const atr = pend.filter(a=>a.fecha && a.fecha < h).length;
+  const fechas = pend.map(a=>a.fecha).filter(Boolean).sort();
+  return { total:pend.length, acl, asig:pend.length - acl, atr, vieja:fechas[0] || "" };
+}
+function abrirEquipo(){
+  const p = $("#equipoPantalla");
+  p.hidden = false; p.scrollTop = 0;
+  pintarVerEquipo();
+  refrescarEquipo();
+}
+function pintarVerEquipo(){
+  const p = $("#equipoPantalla");
+  if(!p || p.hidden) return;
+  const hora = adm.actualizado
+    ? new Date(adm.actualizado).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit", hour12:false }) : "";
+  $("#eqSync").textContent = (adm.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar"))
+    + (navigator.onLine ? "" : " · sin conexión");
+
+  const sel = $("#eqPersona");
+  if(document.activeElement !== sel){
+    sel.innerHTML = `<option value="">— Todo el equipo (resumen) —</option>` + adm.usuarios.map(u=>{
+      const c = cifrasEq(Array.isArray(u.pendientes) ? u.pendientes : []);
+      return `<option value="${esc(u.usuario)}">${esc(u.nombre)} · ${c.total}</option>`;
+    }).join("");
+    if(eqv.persona && !adm.usuarios.some(u=>u.usuario === eqv.persona)) eqv.persona = "";
+    sel.value = eqv.persona;
+  }
+  $("#eqFiltros").querySelectorAll("button").forEach(b=> b.setAttribute("aria-pressed", String(b.dataset.f === eqv.filtro)));
+
+  const cont = $("#eqLista");
+  if(!adm.usuarios.length){
+    $("#eqTitulo").textContent = "Todo el equipo";
+    $("#eqResumen").textContent = "";
+    cont.innerHTML = `<p class="pista act-vacio">${adm.cargando ? "Cargando equipo…" : "Aún no se descarga el equipo. Oprima ↻ Actualizar con señal."}</p>`;
+    return;
+  }
+
+  if(!eqv.persona){
+    /* Resumen: una tarjeta por colaborador; al tocarla se abre su lista. */
+    $("#eqTitulo").textContent = "Todo el equipo";
+    let tot = 0, atr = 0, acl = 0;
+    const filas = adm.usuarios.map(u=>{
+      const pend = Array.isArray(u.pendientes) ? u.pendientes : [];
+      const c = cifrasEq(pend), vis = filtrarEq(pend).length;
+      tot += c.total; atr += c.atr; acl += c.acl;
+      return { u, c, vis };
+    }).sort((a,b)=> b.vis - a.vis || b.c.atr - a.c.atr);
+    $("#eqResumen").textContent = `${adm.usuarios.length} colaboradores · ${tot} pendientes · ${atr} atrasados · ${acl} aclaraciones`;
+    cont.innerHTML = filas.map(({u,c,vis})=>{
+      const d = diasDesde(c.vieja);
+      const vieja = c.vieja ? `<span class="act-fecha${d>0 ? " atrasada" : ""}">Más antigua ${c.vieja.split("-").reverse().slice(0,2).join("/")}${d>0 ? ` · ${d} días` : ""}</span>` : "";
+      return `<div class="adm-persona eq-persona" data-cero="${c.total ? "0" : "1"}" data-u="${esc(u.usuario)}" role="button" tabindex="0">
+        <b>${esc(u.nombre)}</b>
+        <span class="adm-puesto">${esc(u.puesto || u.rol || "")}${u.estado && normCliente(u.estado) !== "activo" ? " · " + esc(u.estado) : ""}</span>
+        ${c.total ? `<div class="eq-cifras">
+          <span class="act-fecha">${c.asig} asignada(s)</span>
+          <span class="act-fecha${c.atr ? " atrasada" : ""}">${c.atr} atrasada(s)</span>
+          <span class="act-fecha">${c.acl} aclaración(es)</span>
+          ${vieja}
+        </div>` : `<span class="adm-vacio">✓ Sin pendientes</span>`}
+      </div>`;
+    }).join("");
+    cont.querySelectorAll(".eq-persona").forEach(el=>{
+      const ir = ()=>{ eqv.persona = el.dataset.u; pintarVerEquipo(); $("#equipoPantalla").scrollTop = 0; };
+      el.onclick = ir;
+      el.onkeydown = e=>{ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); ir(); } };
+    });
+    return;
+  }
+
+  /* Lista de un colaborador */
+  const u = adm.usuarios.find(x=>x.usuario === eqv.persona);
+  const pend = Array.isArray(u.pendientes) ? u.pendientes : [];
+  const c = cifrasEq(pend), lista = filtrarEq(pend);
+  $("#eqTitulo").textContent = u.nombre || u.usuario;
+  $("#eqResumen").textContent = `${c.total} pendientes · ${c.asig} asignadas · ${c.atr} atrasadas · ${c.acl} aclaraciones` +
+    (eqv.filtro !== "todas" ? ` · mostrando ${lista.length}` : "");
+  cont.innerHTML = lista.length ? lista.map(a=>{
+    const f = etiquetaFecha(a.fecha), d = diasDesde(a.fecha), acl = esAclaracion(a);
+    const lugar = [a.cliente, a.sitio].filter(Boolean).map(esc).join(" · ") || "sin cliente";
+    return `<div class="eq-tarea" data-acl="${acl ? "1" : "0"}" data-atr="${f.cls === "atrasada" ? "1" : "0"}">
+      <div class="act-top">
+        <span class="act-fecha ${f.cls}">${f.txt}${d>0 ? ` · ${d} días` : ""}</span>
+        <span class="act-fecha">${acl ? "Aclaración" : esc(a.origen || "Asignada")}</span>
+        <span class="act-fecha">${lugar}</span>
+      </div>
+      <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
+      ${a.nota ? `<div class="act-nota-previa">${esc(a.nota)}</div>` : ""}
+      <div class="eq-id">${esc(a.id)}</div>
+    </div>`;
+  }).join("") : `<p class="pista act-vacio">${pend.length ? "Nada con este filtro." : "✓ Sin pendientes."}</p>`;
+}
+$("#eqPersona").addEventListener("change", e=>{ eqv.persona = e.target.value; pintarVerEquipo(); });
+$("#eqFiltros").querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{ eqv.filtro = b.dataset.f; pintarVerEquipo(); }));
+$("#btnEqRefrescar").addEventListener("click", refrescarEquipo);
+$("#btnEqMenu").addEventListener("click", ()=>{ $("#equipoPantalla").hidden = true; mostrarInicio(); });
+$("#btnIrEquipo").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirEquipo(); });
 $("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAdmin(); });
 
 /* Alta de cliente: opcion propia del menu, no escondida dentro de otra pantalla. */

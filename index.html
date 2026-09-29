@@ -1464,7 +1464,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v50";
+const APP_VER = "v51";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -3069,9 +3069,17 @@ $("#chkVerClaveNueva").addEventListener("change", e=>{
 const LS_CLIENTES = "blake.clientes";
 /* Corrige coordenadas a las que se les perdió el punto decimal
    (ej. 195816963 -> 19.5816963). Latitud máx 90, longitud máx 180. */
+function numCoord(v){
+  /* v51: acepta "19.496603" y "19,496603" (teclado o Sheets en español), con espacios */
+  if(typeof v === "number") return v;
+  var t = String(v).trim().replace(/\s/g,"");
+  if(t.indexOf(",")>=0 && t.indexOf(".")>=0) t = t.replace(/,/g,"");
+  else t = t.replace(",",".");
+  return Number(t);
+}
 function normCoord(v, max){
   if(v===null || v===undefined || v==="") return null;
-  var n = Number(v); if(!isFinite(n)) return null;
+  var n = numCoord(v); if(!isFinite(n)) return null;
   var s = n<0 ? -1 : 1; n = Math.abs(n);
   while(n > max) n = n/10;
   return s*n;
@@ -3079,6 +3087,8 @@ function normCoord(v, max){
 function normalizarCliente(o){
   o.lat = normCoord(o.lat, 90);
   o.lon = normCoord(o.lon, 180);
+  /* v51: longitud sin signo en México (lat 14–33, lon +86 a +119) = se perdió el menos */
+  if(o.lat!=null && o.lon!=null && o.lat>14 && o.lat<33 && o.lon>86 && o.lon<119) o.lon = -o.lon;
   return o;
 }
 function cargarClientesCache(){
@@ -4164,6 +4174,11 @@ $("#btnCliGps").addEventListener("click", ()=>{
   }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 });
 
+/* v51: pegar "19.496603, -99.020691" (copiado de Google Maps) en Latitud llena las dos casillas. */
+$("#cliLat").addEventListener("input", ()=>{
+  const m = $("#cliLat").value.trim().match(/^(-?\d+[.,]\d+)\s*[;,]?\s+(-?\d+[.,]\d+)$|^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+  if(m){ $("#cliLat").value = m[1] || m[3]; $("#cliLon").value = m[2] || m[4]; }
+});
 async function altaCliente(){
   if($("#btnAltaCli").disabled) return;
   const nombre = $("#cliNombre").value.trim();
@@ -4172,7 +4187,8 @@ async function altaCliente(){
   const orden  = $("#cliOrden").value.trim();
   const radio  = Math.max(30, Math.min(5000, parseInt($("#cliRadio").value,10) || 200));
   const lat = normCoord($("#cliLat").value.trim(), 90);
-  const lon = normCoord($("#cliLon").value.trim(), 180);
+  let lon = normCoord($("#cliLon").value.trim(), 180);
+  if(lat!==null && lon!==null && lat>14 && lat<33 && lon>86 && lon<119) lon = -lon;   /* v51 */
   if(lat===null || lon===null){ avisar("Coordenadas inválidas","Revise la latitud y la longitud.","error"); return; }
 
   const ok = await confirmar("¿Dar de alta el cliente?",

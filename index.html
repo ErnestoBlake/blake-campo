@@ -239,6 +239,7 @@ body{
   display:flex;align-items:center;gap:9px;margin:14px 0 10px;
   font-family:var(--texto);font-size:14.5px;color:var(--plata-alta);
 }
+.chk-linea[hidden]{display:none !important}
 .chk-linea input{width:19px;height:19px;accent-color:var(--naranja);flex:0 0 auto}
 .leyenda-firma{
   margin:10px 0 8px;padding:11px 13px;border:1px solid var(--linea);
@@ -1463,7 +1464,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v49";
+const APP_VER = "v50";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -1888,7 +1889,12 @@ function pintarEvidencia(){
 }
 
 /* v49: en trabajo interno (cliente "Blake Inc") el cliente somos nosotros: no hay firma de cliente. */
-function esInterno(){ return !!(estado.orden && String(estado.orden.cliente||"").trim().toLowerCase() === "blake inc"); }
+function esInterno(){
+  if(!estado.orden) return false;
+  const c = String(estado.orden.cliente||"").trim().toLowerCase();
+  const si = String(estado.orden.sitio||"").trim().toLowerCase();
+  return c.indexOf("blake inc") === 0 || si.indexOf("tezoyuca") >= 0;   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
+}
 function pintarCierreForm(){
   const mostrar = estado.orden && estado.eventos.regreso && !estado.eventos.salida;
   $("#cierreForm").hidden = !mostrar;

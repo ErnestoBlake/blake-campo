@@ -1105,7 +1105,8 @@ body{
     </div>
 
       <label class="adm-campo" for="cliNombre">Cliente</label>
-      <input type="text" id="cliNombre" maxlength="80" autocapitalize="words" placeholder="Ejemplo: Holcim">
+      <input type="text" id="cliNombre" maxlength="80" autocapitalize="words" placeholder="Ejemplo: Holcim" list="cliLista" autocomplete="off">
+      <datalist id="cliLista"></datalist>
 
       <label class="adm-campo" for="cliSitio">Obra / Sitio</label>
       <input type="text" id="cliSitio" maxlength="120" autocapitalize="words" placeholder="Ejemplo: Planta Atitalaquia">
@@ -1464,7 +1465,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v51";
+const APP_VER = "v52";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -3439,7 +3440,7 @@ function mostrarInicio(){
   $("#actividadesPantalla").hidden = true;
   $("#adminPantalla").hidden = true;
   $("#btnIrAdmin").hidden = !esAdminApp();
-  $("#btnIrCliente").hidden = !esAdminApp();
+  $("#btnIrCliente").hidden = false;   /* v52: cualquier técnico puede dar de alta el sitio donde está */
   $("#btnIrEquipo").hidden = !esAdminApp();
   $("#equipoPantalla").hidden = true;
   $("#clientePantalla").hidden = true;
@@ -4136,19 +4137,24 @@ function pintarAltaCli(){
   const sitio  = $("#cliSitio").value.trim();
   const correo = $("#cliCorreo").value.trim();
   const lat = $("#cliLat").value.trim(), lon = $("#cliLon").value.trim();
+  const adm = esAdminApp();
   const faltan = [];
   if(nombre.length < 2) faltan.push("el nombre del cliente");
   if(sitio.length  < 2) faltan.push("la obra o sitio");
   if(!correoValido(correo)) faltan.push("un correo válido del cliente");
-  if(!lat || !lon) faltan.push("las coordenadas");
+  if(adm ? (!lat || !lon) : !altaGps) faltan.push(adm ? "las coordenadas" : "las coordenadas del GPS (botón «Tomar coordenadas aquí»)");
   // Duplicado: mismo cliente y mismo sitio ya en la lista.
   const repetido = ORDENES.some(o =>
     (o.titulo || o.cliente || "").trim().toUpperCase() === nombre.toUpperCase() &&
     (o.sitio || "").trim().toUpperCase() === sitio.toUpperCase());
   const n = $("#cliNota");
-  n.classList.toggle("alerta", faltan.length > 0 || repetido);
-  $("#btnAltaCli").disabled = faltan.length > 0 || repetido;
-  n.textContent = repetido
+  let cerca = null;
+  if(!adm && altaGps) cerca = sitioCercano(altaGps.la, altaGps.lo);
+  n.classList.toggle("alerta", faltan.length > 0 || repetido || !!cerca);
+  $("#btnAltaCli").disabled = faltan.length > 0 || repetido || !!cerca;
+  n.textContent = cerca
+    ? `Ya existe «${cerca.o.cliente || cerca.o.titulo} · ${cerca.o.sitio || ""}» a ${cerca.d} m de aquí. Elíjalo de la lista de clientes; no hace falta darlo de alta otra vez.`
+    : repetido
     ? "Ese cliente ya existe con esa misma obra. Revise la lista antes de duplicarlo."
     : (faltan.length ? "Falta " + faltan.join(", ") + "."
                      : "Se dará de alta y aparecerá en la lista de todos los técnicos.");
@@ -4162,6 +4168,12 @@ $("#btnCliGps").addEventListener("click", ()=>{
   $("#cliGpsTxt").textContent = "Leyendo la ubicación…";
   navigator.geolocation.getCurrentPosition(pos=>{
     const {latitude:la, longitude:lo, accuracy:pr} = pos.coords;
+    if(!esAdminApp() && pr > 50){
+      altaGps = null; $("#cliLat").value = ""; $("#cliLon").value = "";
+      $("#cliGpsTxt").textContent = `Precisión de ±${Math.round(pr)} m: no alcanza (máximo ±50 m). Salga a cielo abierto y repita.`;
+      pintarAltaCli(); return;
+    }
+    altaGps = { la:+la.toFixed(6), lo:+lo.toFixed(6), pr:Math.round(pr) };
     $("#cliLat").value = la.toFixed(6);
     $("#cliLon").value = lo.toFixed(6);
     $("#cliGpsTxt").textContent = `Tomadas aquí: ${la.toFixed(5)}, ${lo.toFixed(5)} ±${Math.round(pr)} m`;
@@ -4185,9 +4197,11 @@ async function altaCliente(){
   const sitio  = $("#cliSitio").value.trim();
   const correo = $("#cliCorreo").value.trim();
   const orden  = $("#cliOrden").value.trim();
-  const radio  = Math.max(30, Math.min(5000, parseInt($("#cliRadio").value,10) || 200));
-  const lat = normCoord($("#cliLat").value.trim(), 90);
-  let lon = normCoord($("#cliLon").value.trim(), 180);
+  const radio  = esAdminApp() ? Math.max(30, Math.min(5000, parseInt($("#cliRadio").value,10) || 200)) : 200;
+  const adm = esAdminApp();
+  if(!adm && !altaGps){ avisar("Faltan las coordenadas", "Presione «Tomar coordenadas aquí» estando en el sitio.", "error"); return; }
+  const lat = adm ? normCoord($("#cliLat").value.trim(), 90) : altaGps.la;
+  let lon = adm ? normCoord($("#cliLon").value.trim(), 180) : altaGps.lo;
   if(lat!==null && lon!==null && lat>14 && lat<33 && lon>86 && lon<119) lon = -lon;   /* v51 */
   if(lat===null || lon===null){ avisar("Coordenadas inválidas","Revise la latitud y la longitud.","error"); return; }
 
@@ -4206,8 +4220,8 @@ async function altaCliente(){
   if(!$("#adminPantalla").hidden) pintarAdmin();
 
   ["#cliNombre","#cliSitio","#cliOrden","#cliCorreo","#cliLat","#cliLon"].forEach(sel=>{ const e=$(sel); if(e) e.value=""; });
-  $("#cliRadio").value = 200;
-  $("#cliGpsTxt").textContent = "Sin coordenadas. Tómelas estando en el sitio, o escríbalas abajo.";
+  $("#cliRadio").value = 200; altaGps = null;
+  $("#cliGpsTxt").textContent = "Sin coordenadas. Tómelas estando en el sitio" + (esAdminApp() ? ", o escríbalas abajo." : ".");
   pintarAltaCli();
   avisar("Cliente dado de alta", navigator.onLine
     ? `${nombre} · ${sitio}. Ya aparece en la lista.`
@@ -4365,10 +4379,24 @@ $("#btnIrEquipo").addEventListener("click", ()=>{ $("#inicio").hidden = true; ab
 $("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAdmin(); });
 
 /* Alta de cliente: opcion propia del menu, no escondida dentro de otra pantalla. */
+let altaGps = null;   /* v52: lectura GPS del alta {la, lo, pr}; el técnico solo puede usar esta, no teclear */
 function abrirAltaCliente(){
   const p = $("#clientePantalla");
   p.hidden = false; p.scrollTop = 0;
+  altaGps = null;
+  const adm = esAdminApp();
+  $("#cliLat").readOnly = !adm; $("#cliLon").readOnly = !adm; $("#cliRadio").disabled = !adm;
+  if(!adm){ $("#cliRadio").value = 200; $("#cliGpsTxt").textContent = "Párese en el sitio y presione «Tomar coordenadas aquí». Las coordenadas no se pueden teclear."; }
+  const nombres = {}; ORDENES.forEach(o=>{ const n = (o.cliente||o.titulo||"").trim(); if(n) nombres[n.toLowerCase()] = n; });
+  $("#cliLista").innerHTML = Object.keys(nombres).sort().map(k=>`<option value="${esc(nombres[k])}">`).join("");
   pintarAltaCli();
+}
+/* v52: sitio ya registrado a menos de 80 m (con cualquier nombre) */
+function sitioCercano(la, lo){
+  let mejor = null;
+  ORDENES.forEach(o=>{ if(o.lat==null || o.lon==null) return;
+    const d = metros(la, lo, o.lat, o.lon); if(d < 80 && (!mejor || d < mejor.d)) mejor = { o, d:Math.round(d) }; });
+  return mejor;
 }
 $("#btnIrCliente").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirAltaCliente(); });
 $("#btnCliMenu").addEventListener("click", ()=>{ $("#clientePantalla").hidden = true; mostrarInicio(); });

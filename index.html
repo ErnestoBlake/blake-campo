@@ -1465,7 +1465,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v52";
+const APP_VER = "v53";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -4163,12 +4163,22 @@ function pintarAltaCli(){
   const el = $(sel); if(el) el.addEventListener("input", pintarAltaCli);
 });
 
+let altaWatch = null;
+function altaGpsParar(){ if(altaWatch){ try{ navigator.geolocation.clearWatch(altaWatch.id); }catch(e){} clearInterval(altaWatch.reloj); altaWatch = null; } }
 $("#btnCliGps").addEventListener("click", ()=>{
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
-  $("#cliGpsTxt").textContent = "Leyendo la ubicación…";
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const {latitude:la, longitude:lo, accuracy:pr} = pos.coords;
-    if(!esAdminApp() && pr > 50){
+  altaGpsParar();
+  const MAXP = esAdminApp() ? 1e9 : 50, ESPERA = 60;   /* v53: 60 s y se queda con la mejor lectura (antes 15 s y una sola) */
+  let mejor = null, seg = 0;
+  const pinta = ()=>{ $("#cliGpsTxt").textContent = "Leyendo la ubicación… " + seg + " s" + (mejor ? " · mejor lectura ±" + Math.round(mejor.accuracy) + " m" : ""); };
+  const cierra = ()=>{
+    altaGpsParar();
+    if(!mejor){
+      $("#cliGpsTxt").textContent = "No se pudo leer la ubicación. Salga de la nave a cielo abierto y repita.";
+      avisar("Ubicación no disponible","No hubo señal de GPS en 60 s. Salga de la nave a cielo abierto, espere y repita. Si el sitio es interno, pida al administrador que capture las coordenadas.","error"); return;
+    }
+    const {latitude:la, longitude:lo, accuracy:pr} = mejor;
+    if(pr > MAXP){
       altaGps = null; $("#cliLat").value = ""; $("#cliLon").value = "";
       $("#cliGpsTxt").textContent = `Precisión de ±${Math.round(pr)} m: no alcanza (máximo ±50 m). Salga a cielo abierto y repita.`;
       pintarAltaCli(); return;
@@ -4178,12 +4188,19 @@ $("#btnCliGps").addEventListener("click", ()=>{
     $("#cliLon").value = lo.toFixed(6);
     $("#cliGpsTxt").textContent = `Tomadas aquí: ${la.toFixed(5)}, ${lo.toFixed(5)} ±${Math.round(pr)} m`;
     pintarAltaCli();
+  };
+  pinta();
+  const id = navigator.geolocation.watchPosition(pos=>{
+    if(!mejor || pos.coords.accuracy < mejor.accuracy) mejor = pos.coords;
+    if(mejor.accuracy <= MAXP) cierra(); else pinta();
   }, err=>{
-    $("#cliGpsTxt").textContent = "No se pudo leer la ubicación. Escriba las coordenadas a mano.";
-    avisar("Ubicación no disponible",
-      err.code===1 ? "Debe permitir el acceso a la ubicación en el navegador."
-                   : "La señal de GPS tardó demasiado. Salga a cielo abierto e intente otra vez.", "error");
-  }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+    if(err.code === 1){
+      altaGpsParar();
+      $("#cliGpsTxt").textContent = "No se pudo leer la ubicación.";
+      avisar("Ubicación no disponible","Debe permitir el acceso a la ubicación en el navegador (candado junto a la dirección web).","error");
+    }
+  }, { enableHighAccuracy:true, timeout:ESPERA*1000, maximumAge:0 });
+  altaWatch = { id, reloj: setInterval(()=>{ seg++; if(seg >= ESPERA) cierra(); else pinta(); }, 1000) };
 });
 
 /* v51: pegar "19.496603, -99.020691" (copiado de Google Maps) en Latitud llena las dos casillas. */
@@ -4380,7 +4397,7 @@ $("#btnIrAdmin").addEventListener("click", ()=>{ $("#inicio").hidden = true; abr
 
 /* Alta de cliente: opcion propia del menu, no escondida dentro de otra pantalla. */
 let altaGps = null;   /* v52: lectura GPS del alta {la, lo, pr}; el técnico solo puede usar esta, no teclear */
-function abrirAltaCliente(){
+function abrirAltaCliente(){ if(typeof altaGpsParar==="function") altaGpsParar();
   const p = $("#clientePantalla");
   p.hidden = false; p.scrollTop = 0;
   altaGps = null;

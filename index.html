@@ -769,7 +769,7 @@ body{
     </div>
     <button class="firma-limpiar" id="btnLimpiarFirmaTec" type="button">Limpiar firma del técnico</button>
 
-    <label class="chk-linea" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
+    <label class="chk-linea" id="lineaFirmaCli" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
       <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
@@ -1463,7 +1463,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v48";
+const APP_VER = "v49";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -1887,15 +1887,20 @@ function pintarEvidencia(){
   if(b) b.onclick = ()=> $("#camara").click();
 }
 
+/* v49: en trabajo interno (cliente "Blake Inc") el cliente somos nosotros: no hay firma de cliente. */
+function esInterno(){ return !!(estado.orden && String(estado.orden.cliente||"").trim().toLowerCase() === "blake inc"); }
 function pintarCierreForm(){
   const mostrar = estado.orden && estado.eventos.regreso && !estado.eventos.salida;
   $("#cierreForm").hidden = !mostrar;
+  if(mostrar && esInterno()){
+    estado.incluirFirma = false; estado.firma = null;
+    $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true;
+  } else if(mostrar){ $("#lineaFirmaCli").hidden = false; }
   if(mostrar){
     pintarRenglones();
     if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
-    $("#firmaCaja").hidden = !estado.incluirFirma;
-    $("#btnLimpiarFirma").hidden = !estado.incluirFirma;
-    if(estado.incluirFirma) prepararFirma();
+    if(!esInterno()){ $("#firmaCaja").hidden = !estado.incluirFirma; $("#btnLimpiarFirma").hidden = !estado.incluirFirma; }
+    if(estado.incluirFirma && !esInterno()) prepararFirma();
     prepararFirmaTec();
     prepararCierreAct();
     pintarCierreAct();
@@ -1947,7 +1952,7 @@ function pintarBoton(){
   const faltanActiv = esSalida && !medAct.ok;
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
-  const faltanFirma = esSalida && !estado.firma;
+  const faltanFirma = esSalida && !esInterno() && !estado.firma;
   const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.

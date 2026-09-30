@@ -808,7 +808,7 @@ body{
         <option>Otro</option>
       </select>
       <label class="adm-campo" for="cancelaDetalle">Explicación</label>
-      <textarea id="cancelaDetalle" placeholder="Explica qué pasó, con quién se habló y qué se acordó. Mínimo 15 caracteres."></textarea>
+      <textarea id="cancelaDetalle" placeholder="Explica qué pasó, con quién se habló y qué se acordó. Mínimo 100 caracteres."></textarea>
       <div class="act-conteo" id="cancelaConteo">0 caracteres</div>
       <button class="btn btn-cancela" id="btnCancelaConfirmar" type="button" disabled>Confirmar cancelación</button>
       <p class="nota-btn" id="cancelaNota">—</p>
@@ -1500,7 +1500,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v58";
+const APP_VER = "v59";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2070,10 +2070,10 @@ function pintarCancela(){
   $("#cancelaCaja").hidden = !activo;
   if(!activo){ $("#cancelaPanel").hidden = true; }
   const t = $("#cancelaDetalle").value.trim();
-  $("#cancelaConteo").textContent = t.length + " caracteres";
+  $("#cancelaConteo").textContent = t.length + " / 100 caracteres" + (t.length < 100 ? " · faltan " + (100 - t.length) : " ✓");
   const faltan = [];
   if(!$("#cancelaMotivo").value) faltan.push("el motivo");
-  if(t.length < 15) faltan.push("la explicación (mínimo 15 caracteres)");
+  if(t.length < 100) faltan.push("la explicación (mínimo 100 caracteres; lleva " + t.length + ")");
   $("#btnCancelaConfirmar").disabled = faltan.length > 0;
   $("#cancelaNota").textContent = faltan.length
     ? "Falta " + faltan.join(" y ") + "."
@@ -2088,7 +2088,7 @@ async function cancelarServicio(){
   if(!o) return;
   const motivo = $("#cancelaMotivo").value;
   const detalle = $("#cancelaDetalle").value.trim();
-  if(!motivo || detalle.length < 15) return;
+  if(!motivo || detalle.length < 100) return;
   const folioCan = folioCancelacion();
   const ok = await confirmar("¿Cancelar el servicio?",
     `Folio de cancelación: ${folioCan}\nCliente: ${o.titulo || o.cliente}\nMotivo: ${motivo}\n\n` +

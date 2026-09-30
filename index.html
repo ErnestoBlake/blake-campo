@@ -1465,7 +1465,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v53";
+const APP_VER = "v54";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2879,6 +2879,19 @@ async function entrarConBio(){
     avisar("Renueva tu acceso", "Pasaron más de 30 días desde tu último acceso con contraseña. Entra una vez con tu correo y contraseña; después vuelves a usar tu huella o rostro.", "alerta");
     mostrarClaveLogin(u);
     return;
+  }
+  /* v54: con señal, la huella/rostro ya NO da por buena una sesión guardada sin preguntarle al servidor.
+     Si el servidor no la reconoce, se pide la contraseña en ese momento (antes se aceptaba y los registros
+     se rechazaban después, sin que la persona lo supiera). Sin señal se entra como siempre. */
+  if(navigator.onLine){
+    btn.disabled = true;
+    const chk = v.token ? await llamarJSONP("actividades=1&token=" + encodeURIComponent(v.token), 15000) : { ok:false, error:"Sesión no válida" };
+    btn.disabled = false;
+    if(chk && chk.ok === false && esErrorSesion(chk.error)){
+      avisar("Su sesión venció", "El servidor ya no la reconoce. Entre esta vez con su correo y contraseña; después podrá volver a usar su huella o rostro.", "alerta");
+      mostrarClaveLogin(u);
+      return;
+    }
   }
   estado.tecnico = v.nombre || u; estado.usuario = u; estado.token = v.token || ""; estado.rol = v.rol || "";
   estado.sinSenal = !navigator.onLine;

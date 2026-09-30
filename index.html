@@ -1050,6 +1050,9 @@ body{
       <p class="nota-btn" id="admNota">—</p>
     </div>
 
+    <span class="etiqueta act-bloque">Solicitudes de reasignación</span>
+    <div id="admSolicitudes"></div>
+
     <span class="etiqueta act-bloque">Pendientes del equipo</span>
     <div id="admEquipo"></div>
     <p class="act-cola" id="admCola">—</p>
@@ -1164,6 +1167,22 @@ body{
     <p class="pista" id="miMsj" style="color:var(--ambar);min-height:1.2em"></p>
     <button class="btn btn-sec" id="miSinVerif" type="button">No puedo verificar ahora (falla del teléfono)</button>
     <button class="btn btn-sec" id="miNo" type="button">Cancelar</button>
+  </div>
+</div>
+
+<!-- v56: pedir reasignación de una actividad (la autoriza un administrador) -->
+<div class="portada" id="modalReasig" hidden role="dialog" aria-modal="true" aria-labelledby="mrTitulo">
+  <div class="portada-caja">
+    <span class="etiqueta">Reasignar actividad</span>
+    <h2 id="mrTitulo">Pedir reasignación</h2>
+    <p class="pista confirmar-texto" id="mrAct">—</p>
+    <p class="pista">La actividad sigue a su nombre hasta que un administrador la autorice. Su solicitud queda registrada con fecha y hora.</p>
+    <label class="adm-campo" for="mrPropuesta">¿A quién le corresponde? (opcional)</label>
+    <input id="mrPropuesta" type="text" maxlength="120" placeholder="Nombre de la persona">
+    <label class="adm-campo" for="mrMotivo">Motivo (opcional)</label>
+    <textarea id="mrMotivo" maxlength="500" placeholder="Ejemplo: no es de mi área / no es mi cliente"></textarea>
+    <button class="btn" id="mrEnviar" type="button">Enviar solicitud</button>
+    <button class="btn btn-sec" id="mrNo" type="button">Cancelar</button>
   </div>
 </div>
 
@@ -1465,7 +1484,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v54";
+const APP_VER = "v56";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2161,7 +2180,12 @@ async function registrar(){
   }
   if(!navigator.geolocation){ avisar("Sin GPS","Este teléfono no permite leer la ubicación.","error"); return; }
   /* v48: confirmar identidad (huella/rostro; respaldo contraseña) antes de registrar la jornada. */
-  const idm = await verificarIdentidad(paso);
+  /* v55: la identidad se confirma UNA vez por servicio (en la llegada). Comida, regreso y salida reutilizan esa
+     verificación. Si en la llegada se declaró "SIN VERIFICAR", se vuelve a pedir. */
+  const previo = ["llegada","comida","regreso"].map(k=> (estado.eventos||{})[k]).find(e=> e && e.idm && !/^SIN VERIFICAR/.test(e.idm));
+  let idm;
+  if(paso.id !== "llegada" && previo) idm = previo.idm.replace(/ \(verificado en la llegada\)$/, "") + " (verificado en la llegada)";
+  else idm = await verificarIdentidad(paso);
   if(idm === null) return;
   estado.leyendo = true; pintarBoton();
   // La salida cierra el servicio: la pantalla de envio se abre de inmediato,
@@ -2210,10 +2234,10 @@ async function registrar(){
     if(tieneRef){ dist = metros(lat,lon,o.lat,o.lon); fuera = dist > (o.radio||200); }
     estatus = !tieneRef ? "Sin referencia GPS" : (fuera ? "FUERA DE RANGO" : "En sitio");
     if(lectura.edad > 30) estatus += ` (GPS de hace ${lectura.edad} s)`;
-    estado.eventos[paso.id] = { hora, lat, lon, dist:tieneRef?dist:null, fuera, prec:lectura.prec };
+    estado.eventos[paso.id] = { hora, lat, lon, dist:tieneRef?dist:null, fuera, prec:lectura.prec, idm };
   } else {
     estatus = "SIN UBICACIÓN GPS";
-    estado.eventos[paso.id] = { hora, lat:null, lon:null, dist:null, fuera:false, prec:null, sinGps:true };
+    estado.eventos[paso.id] = { hora, lat:null, lon:null, dist:null, fuera:false, prec:null, sinGps:true, idm };
   }
   estatus += " · ID: " + idm;   /* v48: cómo se comprobó quién registró */
   estado.leyendo = false;
@@ -3666,6 +3690,45 @@ function idsMarcadosCliente(){
   return Object.keys(act.marcas).filter(id=>vig.has(id));
 }
 
+/* ---------- v56: pedir reasignación de una actividad ----------
+   Cualquier colaborador puede pedir que una actividad SUYA pase a otra persona. La actividad sigue a su
+   nombre hasta que un administrador la autoriza (y puede elegir a otra persona) o la rechaza. */
+function reasigPendiente(a){
+  return a.reasig === "PENDIENTE" ||
+    estado.cola.some(x=> x.tipo==="asignar" && x.accion==="pedir_reasignacion" && String(x.id)===String(a.id));
+}
+function htmlReasig(a){
+  if(esAclaracion(a)) return "";
+  return reasigPendiente(a)
+    ? `<div class="act-nota-previa">⏳ Reasignación solicitada · espera la autorización de un administrador</div>`
+    : `<button type="button" class="link-volver reasig-btn" data-reasig="${esc(String(a.id))}">No me corresponde · pedir reasignación</button>`;
+}
+let _reasigId = "";
+function abrirReasignar(id){
+  const a = act.lista.find(x=> String(x.id) === String(id));
+  if(!a) return;
+  _reasigId = String(id);
+  $("#mrAct").textContent = a.titulo || a.texto || "";
+  $("#mrPropuesta").value = ""; $("#mrMotivo").value = "";
+  $("#modalReasig").hidden = false;
+}
+document.addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest("[data-reasig]");
+  if(b) abrirReasignar(b.dataset.reasig);
+});
+$("#mrNo").addEventListener("click", ()=>{ $("#modalReasig").hidden = true; _reasigId = ""; });
+$("#mrEnviar").addEventListener("click", ()=>{
+  if(!_reasigId) return;
+  encolar({ tipo:"asignar", token:estado.token, accion:"pedir_reasignacion", id:_reasigId,
+            propuesta:$("#mrPropuesta").value.trim(), motivo:$("#mrMotivo").value.trim() });
+  const a = act.lista.find(x=> String(x.id) === _reasigId); if(a) a.reasig = "PENDIENTE";
+  $("#modalReasig").hidden = true; _reasigId = "";
+  avisar("Solicitud enviada", navigator.onLine
+    ? "Un administrador la revisará. La actividad sigue a su nombre mientras tanto."
+    : "Sin señal: quedó guardada en el teléfono y se enviará sola al recuperar la conexión.", "ok");
+  pintarActividades();
+});
+
 /* Renglón de solo lectura para la consulta "Todos tus pendientes". */
 function htmlActConsulta(a){
   const f = etiquetaFecha(a.fecha);
@@ -3674,6 +3737,7 @@ function htmlActConsulta(a){
     <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span><span class="act-fecha">${cli}</span></div>
     <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
+    ${htmlReasig(a)}
   </div>`;
 }
 
@@ -3687,6 +3751,7 @@ function htmlActItem(a){
     <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${origen}</div>
     <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
+    ${htmlReasig(a)}
     <div class="act-ops">${ops}</div>
     ${pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
     <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
@@ -3982,7 +4047,7 @@ $("#btnEnviarAct").addEventListener("click", enviarActividades);
    reprogramar cada uno. El conector valida el rol otra vez del lado
    del servidor: esconder el botón no es la seguridad, solo la comodidad.
    ============================================================ */
-const adm = { usuarios:[], actualizado:null, cargando:false, editando:null };
+const adm = { usuarios:[], solicitudes:[], actualizado:null, cargando:false, editando:null };
 const esAdminApp = () => normCliente(estado.rol) === "administrador";
 
 function abrirAdmin(){
@@ -4008,6 +4073,7 @@ async function refrescarEquipo(){
     pintarAdmin(); pintarVerEquipo(); return;
   }
   adm.usuarios = Array.isArray(resp.usuarios) ? resp.usuarios : [];
+  adm.solicitudes = Array.isArray(resp.solicitudes) ? resp.solicitudes : [];   /* v56 */
   adm.actualizado = new Date().toISOString();
   pintarAdmin(); pintarVerEquipo();
 }
@@ -4043,6 +4109,7 @@ function pintarAdmin(){
   if(antesC && cli.some(o=>o.cliente === antesC)) selC.value = antesC;
 
   pintarEquipo();
+  pintarSolicitudes();
   pintarBotonAsignar();
 }
 
@@ -4064,6 +4131,49 @@ function pintarBotonAsignar(){
 }
 ["#admResponsable","#admCliente","#admFecha"].forEach(s=> $(s).addEventListener("change", pintarBotonAsignar));
 $("#admTextos").addEventListener("input", pintarBotonAsignar);
+
+/* v56: solicitudes de reasignación pendientes (solo administrador). */
+function pintarSolicitudes(){
+  const cont = $("#admSolicitudes");
+  if(!cont) return;
+  if(cont.contains(document.activeElement) && /^(SELECT|INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  const L = adm.solicitudes || [];
+  if(!L.length){ cont.innerHTML = `<p class="pista act-vacio">Sin solicitudes pendientes.</p>`; return; }
+  cont.innerHTML = L.map(s=>{
+    const prop = normCliente(s.propuesta || "");
+    const cand = adm.usuarios.filter(u=> u.usuario !== s.solicitante);
+    const sel = prop ? (cand.find(u=> normCliente(u.nombre).includes(prop)) || {}).usuario : "";
+    const opts = cand.map(u=> `<option value="${esc(u.usuario)}"${u.usuario === sel ? " selected" : ""}>${esc(u.nombre)}</option>`).join("");
+    return `<div class="adm-persona" data-sol="${esc(s.id)}">
+      <b>${esc(s.nombre)}</b><span class="adm-puesto">${esc(s.fecha)}</span>
+      <div class="adm-tarea">
+        <div>${esc(s.actividad)}</div>
+        ${s.motivo ? `<div class="adm-meta">Motivo: ${esc(s.motivo)}</div>` : ""}
+        ${s.propuesta ? `<div class="adm-meta">Propone: ${esc(s.propuesta)}</div>` : ""}
+        <label class="adm-campo">Asignar a</label>
+        <select class="sol-resp"><option value="">— Elige a la persona —</option>${opts}</select>
+        <input type="text" class="sol-nota" maxlength="200" placeholder="Nota (opcional)">
+        <div class="adm-acciones">
+          <button type="button" class="sol-ok">Autorizar</button>
+          <button type="button" class="sol-no" data-peligro="1">Rechazar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  cont.querySelectorAll(".adm-persona").forEach(caja=>{
+    const id = caja.dataset.sol;
+    caja.querySelector(".sol-ok").onclick = ()=>{
+      const responsable = caja.querySelector(".sol-resp").value;
+      if(!responsable){ avisar("Falta elegir", "Elija a quién se asigna la actividad.", "alerta"); return; }
+      mandarAdmin({ tipo:"asignar", token:estado.token, accion:"autorizar_reasignacion", solicitud:id, responsable,
+                    nota:caja.querySelector(".sol-nota").value.trim() }, "Reasignación autorizada");
+    };
+    caja.querySelector(".sol-no").onclick = ()=>{
+      mandarAdmin({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id,
+                    nota:caja.querySelector(".sol-nota").value.trim() }, "Solicitud rechazada");
+    };
+  });
+}
 
 function pintarEquipo(){
   const cont = $("#admEquipo");

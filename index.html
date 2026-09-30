@@ -1519,7 +1519,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v60";
+const APP_VER = "v61";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2430,6 +2430,13 @@ function actividadesDetCierre(){
   const adic = estado.renglones.map(normRenglon).filter(renglonLleno)
     .map(r=>({ titulo: limpiaTxt(r.titulo), detalle: limpiaTxt(r.detalle) }));
   return asig.concat(adic).filter(x=>x.titulo || x.detalle);
+}
+/* v61: actividades que quedaron PENDIENTES o CANCELADAS, con la justificación escrita (va al PDF/correo). */
+function noConcluidasCierre(){
+  return idsMarcadosCliente().filter(id=>act.marcas[id]==="PENDIENTE" || act.marcas[id]==="CANCELADA").map(id=>{
+    const a = act.lista.find(x=>String(x.id)===id);
+    return { estado: act.marcas[id], titulo: limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle: limpiaTxt(act.notas[id]) };
+  }).filter(x=>x.titulo || x.detalle);
 }
 function adicionalesCierre(){
   return estado.renglones.map(normRenglon).filter(renglonLleno)
@@ -3869,7 +3876,7 @@ $("#cierreAdicInput").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.pr
 function encolarHojaCliente(o, reporteId, ids, snap){
   /* v48: las actividades se toman ANTES de encolar el reporte_act (snap). Al encolarlo, las
      terminadas/canceladas salen de la lista (idsEnCola) y la hoja del correo quedaba "sin actividades". */
-  snap = snap || { hechas: hechasCierre(), adicionales: adicionalesCierre(), actividadesDet: actividadesDetCierre() };
+  snap = snap || { hechas: hechasCierre(), adicionales: adicionalesCierre(), actividadesDet: actividadesDetCierre(), noConcluidas: noConcluidasCierre() };
   const hechas = snap.hechas;
   const ev = estado.eventos || {};
   const punto = e => e && e.hora ? { hora:e.hora, lat:(e.lat != null ? +(+e.lat).toFixed(6) : null), lon:(e.lon != null ? +(+e.lon).toFixed(6) : null) } : null;
@@ -3882,6 +3889,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     salida: punto(ev.salida) || { hora: ahora(), lat:null, lon:null },   /* v47: la salida ya lleva sus coordenadas (antes iban en null) */
     hechas, adicionales: snap.adicionales,
     actividadesDet: snap.actividadesDet,   /* v43: título y descripción por separado */
+    noConcluidas: snap.noConcluidas || [],   /* v61: pendientes/canceladas con su justificación */
     detalle: "",
     firma: estado.incluirFirma && estado.firma ? estado.firma : "",
     firmaTecnico: estado.firmaTec || "",
@@ -3899,7 +3907,7 @@ function encolarReporteAct(o){
   const reporteId = "R" + idCorto();
   const adicC = adicionalesCierre();
   /* v48: copia de lo que se declaró, ANTES de encolar (ver encolarHojaCliente). */
-  const snap = { hechas: hechasCierre(), adicionales: adicC, actividadesDet: actividadesDetCierre() };
+  const snap = { hechas: hechasCierre(), adicionales: adicC, actividadesDet: actividadesDetCierre(), noConcluidas: noConcluidasCierre() };
   if(!ids.length && !adicC.length){ encolarHojaCliente(o, reporteId, ids, snap); return; }
   encolar({
     tipo:"reporte_act", token:estado.token, reporteId,

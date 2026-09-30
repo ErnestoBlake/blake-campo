@@ -573,6 +573,14 @@ body{
 
 /* ---------- Pantalla de envío del reporte ---------- */
 #envio{z-index:130}
+#modalProc{z-index:140}
+.proc-rueda{width:54px;height:54px;margin:0 auto 18px;border-radius:50%;border:5px solid rgba(255,255,255,.18);border-top-color:var(--naranja,#ff7a1a);animation:procGira 0.9s linear infinite}
+#modalProc[data-estado="ok"] .proc-rueda{animation:none;border-color:var(--verde);position:relative}
+#modalProc[data-estado="ok"] .proc-rueda::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--verde)}
+#modalProc[data-estado="error"] .proc-rueda{animation:none;border-color:var(--rojo)}
+#modalProc[data-estado="error"] .proc-rueda::after{content:"!";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--rojo)}
+#modalProc .proc-rueda{position:relative}
+@keyframes procGira{to{transform:rotate(360deg)}}
 #envio h2{margin-bottom:20px}
 .env-barra{height:12px;background:var(--acero-800);border:1px solid var(--linea);border-radius:999px;overflow:hidden}
 .env-barra i{display:block;height:100%;width:0;background:var(--naranja);transition:width .35s ease}
@@ -1170,6 +1178,17 @@ body{
 </div>
 
 
+<!-- v59: procesando la reasignación (autorizar / rechazar) -->
+<div class="portada" id="modalProc" hidden role="dialog" aria-modal="true" aria-labelledby="mpTitulo" data-estado="espera">
+  <div class="portada-caja">
+    <div class="proc-rueda" id="mpRueda" aria-hidden="true"></div>
+    <span class="etiqueta" id="mpEtiqueta">Procesando</span>
+    <h2 id="mpTitulo">Procesando la reasignación…</h2>
+    <p class="pista confirmar-texto" id="mpTexto">Espere un momento. No cierre la app ni salga de esta pantalla hasta que termine.</p>
+    <button class="btn" id="mpOk" type="button" hidden>Entendido</button>
+  </div>
+</div>
+
 <!-- v48: confirmar identidad al registrar la jornada (huella/rostro; respaldo: contraseña) -->
 <div class="portada" id="modalIdent" hidden role="dialog" aria-modal="true" aria-labelledby="miTitulo">
   <div class="portada-caja">
@@ -1500,7 +1519,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v59";
+const APP_VER = "v60";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -4104,6 +4123,52 @@ async function refrescarEquipo(){
   adm.actualizado = new Date().toISOString();
   pintarAdmin(); pintarVerEquipo();
 }
+/* v59: pantalla de espera mientras se procesa la autorización o el rechazo */
+let _procOcupado = false;
+function procMostrar(est, etiqueta, titulo, texto, boton){
+  const m = $("#modalProc"); m.dataset.estado = est; m.hidden = false;
+  $("#mpEtiqueta").textContent = etiqueta; $("#mpTitulo").textContent = titulo; $("#mpTexto").textContent = texto;
+  $("#mpOk").hidden = !boton;
+}
+$("#mpOk").addEventListener("click", ()=>{ $("#modalProc").hidden = true; });
+async function procesarSolicitud(sobre, titulo, exito){
+  if(_procOcupado) return;
+  _procOcupado = true;
+  try{
+    procMostrar("espera", "Procesando", titulo, "Espere un momento. No cierre la app ni salga de esta pantalla hasta que termine.", false);
+    encolar(sobre);
+    const qid = sobre._qid, idSol = sobre.solicitud;
+    const itemDe = ()=> estado.cola.find(x=> x._qid === qid);
+    const fin = Date.now() + 90000;
+    while(Date.now() < fin && itemDe()){
+      if(!navigator.onLine) break;
+      if(itemDe()._ultimoError || estado.sesionVencida) break;   /* el servidor lo rechazó */
+      await new Promise(r=> setTimeout(r, 400));
+    }
+    const it = itemDe();
+    if(it && (it._ultimoError || estado.sesionVencida)){
+      /* Acción del administrador que falló: no se deja reintentando en silencio. */
+      const msg = String(it._ultimoError || estado.ultimoError || "Error del servidor");
+      estado.cola = estado.cola.filter(x=> x._qid !== qid); persistir();
+      if(!BD.sinBD) bdDel("cola", qid).catch(()=>{});
+      const ses = esErrorSesion(msg) || estado.sesionVencida;
+      procMostrar("error", "No se pudo", ses ? "Su sesión venció" : "El servidor no aceptó el cambio",
+        msg + " · No se hizo ningún cambio. " + (ses ? "Cierre sesión, entre de nuevo con señal y repita." : "Intente otra vez."), true);
+    }else if(it){
+      procMostrar("error", "Pendiente de envío", "Aún no se envía", navigator.onLine
+        ? "El servidor no respondió a tiempo. El cambio quedó guardado en el teléfono y se enviará solo; espere unos minutos y actualice."
+        : "Sin señal: el cambio quedó guardado en el teléfono y se enviará solo al recuperar la conexión.", true);
+    }else{
+      for(let i = 0; i < 60 && adm.cargando; i++) await new Promise(r=> setTimeout(r, 300));
+      await refrescarEquipo();
+      const aunHay = (adm.solicitudes || []).some(s=> String(s.id) === String(idSol));
+      if(aunHay) procMostrar("error", "Revise", "No se pudo confirmar", "El servidor recibió el cambio pero la solicitud sigue en la lista. Presione ↻ Actualizar y revise.", true);
+      else procMostrar("ok", "Listo", exito, "El cambio quedó registrado en el servidor.", true);
+    }
+  }catch(e){
+    procMostrar("error", "Error", "No se pudo completar", String(e && e.message || e), true);
+  }finally{ _procOcupado = false; }
+}
 /* v57: pantalla "Autorizar cambio de actividades" + contador en el menú */
 function pintarBotonSol(){
   const b = $("#btnIrSol"); if(!b) return;
@@ -4212,12 +4277,12 @@ function pintarSolicitudes(){
     caja.querySelector(".sol-ok").onclick = ()=>{
       const responsable = caja.querySelector(".sol-resp").value;
       if(!responsable){ avisar("Falta elegir", "Elija a quién se asigna la actividad.", "alerta"); return; }
-      mandarAdmin({ tipo:"asignar", token:estado.token, accion:"autorizar_reasignacion", solicitud:id, responsable,
-                    nota:caja.querySelector(".sol-nota").value.trim() }, "Reasignación autorizada");
+      procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"autorizar_reasignacion", solicitud:id, responsable,
+                    nota:caja.querySelector(".sol-nota").value.trim() }, "Autorizando la reasignación…", "Reasignación autorizada");
     };
     caja.querySelector(".sol-no").onclick = ()=>{
-      mandarAdmin({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id,
-                    nota:caja.querySelector(".sol-nota").value.trim() }, "Solicitud rechazada");
+      procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id,
+                    nota:caja.querySelector(".sol-nota").value.trim() }, "Rechazando la solicitud…", "Solicitud rechazada");
     };
   });
 }

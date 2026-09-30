@@ -919,6 +919,10 @@ body{
       <b>Asignar actividades</b>
       <span id="inicioAdminDet">Panel de administrador: asigna el trabajo del día por colaborador.</span>
     </button>
+    <button class="menu-op menu-op--acl" id="btnIrSol" type="button" hidden>
+      <b>Autorizar cambio de actividades</b>
+      <span id="inicioSolDet">Administrador: revisa las solicitudes de reasignación de los colaboradores.</span>
+    </button>
     <button class="menu-op" id="btnIrEquipo" type="button" hidden>
       <b>Actividades del equipo</b>
       <span id="inicioEquipoDet">Administrador: consulta los pendientes y aclaraciones de cada colaborador (solo consulta).</span>
@@ -1019,6 +1023,21 @@ body{
   </div>
 </div>
 
+<!-- v57: Pantalla: autorizar cambio de actividades (solicitudes de reasignación) -->
+<div class="pantalla" id="solPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnSolMenu" type="button">← Menú</button>
+      <button class="link-volver" id="btnSolRefrescar" type="button">↻ Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Autorizar cambio de actividades</span>
+      <h2>Solicitudes de reasignación</h2>
+      <p class="pista" id="solSync">—</p>
+    </div>
+    <div id="admSolicitudes"></div>
+  </div>
+</div>
 <!-- Pantalla: panel de administrador (asignar actividades) -->
 <div class="pantalla" id="adminPantalla" hidden>
   <div class="pantalla-caja">
@@ -1049,9 +1068,6 @@ body{
       <button class="btn" id="btnAsignar" type="button" disabled>Asignar</button>
       <p class="nota-btn" id="admNota">—</p>
     </div>
-
-    <span class="etiqueta act-bloque">Solicitudes de reasignación</span>
-    <div id="admSolicitudes"></div>
 
     <span class="etiqueta act-bloque">Pendientes del equipo</span>
     <div id="admEquipo"></div>
@@ -1484,7 +1500,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v57";
+const APP_VER = "v58";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -2661,14 +2677,15 @@ const PANTALLAS_RETORNO = {
   aclaraciones: "#aclaracionesPantalla",
   actividades:  "#actividadesPantalla",
   admin:        "#adminPantalla",
-  equipo:       "#equipoPantalla"
+  equipo:       "#equipoPantalla",
+  sol:          "#solPantalla"
 };
 function sesionVencidaEn(pantalla){
   _volverA = pantalla || "";
   estado.sesionVencida = true;
   Object.values(PANTALLAS_RETORNO).forEach(sel=>{ const p = $(sel); if(p) p.hidden = true; });
   $("#inicio").hidden = true;
-  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo" }[_volverA] || "donde estaba";
+  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo", sol:"Autorizar cambio de actividades" }[_volverA] || "donde estaba";
   avisar("Entre de nuevo, con señal",
     `El servidor ya no reconoce la sesión de este teléfono. Escriba su correo y contraseña: al entrar regresará a ${nombre}. No se perdió nada.`, "error");
   pedirLogin();
@@ -2679,6 +2696,7 @@ function volverTrasLogin(){
   if(destino === "actividades"){ $("#inicio").hidden = true; abrirActividades(); return true; }
   if(destino === "admin" && esAdminApp()){ $("#inicio").hidden = true; abrirAdmin(); return true; }
   if(destino === "equipo" && esAdminApp()){ $("#inicio").hidden = true; abrirEquipo(); return true; }
+  if(destino === "sol" && esAdminApp()){ $("#inicio").hidden = true; abrirSol(); return true; }
   return false;
 }
 function pedirLogin(){
@@ -3480,9 +3498,12 @@ function mostrarInicio(){
   $("#btnIrCliente").hidden = false;   /* v52: cualquier técnico puede dar de alta el sitio donde está */
   $("#btnIrEquipo").hidden = !esAdminApp();
   $("#equipoPantalla").hidden = true;
+  $("#solPantalla").hidden = true;
   $("#clientePantalla").hidden = true;
   $("#aclaracionesPantalla").hidden = true;
   $("#portadaClave").hidden = true;
+  pintarBotonSol();
+  if(esAdminApp() && navigator.onLine && !adm.cargando) refrescarEquipo();   /* v57: contador de solicitudes */
   pintarBotonAclaraciones();
   pintarBotonBio();   /* v48 */
   $("#inicio").hidden = false;
@@ -3491,7 +3512,7 @@ async function cerrarSesion(){
   if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
   _claveDeEntrada = ""; _volverA = ""; $("#portadaClave").hidden = true;
-  adm.usuarios = []; adm.actualizado = null;
+  adm.usuarios = []; adm.solicitudes = []; adm.actualizado = null; $("#solPantalla").hidden = true;
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
   $("#equipoPantalla").hidden = true;
@@ -4073,7 +4094,7 @@ async function refrescarEquipo(){
   if(!resp){ avisar("Sin conexión", "No se pudo leer el equipo. Se muestra lo último cargado.", "info"); pintarAdmin(); pintarVerEquipo(); return; }
   if(!resp.ok){
     if(/sesi[oó]n|autorizado/i.test(resp.error || "")){
-      sesionVencidaEn(!$("#equipoPantalla").hidden ? "equipo" : "admin"); return;
+      sesionVencidaEn(!$("#solPantalla").hidden ? "sol" : (!$("#equipoPantalla").hidden ? "equipo" : "admin")); return;
     }
     avisar("No se pudo cargar el equipo", resp.error || "Error del conector.", "error");
     pintarAdmin(); pintarVerEquipo(); return;
@@ -4083,6 +4104,25 @@ async function refrescarEquipo(){
   adm.actualizado = new Date().toISOString();
   pintarAdmin(); pintarVerEquipo();
 }
+/* v57: pantalla "Autorizar cambio de actividades" + contador en el menú */
+function pintarBotonSol(){
+  const b = $("#btnIrSol"); if(!b) return;
+  b.hidden = !esAdminApp();
+  const n = (adm.solicitudes || []).length;
+  $("#inicioSolDet").textContent = n
+    ? `⚠ ${n} solicitud${n === 1 ? "" : "es"} esperando su autorización.`
+    : "Administrador: revisa las solicitudes de reasignación de los colaboradores.";
+  const hora = adm.actualizado ? new Date(adm.actualizado).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit", hour12:false }) : "";
+  const s = $("#solSync"); if(s) s.textContent = (adm.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar")) + (navigator.onLine ? "" : " · sin conexión");
+}
+function abrirSol(){
+  const p = $("#solPantalla"); p.hidden = false; p.scrollTop = 0;
+  pintarSolicitudes(); pintarBotonSol();
+  refrescarEquipo();
+}
+$("#btnIrSol").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirSol(); });
+$("#btnSolMenu").addEventListener("click", ()=>{ $("#solPantalla").hidden = true; mostrarInicio(); });
+$("#btnSolRefrescar").addEventListener("click", refrescarEquipo);
 $("#btnAdmRefrescar").addEventListener("click", refrescarEquipo);
 
 /* Lista de clientes para asignar. Siempre incluye "Blake Inc" (trabajo interno). */
@@ -4116,6 +4156,7 @@ function pintarAdmin(){
 
   pintarEquipo();
   pintarSolicitudes();
+  pintarBotonSol();
   pintarBotonAsignar();
 }
 
@@ -4392,7 +4433,7 @@ function mandarAdmin(sobre, titulo){
 }
 async function esperarColaYRefrescar(){
   for(let i = 0; i < 40 && estado.cola.length; i++) await new Promise(r=>setTimeout(r, 500));
-  if(estado.cola.length === 0 && !$("#adminPantalla").hidden) refrescarEquipo();
+  if(estado.cola.length === 0 && (!$("#adminPantalla").hidden || !$("#solPantalla").hidden)) refrescarEquipo();
 }
 
 async function asignarActividades(){

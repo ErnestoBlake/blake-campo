@@ -1177,9 +1177,9 @@ body{
     <h2 id="mrTitulo">Pedir reasignación</h2>
     <p class="pista confirmar-texto" id="mrAct">—</p>
     <p class="pista">La actividad sigue a su nombre hasta que un administrador la autorice. Su solicitud queda registrada con fecha y hora.</p>
-    <label class="adm-campo" for="mrPropuesta">¿A quién le corresponde? (opcional)</label>
-    <input id="mrPropuesta" type="text" maxlength="120" placeholder="Nombre de la persona">
-    <label class="adm-campo" for="mrMotivo">Motivo (opcional)</label>
+    <label class="adm-campo" for="mrPropuesta">1. ¿A quién le corresponde?</label>
+    <select id="mrPropuesta"></select>
+    <label class="adm-campo" for="mrMotivo">2. Motivo</label>
     <textarea id="mrMotivo" maxlength="500" placeholder="Ejemplo: no es de mi área / no es mi cliente"></textarea>
     <button class="btn" id="mrEnviar" type="button">Enviar solicitud</button>
     <button class="btn btn-sec" id="mrNo" type="button">Cancelar</button>
@@ -1484,7 +1484,7 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v56";
+const APP_VER = "v57";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -3709,7 +3709,11 @@ function abrirReasignar(id){
   if(!a) return;
   _reasigId = String(id);
   $("#mrAct").textContent = a.titulo || a.texto || "";
-  $("#mrPropuesta").value = ""; $("#mrMotivo").value = "";
+  let col = [];
+  try{ const c0 = act.lista[0] && act.lista[0].colegas; if(Array.isArray(c0) && c0.length){ col = c0; localStorage.setItem("bc_colegas", JSON.stringify(c0)); } else col = JSON.parse(localStorage.getItem("bc_colegas")||"[]"); }catch(e){}
+  col = col.slice().sort((x,y)=> String(x.nombre||"").localeCompare(String(y.nombre||""),"es"));
+  $("#mrPropuesta").innerHTML = `<option value="">— Elija a la persona —</option>` + col.map(c=>`<option value="${esc(c.nombre||c.usuario)}">${esc(c.nombre||c.usuario)}</option>`).join("");
+  $("#mrMotivo").value = "";
   $("#modalReasig").hidden = false;
 }
 document.addEventListener("click", e=>{
@@ -3719,6 +3723,8 @@ document.addEventListener("click", e=>{
 $("#mrNo").addEventListener("click", ()=>{ $("#modalReasig").hidden = true; _reasigId = ""; });
 $("#mrEnviar").addEventListener("click", ()=>{
   if(!_reasigId) return;
+  if(!$("#mrPropuesta").value){ avisar("Falta la persona", "Elija a quién le corresponde la actividad.", "alerta"); return; }
+  if(!$("#mrMotivo").value.trim()){ avisar("Falta el motivo", "Escriba por qué solicita la reasignación.", "alerta"); return; }
   encolar({ tipo:"asignar", token:estado.token, accion:"pedir_reasignacion", id:_reasigId,
             propuesta:$("#mrPropuesta").value.trim(), motivo:$("#mrMotivo").value.trim() });
   const a = act.lista.find(x=> String(x.id) === _reasigId); if(a) a.reasig = "PENDIENTE";

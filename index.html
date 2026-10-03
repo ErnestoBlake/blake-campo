@@ -564,6 +564,13 @@ body{
 #eqBuscar:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
 .adm-filtro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;font-family:var(--dato);font-size:12px;color:var(--plata-alta)}
 .adm-filtro button{background:none;border:1px solid var(--linea);color:var(--naranja-glow);border-radius:3px;padding:8px 10px;font-family:var(--dato);font-size:11px;cursor:pointer}
+.act-prio{font-family:var(--dato);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--linea);border-radius:3px;padding:3px 7px;color:var(--plata-alta)}
+.act-prio.alta{color:#FFB3AE;border-color:rgba(224,65,58,.7);background:rgba(224,65,58,.12)}
+.act-prio.media{color:#F2D29B;border-color:rgba(242,168,28,.55)}
+.act-prio.baja{color:var(--plata)}
+.act-edit{font-family:var(--dato);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--naranja);border-radius:3px;padding:3px 7px;color:var(--naranja-glow)}
+#admPrioBox[hidden]{display:none !important}
+.adm-editor textarea.ed-texto{width:100%;min-height:96px}
 #admDup{margin-top:14px;padding:12px;border:2px solid var(--rojo);border-radius:3px;background:rgba(224,65,58,.08)}
 #admDup h3{margin:0 0 8px;font-family:var(--dato);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--rojo)}
 #admDup .dup-item{margin:0 0 12px;font-size:14px;line-height:1.45;color:var(--plata-alta)}
@@ -1078,6 +1085,15 @@ body{
     <label class="adm-campo" for="admFecha">Fecha de la actividad</label>
     <input type="date" id="admFecha">
 
+    <div id="admPrioBox" hidden>
+      <label class="adm-campo" for="admPrioridad">Prioridad</label>
+      <select id="admPrioridad">
+        <option value="Alta">Alta · plazo 1 día hábil</option>
+        <option value="Media" selected>Media · plazo 3 días hábiles</option>
+        <option value="Baja">Baja · plazo 7 días hábiles</option>
+      </select>
+    </div>
+
     <label class="adm-campo" for="admTextos">Actividades (una por renglón)</label>
     <textarea id="admTextos" placeholder="Ejemplo:&#10;Calibrar báscula de cemento&#10;Revisar sensor de nivel del silo 2"></textarea>
     <div class="act-conteo" id="admConteo">0 actividades</div>
@@ -1534,7 +1550,9 @@ function encolar(sobre){
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
 /* v62b: el buscador compara palabra por palabra (cualquier orden) contra nombre, puesto, alias y correo; si ninguna tarjeta cumple todas las palabras, muestra las que cumplen alguna. */
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
-const APP_VER = "v62b";
+/* v63: editar actividad asignada, prioridad por actividad (Alta 1 / Media 3 / Baja 7 días hábiles, lunes a sábado) y aviso de atraso.
+   Los botones nuevos solo salen si el conector los anuncia en equipo=1 (caps). Sin conector v63 la app se comporta como la v62b. */
+const APP_VER = "v63";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -3636,6 +3654,52 @@ async function refrescarActividades(){
 }
 $("#btnActRefrescar").addEventListener("click", refrescarActividades);
 
+/* v63 · Prioridad y atraso.
+   Plazo en días hábiles (lunes a sábado; el domingo no cuenta: LFT arts. 69-71, descanso semanal).
+   El conteo parte de la fecha asignada o, si el administrador cambió el fondo del texto o acortó el plazo, de la fecha de esa edición.
+   Una actividad sin prioridad conserva la regla anterior (atrasada si su fecha ya pasó). */
+const PLAZO_PRIO = { Alta:1, Media:3, Baja:7 };
+function normPrio(p){
+  const n = String(p || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+  return n === "alta" ? "Alta" : n === "media" ? "Media" : n === "baja" ? "Baja" : "";
+}
+function diasHabiles(desde, hasta){
+  if(!desde || !hasta || hasta <= desde) return 0;
+  const p = desde.split("-").map(Number), q = hasta.split("-").map(Number);
+  let d = Date.UTC(p[0],p[1]-1,p[2]); const fin = Date.UTC(q[0],q[1]-1,q[2]); let n = 0;
+  while(d < fin){ d += 86400000; if(new Date(d).getUTCDay() !== 0) n++; }
+  return n;
+}
+function refAtraso(a){ return (a && a.editada && a.fecha && a.editada > a.fecha) ? a.editada : (a && a.fecha) || ""; }
+function estadoPrio(a){
+  const prio = normPrio(a && a.prioridad);
+  if(!prio) return null;
+  const ref = refAtraso(a), plazo = PLAZO_PRIO[prio];
+  if(!ref) return null;
+  const h = hoyISO();
+  if(ref > h) return { prio, plazo, trans:0, atrasada:false, futura:true, ref };
+  const trans = diasHabiles(ref, h);
+  return { prio, plazo, trans, atrasada: trans > plazo, exceso: Math.max(0, trans - plazo), futura:false, ref };
+}
+function esAtrasada(a){
+  const e = estadoPrio(a);
+  if(e) return e.atrasada;
+  const r = refAtraso(a); return !!(r && r < hoyISO());
+}
+function etiquetaAct(a){
+  const e = estadoPrio(a);
+  if(!e) return etiquetaFecha(refAtraso(a));   /* sin prioridad: regla anterior, pero contada desde la edición si la hubo */
+  if(e.futura){ const p = e.ref.split("-"); return { txt:`Programada · ${p[2]}/${p[1]}`, cls:"" }; }
+  if(e.atrasada) return { txt:`Atrasada · ${e.exceso} día${e.exceso === 1 ? "" : "s"} hábil${e.exceso === 1 ? "" : "es"} de más`, cls:"atrasada" };
+  if(e.ref === hoyISO()) return { txt:"Hoy", cls:"hoy" };
+  return { txt:`En plazo · día ${e.trans} de ${e.plazo}`, cls:"" };
+}
+function chipsPrio(a){
+  const pr = normPrio(a && a.prioridad);
+  const ed = a && (a.editada || /EDITADA \d{2}\/\d{2}\/\d{2}/.test(a.nota || ""));
+  return (pr ? `<span class="act-prio ${pr.toLowerCase()}">${pr}</span>` : "") + (ed ? `<span class="act-edit">✎ Editada</span>` : "");
+}
+
 function etiquetaFecha(f){
   if(!f) return { txt:"Sin fecha", cls:"" };
   const h = hoyISO(), p = f.split("-");
@@ -3799,10 +3863,10 @@ $("#mrEnviar").addEventListener("click", ()=>{
 
 /* Renglón de solo lectura para la consulta "Todos tus pendientes". */
 function htmlActConsulta(a){
-  const f = etiquetaFecha(a.fecha);
+  const f = etiquetaAct(a);
   const cli = a.cliente ? esc(a.cliente) + (a.sitio ? " · " + esc(a.sitio) : "") : "Sin cliente asignado";
   return `<div class="act-item" data-solo="1">
-    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span><span class="act-fecha">${cli}</span></div>
+    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}<span class="act-fecha">${cli}</span></div>
     <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     ${htmlReasig(a)}
@@ -3810,13 +3874,13 @@ function htmlActConsulta(a){
 }
 
 function htmlActItem(a){
-  const id = String(a.id), f = etiquetaFecha(a.fecha), m = act.marcas[id] || "";
+  const id = String(a.id), f = etiquetaAct(a), m = act.marcas[id] || "";
   const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
     .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
   const pideNota = m==="PENDIENTE" || m==="CANCELADA" || m==="TERMINADA";
   const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
   return `<div class="act-item" data-marca="${m}">
-    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${origen}</div>
+    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}${origen}</div>
     <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     ${htmlReasig(a)}
@@ -4116,7 +4180,7 @@ $("#btnEnviarAct").addEventListener("click", enviarActividades);
    reprogramar cada uno. El conector valida el rol otra vez del lado
    del servidor: esconder el botón no es la seguridad, solo la comodidad.
    ============================================================ */
-const adm = { usuarios:[], solicitudes:[], actualizado:null, cargando:false, editando:null };
+const adm = { caps:[], usuarios:[], solicitudes:[], actualizado:null, cargando:false, editando:null };
 const esAdminApp = () => normCliente(estado.rol) === "administrador";
 
 function abrirAdmin(){
@@ -4143,6 +4207,7 @@ async function refrescarEquipo(){
   }
   adm.usuarios = Array.isArray(resp.usuarios) ? resp.usuarios : [];
   adm.solicitudes = Array.isArray(resp.solicitudes) ? resp.solicitudes : [];   /* v56 */
+  adm.caps = Array.isArray(resp.caps) ? resp.caps : [];                        /* v63 */
   adm.actualizado = new Date().toISOString();
   pintarAdmin(); pintarVerEquipo();
 }
@@ -4242,12 +4307,14 @@ function pintarAdmin(){
     `<option value="${esc(o.cliente)}" data-sitio="${esc(o.sitio)}">${esc(o.cliente)}${o.sitio ? " · " + esc(o.sitio) : ""}</option>`).join("");
   if(antesC && cli.some(o=>o.cliente === antesC)) selC.value = antesC;
 
+  $("#admPrioBox").hidden = !capOk("prioridad");
   pintarEquipo();
   pintarSolicitudes();
   pintarBotonSol();
   pintarBotonAsignar();
 }
 
+function capOk(c){ return Array.isArray(adm.caps) && adm.caps.indexOf(c) >= 0; }
 function textosAsignar(){
   return $("#admTextos").value.split("\n").map(t=>t.trim()).filter(t=>t.length >= 3);
 }
@@ -4328,12 +4395,14 @@ function pintarEquipo(){
   cont.innerHTML = encab + mostrar.map(u=>{
     const pend = Array.isArray(u.pendientes) ? u.pendientes : [];
     const tareas = pend.map(a=>{
-      const f = etiquetaFecha(a.fecha);
+      const f = etiquetaAct(a);
       const cl = a.cliente ? esc(a.cliente) : "sin cliente";
       return `<div class="adm-tarea">
         <div>${esc(a.titulo || a.texto)}</div>
-        <div class="adm-meta"><span class="act-fecha ${f.cls}">${f.txt}</span><span class="act-fecha">${cl}</span></div>
+        <div class="adm-meta"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}<span class="act-fecha">${cl}</span></div>
         <div class="adm-acciones">
+          ${capOk("editar") ? `<button type="button" data-acc="editar" data-id="${esc(a.id)}">Editar</button>` : ""}
+          ${capOk("prioridad") ? `<button type="button" data-acc="prioridad" data-id="${esc(a.id)}">Prioridad</button>` : ""}
           <button type="button" data-acc="reasignar" data-id="${esc(a.id)}">Reasignar</button>
           <button type="button" data-acc="fecha" data-id="${esc(a.id)}">Cambiar fecha</button>
           <button type="button" data-acc="cancelar" data-peligro="1" data-id="${esc(a.id)}">Cancelar</button>
@@ -4341,9 +4410,10 @@ function pintarEquipo(){
         <div class="adm-editor" id="ed-${esc(a.id)}" hidden></div>
       </div>`;
     }).join("");
+    const nAtr = pend.filter(esAtrasada).length;
     return `<div class="adm-persona" data-cero="${pend.length ? "0" : "1"}">
       <b>${esc(u.nombre)}</b>
-      <span class="adm-puesto">${esc(u.puesto || u.rol || "")} · ${pend.length} pendiente(s)</span>
+      <span class="adm-puesto">${esc(u.puesto || u.rol || "")} · ${pend.length} pendiente(s)${nAtr ? ` · <span class="act-fecha atrasada">${nAtr} atrasada(s)</span>` : ""}</span>
       ${tareas || `<span class="adm-vacio">✓ Sin pendientes</span>`}
     </div>`;
   }).join("");
@@ -4361,7 +4431,19 @@ function abrirEditorAdmin(id, accion){
   $("#admEquipo").querySelectorAll(".adm-editor").forEach(e=>{ e.hidden = true; e.innerHTML = ""; });
   const caja = $(`#ed-${CSS.escape(id)}`);
   if(!caja) return;
-  if(accion === "reasignar"){
+  const act0 = (adm.usuarios.flatMap(u=>Array.isArray(u.pendientes) ? u.pendientes : [])).find(x=>String(x.id) === String(id)) || {};
+  if(accion === "editar"){
+    caja.innerHTML = `<label class="adm-campo">Texto de la actividad</label>
+      <textarea class="ed-texto" maxlength="700" spellcheck="true" lang="es">${esc(act0.titulo || act0.texto || "")}</textarea>
+      <p class="pista">El colaborador verá «Editada» y el texto anterior. Si cambia el fondo, el plazo de atraso cuenta desde hoy; si solo corrige la redacción, no.</p>
+      <div class="adm-acciones"><button type="button" class="ed-ok">Guardar</button><button type="button" class="ed-no">Cerrar</button></div>`;
+  } else if(accion === "prioridad"){
+    const pa = normPrio(act0.prioridad) || "Media";
+    caja.innerHTML = `<label class="adm-campo">Prioridad</label>
+      <select class="ed-prio">${["Alta","Media","Baja"].map(v=>`<option value="${v}"${v===pa?" selected":""}>${v} · ${PLAZO_PRIO[v]} día${PLAZO_PRIO[v]>1?"s":""} hábil${PLAZO_PRIO[v]>1?"es":""}</option>`).join("")}</select>
+      <p class="pista">Si el plazo se acorta, cuenta desde hoy; no se castiga al colaborador hacia atrás.</p>
+      <div class="adm-acciones"><button type="button" class="ed-ok">Guardar</button><button type="button" class="ed-no">Cerrar</button></div>`;
+  } else if(accion === "reasignar"){
     caja.innerHTML = `<label class="adm-campo">Nuevo responsable</label>
       <select class="ed-resp">${adm.usuarios.map(u=>`<option value="${esc(u.usuario)}">${esc(u.nombre)}</option>`).join("")}</select>
       <div class="adm-acciones"><button type="button" class="ed-ok">Guardar</button><button type="button" class="ed-no">Cerrar</button></div>`;
@@ -4378,7 +4460,17 @@ function abrirEditorAdmin(id, accion){
   caja.querySelector(".ed-no").onclick = ()=>{ caja.hidden = true; caja.innerHTML = ""; };
   caja.querySelector(".ed-ok").onclick = ()=>{
     const sobre = { tipo:"asignar", token:estado.token, accion, id };
-    if(accion === "reasignar"){
+    if(accion === "editar"){
+      const t = caja.querySelector(".ed-texto").value.replace(/\s+/g," ").trim();
+      if(t.length < 15){ avisar("Texto muy corto","La actividad necesita al menos 15 caracteres.","error"); return; }
+      if(t === String(act0.titulo || act0.texto || "").trim()){ avisar("Sin cambios","El texto es el mismo.","info"); return; }
+      const dueno = adm.usuarios.find(u=>(u.pendientes||[]).some(x=>String(x.id) === String(id)));
+      const otro = dueno && dueno.pendientes.find(x=>String(x.id) !== String(id) && esDuplicado(t, x.titulo || x.texto));
+      if(otro){ avisar("Ya existe una igual","Ese texto es igual o casi igual a otra pendiente de este colaborador: " + (otro.titulo || otro.texto), "error"); return; }
+      sobre.texto = t;
+    } else if(accion === "prioridad"){
+      sobre.prioridad = caja.querySelector(".ed-prio").value;
+    } else if(accion === "reasignar"){
       sobre.responsable = caja.querySelector(".ed-resp").value;
       if(!sobre.responsable) return;
     } else if(accion === "fecha"){
@@ -4388,7 +4480,7 @@ function abrirEditorAdmin(id, accion){
       sobre.motivo = caja.querySelector(".ed-motivo").value.trim();
     }
     caja.hidden = true; caja.innerHTML = "";
-    mandarAdmin(sobre, accion === "cancelar" ? "Actividad cancelada" : "Cambio guardado");
+    mandarAdmin(sobre, accion === "cancelar" ? "Actividad cancelada" : (accion === "editar" ? "Actividad editada" : "Cambio guardado"));
   };
 }
 
@@ -4576,7 +4668,7 @@ function mostrarDup(halladas){
   const p = $("#admDup");
   p.innerHTML = `<h3>No se asignó nada: ya existe una actividad igual o casi igual</h3>` + halladas.map(h=>{
     if(h.tipo === "mismoEnvio") return `<div class="dup-item">El renglón ${h.i + 1} se repite con el renglón ${h.j + 1} de esta misma captura:<br><b>${esc(h.texto)}</b></div>`;
-    const f = etiquetaFecha(h.ex.fecha);
+    const f = etiquetaAct(h.ex);
     return `<div class="dup-item">Renglón ${h.i + 1}: <b>${esc(h.texto)}</b><br>
       Ya está abierta: <b>${esc(h.ex.titulo || h.ex.texto)}</b>
       <div class="dup-meta">${esc(f.txt)} · ${esc(h.ex.id)}</div>
@@ -4609,14 +4701,16 @@ async function asignarActividades(){
   ocultarDup();
   const nombre = ($("#admResponsable").selectedOptions[0] || {}).textContent || responsable;
   const ok = await confirmar("¿Asignar actividades?",
-    `Colaborador: ${nombre}\nCliente: ${cliente}\nFecha: ${$("#admFecha").value}\n\n` +
+    `Colaborador: ${nombre}\nCliente: ${cliente}\nFecha: ${$("#admFecha").value}` + (capOk("prioridad") ? `\nPrioridad: ${$("#admPrioridad").value}` : "") + `\n\n` +
     textos.map((t,i)=>`${i+1}. ${t}`).join("\n"), "Asignar");
   if(!ok) return;
   encolar({
     tipo:"asignar", token:estado.token, responsable, textos,
     fecha: $("#admFecha").value, cliente, sitio: (opc && opc.dataset.sitio) || "",
-    asignacionId: "G" + idCorto()
+    asignacionId: "G" + idCorto(),
+    ...(capOk("prioridad") ? { prioridad: $("#admPrioridad").value } : {})
   });
+  if($("#admPrioridad")) $("#admPrioridad").value = "Media";
   $("#admTextos").value = "";
   pintarBotonAsignar();
   const soloNombre = String(nombre).split(" · ")[0];
@@ -4643,7 +4737,7 @@ function diasDesde(f){
 }
 function filtrarEq(lista){
   const h = hoyISO();
-  if(eqv.filtro === "atrasadas")    return lista.filter(a=>a.fecha && a.fecha < h);
+  if(eqv.filtro === "atrasadas")    return lista.filter(esAtrasada);
   if(eqv.filtro === "asignadas")    return lista.filter(a=>!esAclaracion(a));
   if(eqv.filtro === "aclaraciones") return lista.filter(a=>esAclaracion(a));
   return lista;
@@ -4651,7 +4745,7 @@ function filtrarEq(lista){
 function cifrasEq(pend){
   const h = hoyISO();
   const acl = pend.filter(a=>esAclaracion(a)).length;
-  const atr = pend.filter(a=>a.fecha && a.fecha < h).length;
+  const atr = pend.filter(esAtrasada).length;
   const fechas = pend.map(a=>a.fecha).filter(Boolean).sort();
   return { total:pend.length, acl, asig:pend.length - acl, atr, vieja:fechas[0] || "" };
 }
@@ -4711,11 +4805,11 @@ function pintarVerEquipo(){
   $("#eqResumen").textContent = `${c.total} pendientes · ${c.asig} asignadas · ${c.atr} atrasadas · ${c.acl} aclaraciones` +
     (eqv.filtro !== "todas" ? ` · mostrando ${lista.length}` : "");
   $("#eqLista").innerHTML = lista.length ? lista.map(a=>{
-    const f = etiquetaFecha(a.fecha), d = diasDesde(a.fecha), acl = esAclaracion(a);
+    const f = etiquetaAct(a), d = diasDesde(a.fecha), acl = esAclaracion(a);
     const lugar = [a.cliente, a.sitio].filter(Boolean).map(esc).join(" · ") || "sin cliente";
     return `<div class="eq-tarea" data-acl="${acl ? "1" : "0"}" data-atr="${f.cls === "atrasada" ? "1" : "0"}">
       <div class="act-top">
-        <span class="act-fecha ${f.cls}">${f.txt}${d>0 ? ` · ${d} días` : ""}</span>
+        <span class="act-fecha ${f.cls}">${f.txt}${(d>0 && !estadoPrio(a)) ? ` · ${d} días` : ""}</span>${chipsPrio(a)}
         <span class="act-fecha">${acl ? "Aclaración" : esc(a.origen || "Asignada")}</span>
         <span class="act-fecha">${lugar}</span>
       </div>
@@ -4862,7 +4956,7 @@ function htmlAcl(a){
   const d = aclDef(v);
   const det = acl.detalles[id] || "";
   const n = limpiaTxt(det).length;
-  const f = a.fecha ? etiquetaFecha(a.fecha) : null;
+  const f = a.fecha ? etiquetaAct(a) : null;
   const listo = aclCompleta(id) ? "1" : "0";
   const opciones = ['<option value="">— Elige el estatus verdadero —</option>']
     .concat(ACL_ESTATUS.map(e=>`<option value="${e.v}"${e.v===v?" selected":""}>${esc(e.t)}</option>`)).join("");

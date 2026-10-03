@@ -560,9 +560,19 @@ body{
 }
 .eq-filtros button[aria-pressed="true"]{color:var(--plata-alta);border-color:var(--naranja);background:rgba(243,146,0,.14)}
 .eq-resumen{font-family:var(--dato);font-size:11.5px;color:var(--plata);margin:8px 0 12px;line-height:1.5}
+#eqBuscar{width:100%;min-height:50px;padding:0 12px;margin:0 0 10px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:15px}
+#eqBuscar:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.adm-filtro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;font-family:var(--dato);font-size:12px;color:var(--plata-alta)}
+.adm-filtro button{background:none;border:1px solid var(--linea);color:var(--naranja-glow);border-radius:3px;padding:8px 10px;font-family:var(--dato);font-size:11px;cursor:pointer}
+#admDup{margin-top:14px;padding:12px;border:2px solid var(--rojo);border-radius:3px;background:rgba(224,65,58,.08)}
+#admDup h3{margin:0 0 8px;font-family:var(--dato);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--rojo)}
+#admDup .dup-item{margin:0 0 12px;font-size:14px;line-height:1.45;color:var(--plata-alta)}
+#admDup .dup-item .dup-meta{font-family:var(--dato);font-size:11px;color:var(--plata)}
+#admDup .dup-item button{margin:6px 8px 0 0}
 .eq-persona{cursor:pointer;display:block;width:100%;text-align:left;color:inherit;font:inherit}
 .eq-persona b::after{content:"  ›";color:var(--naranja-glow)}
 #btnEqCambiar{width:100%;margin-bottom:6px}
+.eq-persona[hidden],#eqSinCoinc[hidden],#admDup[hidden]{display:none !important}
 .eq-persona:hover{background:rgba(243,146,0,.06)}
 .eq-cifras{display:flex;gap:6px;flex-wrap:wrap}
 .eq-tarea{background:var(--acero-800);border:1px solid var(--linea);border-left:3px solid var(--naranja);border-radius:3px;padding:12px 14px;margin-bottom:10px}
@@ -1071,6 +1081,7 @@ body{
     <label class="adm-campo" for="admTextos">Actividades (una por renglón)</label>
     <textarea id="admTextos" placeholder="Ejemplo:&#10;Calibrar báscula de cemento&#10;Revisar sensor de nivel del silo 2"></textarea>
     <div class="act-conteo" id="admConteo">0 actividades</div>
+    <div id="admDup" role="alert" hidden></div>
 
     <div style="margin-top:16px">
       <button class="btn" id="btnAsignar" type="button" disabled>Asignar</button>
@@ -1099,6 +1110,8 @@ body{
 
     <!-- Paso 1: elegir al colaborador -->
     <div id="eqElegir">
+      <input type="search" id="eqBuscar" placeholder="Buscar por nombre o puesto" autocomplete="off" aria-label="Buscar colaborador por nombre o puesto">
+      <p class="pista act-vacio" id="eqSinCoinc" hidden></p>
       <div id="eqPersonas"></div>
     </div>
 
@@ -1519,7 +1532,8 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
-const APP_VER = "v61";
+/* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
+const APP_VER = "v62";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -4302,7 +4316,15 @@ function pintarEquipo(){
     cont.innerHTML = `<p class="pista act-vacio">${adm.cargando ? "Cargando equipo…" : "Aún no se descarga el equipo."}</p>`;
     return;
   }
-  cont.innerHTML = adm.usuarios.map(u=>{
+  /* v62: con un colaborador elegido arriba, solo salen sus renglones (con enlace para ver todo el equipo) */
+  const selU = $("#admResponsable").value;
+  const filtrado = !!selU && !adm.verTodo && adm.usuarios.some(u=>u.usuario === selU);
+  const mostrar = filtrado ? adm.usuarios.filter(u=>u.usuario === selU) : adm.usuarios;
+  const encab = filtrado ? (()=>{
+    const u0 = mostrar[0], n0 = Array.isArray(u0.pendientes) ? u0.pendientes.length : 0;
+    return `<div class="adm-filtro"><b>Pendientes de ${esc(String(u0.nombre || u0.usuario).split(" · ")[0])} (${n0})</b><button type="button" id="admVerTodo">Ver todo el equipo</button></div>`;
+  })() : "";
+  cont.innerHTML = encab + mostrar.map(u=>{
     const pend = Array.isArray(u.pendientes) ? u.pendientes : [];
     const tareas = pend.map(a=>{
       const f = etiquetaFecha(a.fecha);
@@ -4328,7 +4350,10 @@ function pintarEquipo(){
   cont.querySelectorAll(".adm-acciones button").forEach(b=>{
     b.onclick = ()=> abrirEditorAdmin(b.dataset.id, b.dataset.acc);
   });
+  const bt = $("#admVerTodo");
+  if(bt) bt.onclick = ()=>{ adm.verTodo = true; pintarEquipo(); };
 }
+$("#admResponsable").addEventListener("change", ()=>{ adm.verTodo = false; ocultarDup(); pintarEquipo(); });
 
 /* Editor en línea para reasignar / reprogramar / cancelar una asignación */
 function abrirEditorAdmin(id, accion){
@@ -4509,12 +4534,78 @@ async function esperarColaYRefrescar(){
   if(estado.cola.length === 0 && (!$("#adminPantalla").hidden || !$("#solPantalla").hidden)) refrescarEquipo();
 }
 
+/* v62 · Bloqueo de duplicados al asignar.
+   Normaliza: minúsculas, sin acentos ni puntuación, sin el alias inicial "(Nombre)", sin folio "[XXX-NN]" ni fechas dd/mm/aa.
+   Es duplicado si el texto es igual, si uno contiene al otro (el más corto con 10 letras o más), o si comparten
+   al menos el 80 % de las palabras de tres letras o más (contra el texto con menos palabras, mínimo 2). */
+function normDup(t){
+  return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/^\s*\([^)]*\)\s*/, "")
+    .replace(/\[[^\]]{2,14}\]/g, " ")
+    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, " ")
+    .replace(/[^a-z0-9ñ\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+function esDuplicado(a, b){
+  const x = normDup(a), y = normDup(b);
+  if(!x || !y) return false;
+  if(x === y) return true;
+  const corto = x.length <= y.length ? x : y, largo = corto === x ? y : x;
+  if(corto.length >= 10 && largo.includes(corto)) return true;
+  const px = new Set(x.split(" ").filter(w=>w.length >= 3)), py = new Set(y.split(" ").filter(w=>w.length >= 3));
+  const menor = Math.min(px.size, py.size);
+  if(menor < 2) return false;
+  let comunes = 0; px.forEach(w=>{ if(py.has(w)) comunes++; });
+  return comunes / menor >= 0.8;
+}
+function ocultarDup(){ const p = $("#admDup"); if(p){ p.hidden = true; p.innerHTML = ""; } }
+function buscarDuplicados(textos, responsable){
+  const u = adm.usuarios.find(x=>x.usuario === responsable);
+  const abiertas = u && Array.isArray(u.pendientes) ? u.pendientes : [];
+  const halladas = [];
+  textos.forEach((t, i)=>{
+    const ex = abiertas.find(a=> esDuplicado(t, a.titulo || a.texto));
+    if(ex) { halladas.push({ tipo:"existente", i, texto:t, ex }); return; }
+    for(let j = 0; j < i; j++){
+      if(esDuplicado(t, textos[j])){ halladas.push({ tipo:"mismoEnvio", i, j, texto:t }); return; }
+    }
+  });
+  return halladas;
+}
+function mostrarDup(halladas){
+  const p = $("#admDup");
+  p.innerHTML = `<h3>No se asignó nada: ya existe una actividad igual o casi igual</h3>` + halladas.map(h=>{
+    if(h.tipo === "mismoEnvio") return `<div class="dup-item">El renglón ${h.i + 1} se repite con el renglón ${h.j + 1} de esta misma captura:<br><b>${esc(h.texto)}</b></div>`;
+    const f = etiquetaFecha(h.ex.fecha);
+    return `<div class="dup-item">Renglón ${h.i + 1}: <b>${esc(h.texto)}</b><br>
+      Ya está abierta: <b>${esc(h.ex.titulo || h.ex.texto)}</b>
+      <div class="dup-meta">${esc(f.txt)} · ${esc(h.ex.id)}</div>
+      <button type="button" class="btn btn-sec dup-fecha" data-id="${esc(h.ex.id)}">Cambiar fecha del existente</button></div>`;
+  }).join("") + `<button type="button" class="btn btn-sec" id="dupCorregir">Corregir mi texto</button>`;
+  p.hidden = false;
+  p.querySelectorAll(".dup-fecha").forEach(b=> b.onclick = ()=>{
+    adm.verTodo = false; pintarEquipo();
+    abrirEditorAdmin(b.dataset.id, "fecha");
+    const caja = $(`#ed-${CSS.escape(b.dataset.id)}`);
+    if(caja) caja.scrollIntoView({ behavior:"smooth", block:"center" });
+  });
+  $("#dupCorregir").onclick = ()=>{ ocultarDup(); $("#admTextos").focus(); };
+  p.scrollIntoView({ behavior:"smooth", block:"center" });
+}
+$("#admTextos").addEventListener("input", ocultarDup);
+
 async function asignarActividades(){
   const textos = textosAsignar();
   const responsable = $("#admResponsable").value;
   const opc = $("#admCliente").selectedOptions[0];
   const cliente = $("#admCliente").value;
   if(!textos.length || !responsable || !cliente) return;
+  /* v62: si la lista del equipo tiene más de 2 minutos, se vuelve a leer antes de comparar */
+  if(navigator.onLine && (!adm.actualizado || Date.now() - new Date(adm.actualizado).getTime() > 120000)){
+    await refrescarEquipo();
+  }
+  const dups = buscarDuplicados(textos, responsable);
+  if(dups.length){ mostrarDup(dups); return; }
+  ocultarDup();
   const nombre = ($("#admResponsable").selectedOptions[0] || {}).textContent || responsable;
   const ok = await confirmar("¿Asignar actividades?",
     `Colaborador: ${nombre}\nCliente: ${cliente}\nFecha: ${$("#admFecha").value}\n\n` +
@@ -4566,6 +4657,7 @@ function cifrasEq(pend){
 function abrirEquipo(){
   const p = $("#equipoPantalla");
   eqv.persona = ""; eqv.filtro = "todas";      /* siempre se empieza eligiendo al colaborador */
+  $("#eqBuscar").value = "";                   /* v62: el buscador empieza limpio */
   p.hidden = false; p.scrollTop = 0;
   pintarVerEquipo();
   refrescarEquipo();
@@ -4591,7 +4683,7 @@ function pintarVerEquipo(){
     const lista = adm.usuarios.slice().sort((x,y)=> String(x.nombre||"").localeCompare(String(y.nombre||""), "es"));
     cont.innerHTML = lista.map(u=>{
       const c = cifrasEq(Array.isArray(u.pendientes) ? u.pendientes : []);
-      return `<button type="button" class="adm-persona eq-persona" data-cero="${c.total ? "0" : "1"}" data-u="${esc(u.usuario)}">
+      return `<button type="button" class="adm-persona eq-persona" data-cero="${c.total ? "0" : "1"}" data-u="${esc(u.usuario)}" data-bus="${esc(normBus((u.nombre || "") + " " + (u.puesto || u.rol || "")))}">
         <b>${esc(u.nombre)}</b>
         <span class="adm-puesto">${esc(u.puesto || u.rol || "")}${u.estado && normCliente(u.estado) !== "activo" ? " · " + esc(u.estado) : ""}</span>
         ${c.total ? `<div class="eq-cifras">
@@ -4604,6 +4696,7 @@ function pintarVerEquipo(){
     cont.querySelectorAll(".eq-persona").forEach(el=>{
       el.onclick = ()=>{ eqv.persona = el.dataset.u; eqv.filtro = "todas"; pintarVerEquipo(); $("#equipoPantalla").scrollTop = 0; };
     });
+    aplicarBusquedaEq();
     return;
   }
 
@@ -4631,7 +4724,23 @@ function pintarVerEquipo(){
     </div>`;
   }).join("") : `<p class="pista act-vacio">${pend.length ? "Nada con este filtro." : "✓ Sin pendientes."}</p>`;
 }
-$("#btnEqCambiar").addEventListener("click", ()=>{ eqv.persona = ""; pintarVerEquipo(); $("#equipoPantalla").scrollTop = 0; });
+$("#btnEqCambiar").addEventListener("click", ()=>{ eqv.persona = ""; $("#eqBuscar").value = ""; pintarVerEquipo(); $("#equipoPantalla").scrollTop = 0; });
+/* v62 · Buscador de colaboradores: sin acentos ni mayúsculas, contra nombre + puesto; no llama al servidor. */
+function normBus(s){
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function aplicarBusquedaEq(){
+  const q = normBus($("#eqBuscar").value), tarjetas = $("#eqPersonas").querySelectorAll(".eq-persona");
+  let visibles = 0;
+  tarjetas.forEach(el=>{
+    const ok = !q || (el.dataset.bus || "").includes(q);
+    el.hidden = !ok; if(ok) visibles++;
+  });
+  const msg = $("#eqSinCoinc");
+  msg.hidden = !(q && tarjetas.length && !visibles);
+  msg.textContent = msg.hidden ? "" : "Nadie coincide con «" + $("#eqBuscar").value.trim() + "»";
+}
+$("#eqBuscar").addEventListener("input", aplicarBusquedaEq);
 $("#eqFiltros").querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{ eqv.filtro = b.dataset.f; pintarVerEquipo(); }));
 $("#btnEqRefrescar").addEventListener("click", refrescarEquipo);
 $("#btnEqMenu").addEventListener("click", ()=>{ $("#equipoPantalla").hidden = true; mostrarInicio(); });

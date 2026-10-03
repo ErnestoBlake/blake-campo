@@ -1532,8 +1532,9 @@ function encolar(sobre){
    respuesta y daba por enviado todo lo que salía del teléfono. Ahora el
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
+/* v62b: el buscador compara palabra por palabra (cualquier orden) contra nombre, puesto, alias y correo; si ninguna tarjeta cumple todas las palabras, muestra las que cumplen alguna. */
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
-const APP_VER = "v62";
+const APP_VER = "v62b";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -4683,7 +4684,7 @@ function pintarVerEquipo(){
     const lista = adm.usuarios.slice().sort((x,y)=> String(x.nombre||"").localeCompare(String(y.nombre||""), "es"));
     cont.innerHTML = lista.map(u=>{
       const c = cifrasEq(Array.isArray(u.pendientes) ? u.pendientes : []);
-      return `<button type="button" class="adm-persona eq-persona" data-cero="${c.total ? "0" : "1"}" data-u="${esc(u.usuario)}" data-bus="${esc(normBus((u.nombre || "") + " " + (u.puesto || u.rol || "")))}">
+      return `<button type="button" class="adm-persona eq-persona" data-cero="${c.total ? "0" : "1"}" data-u="${esc(u.usuario)}" data-bus="${esc(normBus((u.nombre || "") + " " + (u.puesto || u.rol || "") + " " + (u.alias || "") + " " + (u.usuario || "")))}">
         <b>${esc(u.nombre)}</b>
         <span class="adm-puesto">${esc(u.puesto || u.rol || "")}${u.estado && normCliente(u.estado) !== "activo" ? " · " + esc(u.estado) : ""}</span>
         ${c.total ? `<div class="eq-cifras">
@@ -4730,15 +4731,24 @@ function normBus(s){
   return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 function aplicarBusquedaEq(){
-  const q = normBus($("#eqBuscar").value), tarjetas = $("#eqPersonas").querySelectorAll(".eq-persona");
+  const crudo = $("#eqBuscar").value.trim(), palabras = normBus(crudo).split(" ").filter(Boolean);
+  const tarjetas = Array.from($("#eqPersonas").querySelectorAll(".eq-persona"));
+  const cumple = (el, modo)=>{
+    const h = el.dataset.bus || "";
+    return modo === "todas" ? palabras.every(w=>h.includes(w)) : palabras.some(w=>h.includes(w));
+  };
+  let modo = "todas";
+  if(palabras.length && !tarjetas.some(el=>cumple(el, "todas"))) modo = "alguna";
   let visibles = 0;
   tarjetas.forEach(el=>{
-    const ok = !q || (el.dataset.bus || "").includes(q);
+    const ok = !palabras.length || cumple(el, modo);
     el.hidden = !ok; if(ok) visibles++;
   });
   const msg = $("#eqSinCoinc");
-  msg.hidden = !(q && tarjetas.length && !visibles);
-  msg.textContent = msg.hidden ? "" : "Nadie coincide con «" + $("#eqBuscar").value.trim() + "»";
+  if(!palabras.length || !tarjetas.length){ msg.hidden = true; msg.textContent = ""; return; }
+  if(!visibles){ msg.hidden = false; msg.textContent = "Nadie coincide con «" + crudo + "»"; }
+  else if(modo === "alguna"){ msg.hidden = false; msg.textContent = "Ninguno coincide con todas las palabras; se muestran los que coinciden con alguna."; }
+  else { msg.hidden = true; msg.textContent = ""; }
 }
 $("#eqBuscar").addEventListener("input", aplicarBusquedaEq);
 $("#eqFiltros").querySelectorAll("button").forEach(b=> b.addEventListener("click", ()=>{ eqv.filtro = b.dataset.f; pintarVerEquipo(); }));

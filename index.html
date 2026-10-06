@@ -1549,10 +1549,11 @@ function encolar(sobre){
    sobre sale de la cola solo si el conector contesta { ok:true }.
    Resultado: "ok" | "red" (sin señal / sin respuesta: reintentar) | "rechazo". */
 /* v62b: el buscador compara palabra por palabra (cualquier orden) contra nombre, puesto, alias y correo; si ninguna tarjeta cumple todas las palabras, muestra las que cumplen alguna. */
+/* v64: al contestar una aclaración como "Pendiente" la app exige cliente y sitio (la aclaración pasa a ser pendiente de ese cliente) y la fecha compromiso solo acepta el año actual o el siguiente. */
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
 /* v63: editar actividad asignada, prioridad por actividad (Alta 1 / Media 3 / Baja 7 días hábiles, lunes a sábado) y aviso de atraso.
    Los botones nuevos solo salen si el conector los anuncia en equipo=1 (caps). Sin conector v63 la app se comporta como la v62b. */
-const APP_VER = "v63";
+const APP_VER = "v64";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -4909,7 +4910,18 @@ const ACL_ESTATUS = [
     etq:"CANCELADA POR INSTRUCCION", quien:"¿Quién la canceló? (nombre completo)", compromiso:false }
 ];
 const ACL_MIN_QUIEN = 4;
-const acl = { marcas:{}, detalles:{}, quienes:{}, compromisos:{}, geo:null, geoTxt:"" };
+const acl = { marcas:{}, detalles:{}, quienes:{}, compromisos:{}, clientes:{}, geo:null, geoTxt:"" };
+/* v64: cliente y sitio obligatorios al dejar una aclaración como Pendiente. */
+function aclClienteSep(v){ const p = String(v||"").split("||"); return { cliente:p[0]||"", sitio:p[1]||"" }; }
+function aclFechaOk(f){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(f||""))) return false;
+  const y = +String(f).slice(0,4), a = new Date().getFullYear();
+  return y === a || y === a + 1;
+}
+function aclLimitesFecha(){
+  const a = new Date().getFullYear();
+  return `min="${hoyISO()}" max="${a+1}-12-31"`;
+}
 
 function aclDef(v){ return ACL_ESTATUS.find(e=>e.v===v) || null; }
 function esAclaracion(a){ return /aclaraci/i.test(String((a && a.origen) || "")); }
@@ -4969,7 +4981,15 @@ function htmlAcl(a){
   if(d && d.compromiso){
     extra += `<label for="aclf-${esc(id)}">¿Para cuándo queda?</label>
       <input id="aclf-${esc(id)}" class="acl-fecha" data-id="${esc(id)}" type="date"
-        value="${esc(acl.compromisos[id] || "")}" min="${hoyISO()}">`;
+        value="${esc(acl.compromisos[id] || "")}" ${aclLimitesFecha()}>`;
+    const sel = acl.clientes[id] || "";
+    const ops = ['<option value="">— Elige el cliente y sitio —</option>']
+      .concat(clientesParaAsignar().map(c=>{
+        const val = c.cliente + "||" + c.sitio;
+        return `<option value="${esc(val)}"${val===sel?" selected":""}>${esc(c.cliente + (c.sitio ? " · " + c.sitio : ""))}</option>`;
+      })).join("");
+    extra += `<label for="aclc-${esc(id)}">¿De qué cliente es este pendiente?</label>
+      <select id="aclc-${esc(id)}" class="acl-cli" data-id="${esc(id)}">${ops}</select>`;
   }
   return `<div class="acl-item" data-listo="${listo}">
     <p class="acl-texto">${esc(a.titulo || a.texto || "(sin texto)")}</p>
@@ -4990,7 +5010,8 @@ function aclCompleta(id){
   const d = aclDef(v); if(!d) return false;
   if(limpiaTxt(acl.detalles[id] || "").length < MIN_DETALLE) return false;
   if(d.quien && limpiaTxt(acl.quienes[id] || "").length < ACL_MIN_QUIEN) return false;
-  if(d.compromiso && !acl.compromisos[id]) return false;
+  if(d.compromiso && !aclFechaOk(acl.compromisos[id])) return false;
+  if(d.compromiso && !limpiaTxt(acl.clientes[id] || "")) return false;
   return true;
 }
 
@@ -5043,6 +5064,14 @@ function enlazarAcl(){
   cont.querySelectorAll(".acl-quien").forEach(el=>{
     el.addEventListener("input", e=>{
       acl.quienes[e.target.dataset.id] = e.target.value;
+      e.target.closest(".acl-item").dataset.listo = aclCompleta(e.target.dataset.id) ? "1" : "0";
+      const listas = aclPendientes().filter(a=>aclCompleta(String(a.id))).length;
+      $("#btnEnviarAcl").disabled = !listas;
+    });
+  });
+  cont.querySelectorAll(".acl-cli").forEach(el=>{
+    el.addEventListener("change", e=>{
+      acl.clientes[e.target.dataset.id] = e.target.value;
       e.target.closest(".acl-item").dataset.listo = aclCompleta(e.target.dataset.id) ? "1" : "0";
       const listas = aclPendientes().filter(a=>aclCompleta(String(a.id))).length;
       $("#btnEnviarAcl").disabled = !listas;
@@ -5123,13 +5152,21 @@ async function enviarAclaraciones(){
     tipo:"reporte_act", token:estado.token, reporteId,
     /* v41: el conector exige folio; la aclaración usa su propio número (no es servicio). */
     cliente: ACL_OFICINA.cliente, sitio: ACL_OFICINA.sitio, folio: reporteId,
-    items: listas.map(a=>({ id:String(a.id), estado: aldDefSeguro(String(a.id)).estado, nota: notaAcl(String(a.id)) })),
+    items: listas.map(a=>{
+      const id = String(a.id), d = aldDefSeguro(id);
+      const it = { id, estado: d.estado, nota: notaAcl(id) };
+      if(d.compromiso){
+        const c = aclClienteSep(acl.clientes[id]);
+        it.cliente = c.cliente; it.sitio = c.sitio; it.compromiso = acl.compromisos[id];
+      }
+      return it;
+    }),
     adicionales: [],
     detalle: ""
   });
   /* Salen de la lista local; las que quedaron incompletas siguen aquí. */
   const ids = new Set(listas.map(a=>String(a.id)));
-  ids.forEach(id=>{ delete acl.marcas[id]; delete acl.detalles[id]; delete acl.quienes[id]; delete acl.compromisos[id]; });
+  ids.forEach(id=>{ delete acl.marcas[id]; delete acl.detalles[id]; delete acl.quienes[id]; delete acl.compromisos[id]; delete acl.clientes[id]; });
   act.lista = act.lista.filter(a=>!ids.has(String(a.id)));
   guardarAct();
   $("#aclaracionesPantalla").hidden = true;

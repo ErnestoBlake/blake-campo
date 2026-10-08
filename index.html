@@ -291,6 +291,16 @@ body{
 .celda.add span{font-family:var(--display);font-size:30px;color:var(--naranja);line-height:1}
 .celda.add:disabled span{color:var(--acero-700)}
 .celda.add:focus-visible{outline:2px solid var(--naranja-glow);outline-offset:2px}
+.vid-caja{margin-top:6px}
+.vid-fila{display:flex;align-items:center;gap:10px;padding:8px 10px;margin:6px 0;border:1px solid var(--linea);border-radius:3px;background:var(--acero-800);font-size:13px;color:var(--plata)}
+.vid-fila[data-e="enviado"]{border-color:var(--verde)}
+.vid-fila[data-e="rechazado"]{border-color:#ff4d4d}
+.vid-ico{font-size:18px;color:var(--naranja)}
+.vid-dato{flex:1;line-height:1.35}
+.vid-x{background:none;border:1px solid var(--linea);color:var(--plata);border-radius:3px;padding:4px 8px;font-size:12px;cursor:pointer}
+.vid-aviso{border:1px solid var(--naranja);border-radius:3px;padding:10px 12px;margin:8px 0;background:rgba(255,140,0,.08);color:var(--plata);font-size:13px}
+.vid-aviso p{margin:6px 0 10px}
+.vid-bot{display:flex;gap:8px;flex-wrap:wrap}
 
 /* ---------- Cola ---------- */
 .cola{
@@ -762,6 +772,19 @@ body{
     <p class="ev-nota" id="evNota">Toma mínimo 3 fotos. Puedes agregar más con el botón +.</p>
     <div class="rejilla" id="rejilla"></div>
     <input type="file" id="camara" accept="image/*" multiple hidden>
+
+    <!-- v68: videos de evidencia (opcional) -->
+    <div class="vid-caja" id="vidCaja">
+      <div class="ev-cab" style="margin-top:18px">
+        <span class="etiqueta">Video de evidencia · opcional</span>
+        <span class="conteo" id="vidConteo"></span>
+      </div>
+      <p class="ev-nota">Máximo 30 segundos. Se guarda en el teléfono y sube solo con wifi; con sus datos móviles la app le pregunta antes.</p>
+      <div id="vidLista"></div>
+      <div id="vidAviso"></div>
+      <button class="btn btn-sec" id="btnVideo" type="button" disabled>+ Agregar video</button>
+      <input type="file" id="camaraVid" accept="video/*" hidden>
+    </div>
   </section>
 
   <!-- Cierre del servicio: actividades + firma del cliente -->
@@ -1455,7 +1478,7 @@ function restaurar(){
    IndexedDB da cientos de MB. Cada sobre se guarda aparte con su _qid
    (el orden de envío es el orden de _qid).
    ============================================================ */
-const BD = { nombre:"blake-campo", version:2, db:null, sinBD:false };
+const BD = { nombre:"blake-campo", version:3, db:null, sinBD:false };
 let _qseq = 0;
 function nuevoQid(){ return String(Date.now()).padStart(15,"0") + "-" + String(++_qseq).padStart(5,"0"); }
 function bdAbrir(){
@@ -1468,6 +1491,8 @@ function bdAbrir(){
       if(!db.objectStoreNames.contains("cola")) db.createObjectStore("cola", { keyPath:"_qid" });
       if(!db.objectStoreNames.contains("rechazados")) db.createObjectStore("rechazados", { keyPath:"_qid" });
       if(!db.objectStoreNames.contains("servicio")) db.createObjectStore("servicio", { keyPath:"k" });   // v39
+      if(!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath:"id" });          // v68: el archivo del video
+      if(!db.objectStoreNames.contains("videosprog")) db.createObjectStore("videosprog", { keyPath:"id" }); // v68: avance de la subida
     };
     r.onsuccess = ()=>{
       BD.db = r.result;
@@ -1527,6 +1552,7 @@ async function cargarCola(){
     estado.cola = enBD.concat(nuevos).sort((a,b)=> a._qid < b._qid ? -1 : 1);
     estado.rechazados = await bdTodos("rechazados");
     await cargarFotosServicio();
+    await cargarVideos();                            // v68
   }catch(e){
     BD.sinBD = true;                                 // teléfono sin IndexedDB: método viejo
   }
@@ -1553,7 +1579,7 @@ function encolar(sobre){
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
 /* v63: editar actividad asignada, prioridad por actividad (Alta 1 / Media 3 / Baja 7 días hábiles, lunes a sábado) y aviso de atraso.
    Los botones nuevos solo salen si el conector los anuncia en equipo=1 (caps). Sin conector v63 la app se comporta como la v62b. */
-const APP_VER = "v64";
+const APP_VER = "v68";
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -1694,6 +1720,7 @@ function renovarSesionEnCola(){
   persistir();
   estado.sesionVencida = false;
   enviarCola();
+  try{ subirVideos(); }catch(e){}   // v68
 }
 
 /* v39: las fotos "después" se conservan con imagen hasta la salida, porque
@@ -1975,6 +2002,7 @@ function pintarEvidencia(){
   $("#rejilla").innerHTML = html;
   const b=$("#btnFoto");
   if(b) b.onclick = ()=> $("#camara").click();
+  try{ pintarVideos(); }catch(e){}   // v68
 }
 
 /* v49: en trabajo interno (cliente "Blake Inc") el cliente somos nosotros: no hay firma de cliente. */
@@ -5233,6 +5261,210 @@ $("#btnInstalar").addEventListener("click", async ()=>{
   try{ await _instalar.userChoice; }catch(e){}
   _instalar = null; $("#btnInstalar").hidden = true;
 });
+
+/* ============================================================
+   v68 · VIDEOS DE EVIDENCIA DEL SERVICIO (07-oct-2026)
+   - Máximo 30 s y 80 MB por video; opcional (no frena el cierre del servicio).
+   - Se guardan en el teléfono (IndexedDB) y se suben POR PARTES (1.5 MB), en una
+     fila aparte de la cola de fotos: un video lento no detiene los demás envíos.
+   - Con wifi suben solos; con datos móviles (o si el teléfono no dice qué red usa)
+     la app pregunta al colaborador antes de gastar sus datos.
+   - Si se corta la señal, la subida continúa donde se quedó.
+   - Lo ven solo los administradores (carpeta de Drive del conector + pestaña Videos).
+   ============================================================ */
+const VID = { MAX_S:30, TOL_S:1, MAX_MB:80, PARTE:1572864, lista:[], subiendo:false };
+const vidTam = b => b >= 1048576 ? (b/1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b/1024)) + " KB";
+/* true = wifi/ethernet · false = datos móviles · null = el teléfono no lo dice */
+function vidRed(){
+  const c = navigator.connection;
+  if(!c || !c.type) return null;
+  if(c.type === "wifi" || c.type === "ethernet") return true;
+  if(c.type === "unknown" || c.type === "other" || c.type === "none") return null;
+  return false;
+}
+const vidProgGuardar = v => bdPut("videosprog", { id:v.id, usuario:v.usuario, folio:v.folio, fase:v.fase, dur:v.dur, bytes:v.bytes,
+  estado:v.estado, sig:v.sig, ini:v.ini, datos:v.datos, intentos:v.intentos, error:v.error||"", fecha:v.fecha, hora:v.hora }).catch(fallaGuardado);
+
+async function cargarVideos(){
+  try{
+    const progs = await bdTodos("videosprog");
+    const blobs = await bdTodos("videos");
+    const porId = {}; blobs.forEach(b=> porId[b.id] = b);
+    VID.lista = progs.map(p=> Object.assign({}, porId[p.id] || {}, p))
+                     .sort((a,b)=> a.id < b.id ? -1 : 1);
+    /* videos cuyo avance no se alcanzó a guardar */
+    blobs.forEach(b=>{ if(!VID.lista.find(x=>x.id===b.id)) VID.lista.push(Object.assign({ sig:0, ini:false, datos:false, intentos:0, estado:"pendiente" }, b)); });
+    VID.lista.forEach(v=>{ if(v.estado === "subiendo") v.estado = "pendiente"; });
+  }catch(e){ VID.lista = []; }
+}
+
+function vidDuracion(archivo){
+  return new Promise(res=>{
+    let u; try{ u = URL.createObjectURL(archivo); }catch(e){ return res(null); }
+    const v = document.createElement("video");
+    v.preload = "metadata"; v.muted = true;
+    let listo = false;
+    const fin = x=>{ if(listo) return; listo = true; try{ URL.revokeObjectURL(u); }catch(e){} res(x); };
+    v.onloadedmetadata = ()=> fin(isFinite(v.duration) ? v.duration : null);
+    v.onerror = ()=> fin(null);
+    setTimeout(()=> fin(null), 8000);
+    v.src = u;
+  });
+}
+function vidBase64(blob){
+  return new Promise((res, rej)=>{
+    const r = new FileReader();
+    r.onload = ()=> res(String(r.result).split(",")[1] || "");
+    r.onerror = ()=> rej(r.error || new Error("No se pudo leer el video"));
+    r.readAsDataURL(blob);
+  });
+}
+
+$("#btnVideo").addEventListener("click", ()=>{ if(!$("#btnVideo").disabled) $("#camaraVid").click(); });
+$("#camaraVid").addEventListener("change", async e=>{
+  const a = (e.target.files || [])[0];
+  e.target.value = "";
+  if(!a) return;
+  if(!estado.orden || !estado.eventos.llegada){ avisar("Primero la llegada", "Registre la llegada antes de agregar un video.", "error"); return; }
+  if(BD.sinBD){ avisar("Este teléfono no puede guardar videos", "No tiene memoria interna disponible para la app. Avise a la oficina.", "error"); return; }
+  if(!/^video\//i.test(a.type || "") && !/\.(mp4|mov|m4v|webm|3gp)$/i.test(a.name || "")){
+    avisar("Eso no es un video", "Elija un video grabado con la cámara del teléfono.", "error"); return;
+  }
+  if(a.size > VID.MAX_MB * 1048576){
+    avisar("Video demasiado pesado", `Pesa ${vidTam(a.size)} y el máximo es ${VID.MAX_MB} MB. Grábelo más corto o en calidad 720p.`, "error"); return;
+  }
+  const dur = await vidDuracion(a);
+  if(dur === null && a.size > 25 * 1048576){
+    avisar("No pude comprobar la duración", "El video pesa mucho y el teléfono no dejó leer su duración. Grabe uno de máximo 30 s.", "error"); return;
+  }
+  if(dur !== null && dur > VID.MAX_S + VID.TOL_S){
+    avisar("Video demasiado largo", `Dura ${Math.round(dur)} s y el máximo es ${VID.MAX_S} s. Grabe uno más corto.`, "error"); return;
+  }
+  const g = (GPS.ultimo && (Date.now() - GPS.ultimo.t) <= GPS.EDAD_MAX) ? GPS.ultimo : null;
+  const o = estado.orden;
+  const id = "V" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const ext = ((a.name || "").match(/\.(mp4|mov|m4v|webm|3gp)$/i) || [null, /quicktime/i.test(a.type) ? "mov" : "mp4"])[1].toLowerCase();
+  const reg = { id, usuario:estado.usuario || "", tecnico:estado.tecnico || "", folio:o.folio || "", cliente:o.cliente || "", orden:o.orden || "",
+    sitio:o.sitio || "", fase:faseActual(), nombre:id + "." + ext, mime:a.type || (ext === "mov" ? "video/quicktime" : "video/mp4"),
+    bytes:a.size, dur:Math.round(dur || 0), fecha:hoy(), hora:ahora(),
+    lat:g ? +g.lat.toFixed(6) : "", lon:g ? +g.lon.toFixed(6) : "", prec:g ? g.prec : "",
+    origen:(Date.now() - (a.lastModified || 0)) <= 180000 ? "camara" : "galeria",
+    blob:a, estado:"pendiente", sig:0, ini:false, datos:false, intentos:0, error:"" };
+  try{ await bdPut("videos", reg); await vidProgGuardar(reg); }
+  catch(err){ fallaGuardado(err); return; }
+  VID.lista.push(reg);
+  pintarVideos();
+  avisar("Video guardado", "Se queda en el teléfono y se sube solo con wifi. Con datos móviles la app le pedirá su permiso.", "info");
+  subirVideos();
+});
+
+function vidEtiqueta(v){
+  const pct = v.bytes ? Math.min(100, Math.round(100 * (v.sig || 0) / v.bytes)) : 0;
+  if(v.estado === "enviado")   return "Enviado ✓";
+  if(v.estado === "subiendo")  return "Subiendo " + pct + " %";
+  if(v.estado === "espera")    return "Esperando wifi" + (pct ? " · " + pct + " %" : "");
+  if(v.estado === "rechazado") return "Rechazado: " + (v.error || "avise a la oficina");
+  return "Por subir" + (pct ? " · " + pct + " %" : "") + (v.error ? " · " + v.error : "");
+}
+function pintarVideos(){
+  const caja = $("#vidLista"); if(!caja) return;
+  const o = estado.orden;
+  const bloqueado = !o || !estado.eventos.llegada;
+  $("#btnVideo").disabled = bloqueado;
+  const propios = VID.lista.filter(v=> v.usuario === (estado.usuario || ""));
+  const aqui = o ? propios.filter(v=> v.folio === (o.folio || "")) : [];
+  const pend = propios.filter(v=> v.estado !== "enviado" && v.estado !== "rechazado");
+  $("#vidConteo").textContent = aqui.length ? (aqui.length + " video" + (aqui.length === 1 ? "" : "s")) : "";
+  caja.innerHTML = aqui.map(v=>`<div class="vid-fila" data-e="${esc(v.estado)}">
+      <span class="vid-ico">▶</span>
+      <span class="vid-dato">${v.fase === "despues" ? "Después" : "Antes"} · ${v.dur || "?"} s · ${vidTam(v.bytes)}<br><b>${esc(vidEtiqueta(v))}</b></span>
+      ${(v.estado === "pendiente" || v.estado === "espera") && !v.sig ? `<button class="vid-x" type="button" data-q="${esc(v.id)}">Quitar</button>` : ""}
+    </div>`).join("");
+  /* permiso para usar datos móviles */
+  const esperando = propios.filter(v=> v.estado === "espera" && !v.datos);
+  const av = $("#vidAviso");
+  if(esperando.length && !av.dataset.cerrado){
+    const mb = esperando.reduce((s, v)=> s + (v.bytes - (v.sig || 0)), 0);
+    const sinDato = vidRed() === null;
+    av.innerHTML = `<div class="vid-aviso"><b>${esperando.length} video${esperando.length === 1 ? "" : "s"} por subir (${vidTam(mb)})</b>
+      <p>${sinDato ? "Este teléfono no indica si hay wifi." : "No hay wifi."} Subirlos con datos móviles gasta sus datos. ¿Qué desea hacer?</p>
+      <div class="vid-bot"><button class="btn" type="button" id="vidSiDatos">Subir ahora con mis datos</button>
+      <button class="btn btn-sec" type="button" id="vidNoDatos">Esperar wifi</button></div></div>`;
+    $("#vidSiDatos").onclick = ()=>{ esperando.forEach(v=>{ v.datos = true; vidProgGuardar(v); }); av.innerHTML = ""; subirVideos(); };
+    $("#vidNoDatos").onclick = ()=>{ av.dataset.cerrado = "1"; av.innerHTML = `<p class="ev-nota">Los videos esperan en el teléfono hasta que haya wifi.</p>`; };
+  } else if(!esperando.length){ av.innerHTML = ""; delete av.dataset.cerrado; }
+}
+$("#vidLista").addEventListener("click", async e=>{
+  const b = e.target.closest("[data-q]"); if(!b) return;
+  const id = b.dataset.q;
+  const v = VID.lista.find(x=> x.id === id);
+  if(!v || v.sig) return;
+  if(!confirm("¿Quitar este video? No se ha enviado.")) return;
+  VID.lista = VID.lista.filter(x=> x.id !== id);
+  try{ await bdDel("videos", id); await bdDel("videosprog", id); }catch(_){}
+  pintarVideos();
+});
+
+async function vidMarcarEnviado(v){
+  v.estado = "enviado"; v.sig = v.bytes; v.error = ""; v.blob = null;
+  try{ await bdDel("videos", v.id); }catch(_){}
+  await vidProgGuardar(v);
+}
+async function subirVideos(){
+  if(VID.subiendo || !estado.token || estado.sesionVencida) return;
+  if(!VID.lista.some(v=> v.usuario === estado.usuario && v.estado !== "enviado" && v.estado !== "rechazado")) return;
+  VID.subiendo = true;
+  try{
+    for(const v of VID.lista.filter(x=> x.usuario === estado.usuario && x.estado !== "enviado" && x.estado !== "rechazado")){
+      if(!v.blob){ v.estado = "rechazado"; v.error = "El teléfono ya no tiene el archivo"; await vidProgGuardar(v); continue; }
+      if(!(vidRed() === true || v.datos)){ v.estado = "espera"; pintarVideos(); continue; }
+      v.estado = "subiendo"; pintarVideos();
+      const base = { _u:v.usuario, token:estado.token, id:v.id };
+      let corte = false;
+      if(!v.ini){
+        const r = await enviarUno(Object.assign({ tipo:"video_ini", tecnico:v.tecnico, folio:v.folio, cliente:v.cliente, orden:v.orden, sitio:v.sitio,
+          fase:v.fase, nombre:v.nombre, mime:v.mime, bytes:v.bytes, dur:v.dur, fecha:v.fecha, hora:v.hora, lat:v.lat, lon:v.lon, prec:v.prec, origen:v.origen }, base));
+        if(r.tipo === "red"){ v.estado = "pendiente"; v.error = "sin señal"; await vidProgGuardar(v); break; }
+        if(r.tipo === "rechazo"){
+          if(esErrorSesion(r.error)){ estado.sesionVencida = true; v.estado = "pendiente"; await vidProgGuardar(v); break; }
+          v.intentos++; v.error = r.error; v.estado = v.intentos >= 3 ? "rechazado" : "pendiente"; await vidProgGuardar(v); continue;
+        }
+        if(r.resp.guardado !== "video_ini" && !r.resp.repetido){   // el conector no tiene el parche V68: NO se da por enviado
+          v.estado = "pendiente"; v.error = "falta actualizar el conector (V68)"; await vidProgGuardar(v); break;
+        }
+        v.ini = true; v.sig = r.resp.siguiente || 0; v.error = "";
+        if(r.resp.completo){ await vidMarcarEnviado(v); pintarVideos(); continue; }
+        await vidProgGuardar(v);
+      }
+      while(v.sig < v.bytes){
+        if(!(vidRed() === true || v.datos)){ v.estado = "espera"; corte = true; break; }
+        const fin = Math.min(v.sig + VID.PARTE, v.bytes);
+        let b64;
+        try{ b64 = await vidBase64(v.blob.slice(v.sig, fin)); }
+        catch(err){ v.estado = "pendiente"; v.error = "no se pudo leer el video"; corte = true; break; }
+        const r = await enviarUno(Object.assign({ tipo:"video_parte", desde:v.sig, total:v.bytes, datos:b64 }, base));
+        if(r.tipo === "red"){ v.estado = "pendiente"; v.error = "sin señal"; corte = true; break; }
+        if(r.tipo === "rechazo"){
+          if(esErrorSesion(r.error)){ estado.sesionVencida = true; v.estado = "pendiente"; corte = true; break; }
+          if(/sesi[oó]n de video/i.test(r.error)){ v.ini = false; v.sig = 0; v.estado = "pendiente"; v.error = "reiniciando"; corte = true; break; }
+          v.intentos++; v.error = r.error; v.estado = v.intentos >= 3 ? "rechazado" : "pendiente"; corte = true; break;
+        }
+        if(r.resp.guardado !== "video"){ v.estado = "pendiente"; v.error = "falta actualizar el conector (V68)"; corte = true; break; }
+        v.error = ""; v.intentos = 0;
+        v.sig = Math.min(v.bytes, r.resp.siguiente != null ? r.resp.siguiente : fin);
+        if(r.resp.completo){ await vidMarcarEnviado(v); break; }
+        v.estado = "subiendo"; await vidProgGuardar(v); pintarVideos();
+      }
+      await vidProgGuardar(v);
+      pintarVideos();
+      if(corte && v.estado === "pendiente" && /sin señal/.test(v.error)) break;   // sin señal: no seguir con los demás
+    }
+  }catch(e){ estado.ultimoError = String(e && e.message || e); }
+  finally{ VID.subiendo = false; pintarVideos(); }
+}
+setInterval(()=>{ try{ subirVideos(); }catch(e){} }, 30000);
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible"){ try{ subirVideos(); }catch(e){} } });
+try{ if(navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener("change", ()=>{ pintarVideos(); subirVideos(); }); }catch(e){}
 </script>
 </body>
 </html>

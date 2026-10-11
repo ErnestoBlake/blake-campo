@@ -1624,7 +1624,8 @@ function encolar(sobre){
 /* v73 (10-oct-2026) — PILOTO (solo Manuel): al marcar Terminada en un servicio a cliente, formulario por tipo de trabajo
    (calibración, instalación/reemplazo, traslado/maniobra, reparación/mantenimiento) con campos exactos y «No lo sé».
    Compone la nota automáticamente; bloquea la salida si falta el tipo o algún campo. Servicios internos sin cambio. */
-const APP_VER = "v73";
+/* v74 (10-oct-2026) — el Sr. Ernesto también ve el formulario por tipo de trabajo, para revisarlo. */
+const APP_VER = "v74";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2612,7 +2613,7 @@ function textoActividades(){
 }
 
 /* ---------- v73: formulario por tipo de trabajo (PILOTO: solo usuarios de PILOTO_FORM, servicios a clientes) ---------- */
-const PILOTO_FORM = ["juanma.dichter.97@gmail.com"];
+const PILOTO_FORM = ["juanma.dichter.97@gmail.com","ernesto@blakeinc.com.mx"];   /* Manuel (piloto) y la dirección (para revisar) */
 const PLANTAS_BASE = ["Pragmacero","Santa María","NM-60","Bloquera","Concretera"];
 const TIPOS_TRABAJO = {
   calibracion:{ t:"Calibración de básculas, celdas y cuenta litros", campos:[

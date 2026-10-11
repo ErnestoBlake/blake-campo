@@ -441,6 +441,7 @@ body{
 .inicio-estado{font-family:var(--dato);font-size:11.5px;color:var(--plata);text-align:center;margin-top:6px;line-height:1.5}
 .inicio-estado[data-pend="1"]{color:var(--ambar)}
 .inicio-estado[data-pend="2"]{color:#ff4d4d;font-weight:600}
+.sol-aviso{margin:8px 0;padding:8px 10px;border:1px solid var(--ambar);border-radius:8px;color:var(--ambar);font-family:var(--dato);font-size:12px;line-height:1.45}
 .inicio-version{font-family:var(--dato);font-size:10.5px;color:var(--plata);opacity:.55;text-align:center;margin:2px 0 0;letter-spacing:.04em}
 /* v36: instalar la app en el telefono */
 #btnInstalar{display:block;width:100%;margin:10px 0 2px;padding:12px 14px;border-radius:10px;border:1px solid var(--naranja-glow, #ff8a1f);background:transparent;color:var(--plata);font-family:var(--dato);font-size:12.5px;letter-spacing:.04em;cursor:pointer}
@@ -1597,6 +1598,10 @@ function encolar(sobre){
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
 /* v63: editar actividad asignada, prioridad por actividad (Alta 1 / Media 3 / Baja 7 días hábiles, lunes a sábado) y aviso de atraso.
    Los botones nuevos solo salen si el conector los anuncia en equipo=1 (caps). Sin conector v63 la app se comporta como la v62b. */
+/* v70 (10-oct-2026) — Solicitudes de reasignación sin objeto. Si la actividad ya se cerró, autorizar nunca puede funcionar
+   ("La actividad ya no está pendiente"). Ahora la lista las marca, las cuenta aparte en el menú y ofrece «Cerrar solicitud»
+   (usa el rechazo existente con la nota «Sin objeto…»). Tras cualquier cambio de administrador rechazado, la lista se vuelve a leer.
+   Solo app; el conector no cambia. */
 /* v69 (10-oct-2026) — Letrero rojo "rechazados" que no se quitaba (Jorge Galicia).
    Causa: las ediciones/cambios de administrador pasaban por la cola de reportes; si el servidor las rechazaba
    3 veces ("El texto no cambió", "La actividad ya no está pendiente") quedaban apartadas como "Rechazados por el
@@ -1604,7 +1609,7 @@ function encolar(sobre){
    Ahora: (1) mandarAdmin espera el recibo y muestra el motivo al instante; (2) una acción de administrador
    rechazada se retira y se avisa qué cambio fue y por qué; (3) al abrir la app se limpian las que quedaron de
    versiones anteriores; (4) el menú muestra la versión. Los reportes del colaborador NO se tocan. */
-const APP_VER = "v69";
+const APP_VER = "v70";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -4328,8 +4333,16 @@ async function procesarSolicitud(sobre, titulo, exito){
       estado.cola = estado.cola.filter(x=> x._qid !== qid); persistir();
       if(!BD.sinBD) bdDel("cola", qid).catch(()=>{});
       const ses = esErrorSesion(msg) || estado.sesionVencida;
-      procMostrar("error", "No se pudo", ses ? "Su sesión venció" : "El servidor no aceptó el cambio",
-        (ses ? msg : humanizarError(msg).replace(/^./, c=>c.toUpperCase())) + " · No se hizo ningún cambio. " + (ses ? "Cierre sesión, entre de nuevo con señal y repita." : "Intente otra vez."), true);
+      /* v70: autorizar una reasignación cuya actividad ya se cerró NUNCA va a funcionar. Se recuerda el
+         veredicto del servidor para ofrecer «Cerrar solicitud» en lugar de dejar el mismo botón fallando. */
+      const cerrada = !ses && sobre.accion === "autorizar_reasignacion" && /ya no est[aá] pendiente/i.test(msg);
+      if(cerrada) solSinObjetoMarcar(sobre.solicitud);
+      procMostrar("error", "No se pudo", ses ? "Su sesión venció" : (cerrada ? "La actividad ya estaba cerrada" : "El servidor no aceptó el cambio"),
+        cerrada
+          ? "La actividad ya se cerró, por eso no se puede reasignar. No se hizo ningún cambio. En la lista, use «Cerrar solicitud» para quitar esta petición."
+          : (ses ? msg : humanizarError(msg).replace(/^./, c=>c.toUpperCase())) + " · No se hizo ningún cambio. " + (ses ? "Cierre sesión, entre de nuevo con señal y repita." : "Intente otra vez."), true);
+      /* v70: la lista que se ve puede estar vieja (la actividad ya cambió): se vuelve a leer. */
+      if(!ses){ try{ pintarSolicitudes(); pintarBotonSol(); }catch(e){} try{ refrescarEquipo(); }catch(e){} }
     }else if(it){
       procMostrar("error", "Pendiente de envío", "Aún no se envía", navigator.onLine
         ? "El servidor no respondió a tiempo. El cambio quedó guardado en el teléfono y se enviará solo; espere unos minutos y actualice."
@@ -4349,10 +4362,14 @@ async function procesarSolicitud(sobre, titulo, exito){
 function pintarBotonSol(){
   const b = $("#btnIrSol"); if(!b) return;
   b.hidden = !esAdminApp();
-  const n = (adm.solicitudes || []).length;
+  /* v70: las solicitudes cuya actividad ya se cerró no esperan autorización: se cuentan aparte. */
+  const L = adm.solicitudes || [];
+  const sin = L.filter(s=> estadoSolicitud(s) !== "ok").length;
+  const n = L.length - sin;
   $("#inicioSolDet").textContent = n
-    ? `⚠ ${n} solicitud${n === 1 ? "" : "es"} esperando su autorización.`
-    : "Administrador: revisa las solicitudes de reasignación de los colaboradores.";
+    ? `⚠ ${n} solicitud${n === 1 ? "" : "es"} esperando su autorización.` + (sin ? ` (${sin} más sin objeto: actividad ya cerrada.)` : "")
+    : (sin ? `${sin} solicitud${sin === 1 ? "" : "es"} sin objeto (la actividad ya se cerró): ciérrela${sin === 1 ? "" : "s"} desde esta pantalla.`
+           : "Administrador: revisa las solicitudes de reasignación de los colaboradores.");
   const hora = adm.actualizado ? new Date(adm.actualizado).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit", hour12:false }) : "";
   const s = $("#solSync"); if(s) s.textContent = (adm.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar")) + (navigator.onLine ? "" : " · sin conexión");
 }
@@ -4422,6 +4439,35 @@ function pintarBotonAsignar(){
 ["#admResponsable","#admCliente","#admFecha"].forEach(s=> $(s).addEventListener("change", pintarBotonAsignar));
 $("#admTextos").addEventListener("input", pintarBotonAsignar);
 
+/* v70 · Solicitudes de reasignación cuya actividad YA SE CERRÓ (sin objeto).
+   Pasaba con la de Daniel (consumibles del plasma): él cerró la actividad el mismo día que pidió reasignarla y la
+   solicitud siguió PENDIENTE; al autorizarla el servidor contestaba "La actividad ya no está pendiente" una y otra vez.
+   - "cerrada": el servidor ya lo dijo (se recuerda en este teléfono) -> solo se ofrece «Cerrar solicitud».
+   - "probable": la actividad ya no aparece entre los pendientes del equipo -> se avisa, pero Autorizar sigue disponible
+     por si la lista estuviera incompleta; el servidor tiene la última palabra.
+   «Cerrar solicitud» usa el rechazo existente con la nota «Sin objeto: la actividad ya estaba cerrada.» (sin cambiar el conector). */
+const LS_SOLSIN = "blake.solSinObjeto";
+function solSinObjetoLeer(){ try{ return JSON.parse(localStorage.getItem(LS_SOLSIN) || "{}") || {}; }catch(e){ return {}; } }
+function solSinObjetoMarcar(id){
+  try{
+    const o = solSinObjetoLeer(); o[String(id)] = Date.now();
+    const k = Object.keys(o);
+    if(k.length > 60) k.sort((a,b)=> o[a] - o[b]).slice(0, k.length - 60).forEach(x=>{ delete o[x]; });
+    localStorage.setItem(LS_SOLSIN, JSON.stringify(o));
+  }catch(e){}
+}
+function idsPendientesEquipo(){
+  const s = new Set();
+  (adm.usuarios || []).forEach(u=> (Array.isArray(u.pendientes) ? u.pendientes : []).forEach(a=> s.add(String(a.id))));
+  return s;
+}
+function estadoSolicitud(s){
+  if(solSinObjetoLeer()[String(s.id)]) return "cerrada";
+  const ids = idsPendientesEquipo();
+  if(ids.size && s.idAct && !ids.has(String(s.idAct))) return "probable";
+  return "ok";
+}
+
 /* v56: solicitudes de reasignación pendientes (solo administrador). */
 function pintarSolicitudes(){
   const cont = $("#admSolicitudes");
@@ -4430,37 +4476,47 @@ function pintarSolicitudes(){
   const L = adm.solicitudes || [];
   if(!L.length){ cont.innerHTML = `<p class="pista act-vacio">Sin solicitudes pendientes.</p>`; return; }
   cont.innerHTML = L.map(s=>{
+    const est = estadoSolicitud(s);   /* v70: "ok" | "probable" | "cerrada" */
     const prop = normCliente(s.propuesta || "");
     const cand = adm.usuarios.filter(u=> u.usuario !== s.solicitante);
     const sel = prop ? (cand.find(u=> normCliente(u.nombre).includes(prop)) || {}).usuario : "";
     const opts = cand.map(u=> `<option value="${esc(u.usuario)}"${u.usuario === sel ? " selected" : ""}>${esc(u.nombre)}</option>`).join("");
-    return `<div class="adm-persona" data-sol="${esc(s.id)}">
+    const aviso = est === "cerrada"
+      ? `<div class="sol-aviso">La actividad ya está cerrada: no se puede reasignar. Cierre esta solicitud para quitarla de la lista.</div>`
+      : (est === "probable"
+        ? `<div class="sol-aviso">Esta actividad ya no aparece como pendiente (parece cerrada). Si es así, el servidor no dejará autorizarla: use «Cerrar solicitud».</div>`
+        : "");
+    return `<div class="adm-persona" data-sol="${esc(s.id)}" data-est="${est}">
       <b>${esc(s.nombre)}</b><span class="adm-puesto">${esc(s.fecha)}</span>
       <div class="adm-tarea">
         <div>${esc(s.actividad)}</div>
         ${s.motivo ? `<div class="adm-meta">Motivo: ${esc(s.motivo)}</div>` : ""}
         ${s.propuesta ? `<div class="adm-meta">Propone: ${esc(s.propuesta)}</div>` : ""}
-        <label class="adm-campo">Asignar a</label>
-        <select class="sol-resp"><option value="">— Elige a la persona —</option>${opts}</select>
+        ${aviso}
+        ${est === "cerrada" ? "" : `<label class="adm-campo">Asignar a</label>
+        <select class="sol-resp"><option value="">— Elige a la persona —</option>${opts}</select>`}
         <input type="text" class="sol-nota" maxlength="200" placeholder="Nota (opcional)">
         <div class="adm-acciones">
-          <button type="button" class="sol-ok">Autorizar</button>
-          <button type="button" class="sol-no" data-peligro="1">Rechazar</button>
+          ${est === "cerrada" ? "" : `<button type="button" class="sol-ok">Autorizar</button>`}
+          <button type="button" class="sol-no"${est === "ok" ? ` data-peligro="1"` : ""}>${est === "ok" ? "Rechazar" : "Cerrar solicitud"}</button>
         </div>
       </div>
     </div>`;
   }).join("");
   cont.querySelectorAll(".adm-persona").forEach(caja=>{
     const id = caja.dataset.sol;
-    caja.querySelector(".sol-ok").onclick = ()=>{
+    const sinObjeto = caja.dataset.est !== "ok";
+    const okBtn = caja.querySelector(".sol-ok");
+    if(okBtn) okBtn.onclick = ()=>{
       const responsable = caja.querySelector(".sol-resp").value;
       if(!responsable){ avisar("Falta elegir", "Elija a quién se asigna la actividad.", "alerta"); return; }
       procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"autorizar_reasignacion", solicitud:id, responsable,
                     nota:caja.querySelector(".sol-nota").value.trim() }, "Autorizando la reasignación…", "Reasignación autorizada");
     };
     caja.querySelector(".sol-no").onclick = ()=>{
-      procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id,
-                    nota:caja.querySelector(".sol-nota").value.trim() }, "Rechazando la solicitud…", "Solicitud rechazada");
+      const nota = caja.querySelector(".sol-nota").value.trim() || (sinObjeto ? "Sin objeto: la actividad ya estaba cerrada." : "");
+      procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id, nota },
+        sinObjeto ? "Cerrando la solicitud…" : "Rechazando la solicitud…", sinObjeto ? "Solicitud cerrada" : "Solicitud rechazada");
     };
   });
 }

@@ -1611,7 +1611,8 @@ function encolar(sobre){
    versiones anteriores; (4) el menú muestra la versión. Los reportes del colaborador NO se tocan. */
 /* v71 (10-oct-2026) — Jorge Galicia: las actividades se pueden marcar Terminada/Pendiente/Cancelada desde que se
    registra la llegada, no hasta el regreso de comer. Son borrador local; el envío sigue al cerrar el servicio. */
-const APP_VER = "v71";
+/* v72 (10-oct-2026) — Aviso claro de fotos: DESPUÉS = obligatorias (mínimo 3) para cerrar; ANTES = recomendadas, no bloquean. */
+const APP_VER = "v72";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2048,13 +2049,17 @@ function pintarEvidencia(){
   $("#evTitulo").textContent = fase==="antes"
     ? "Evidencia — ANTES de iniciar" : "Evidencia — DESPUÉS (al terminar)";
   const faltanF = Math.max(0, 3 - fotos.length);
+  /* v72: se aclara qué es obligatorio. DESPUÉS (cierre) bloquea la salida; ANTES solo se recomienda. */
+  const oblig = fase !== "antes";
   $("#evNota").textContent = bloqueado
     ? "Primero registra la llegada; luego podrás tomar las fotos."
-    : (faltanF ? `Faltan ${faltanF} foto(s). Mínimo 3. Usa el botón +.` : "Fotos completas. Puedes agregar más con el botón +.");
-  $("#evNota").dataset.falta = (!bloqueado && faltanF) ? "1" : "0";
+    : (oblig
+        ? (faltanF ? `Obligatorio para cerrar el servicio: 3 fotos como mínimo. Faltan ${faltanF}. Usa el botón +.` : "Fotos del cierre completas. Puedes agregar más con el botón +.")
+        : (faltanF ? `Recomendado: 3 fotos antes de iniciar (faltan ${faltanF}). No bloquea el cierre. Usa el botón +.` : "Fotos de antes completas. Puedes agregar más con el botón +."));
+  $("#evNota").dataset.falta = (!bloqueado && oblig && faltanF) ? "1" : "0";
   const c=$("#evConteo");
-  c.textContent = fotos.length<3 ? `${fotos.length} / 3 mínimo` : `${fotos.length} fotos ✓`;
-  c.dataset.completo = fotos.length>=3 ? "1" : "0";
+  c.textContent = fotos.length<3 ? `${fotos.length} / 3 ${oblig ? "mínimo para cerrar" : "recomendadas"}` : `${fotos.length} fotos ✓`;
+  c.dataset.completo = fotos.length>=3 ? "1" : (oblig ? "0" : "2");
 
   let html = fotos.map(f=>{
     if(f.enviada && !f.url) return `<div class="celda enviada"><span>✓</span></div>`;

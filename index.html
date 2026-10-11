@@ -1609,7 +1609,9 @@ function encolar(sobre){
    Ahora: (1) mandarAdmin espera el recibo y muestra el motivo al instante; (2) una acción de administrador
    rechazada se retira y se avisa qué cambio fue y por qué; (3) al abrir la app se limpian las que quedaron de
    versiones anteriores; (4) el menú muestra la versión. Los reportes del colaborador NO se tocan. */
-const APP_VER = "v70";
+/* v71 (10-oct-2026) — Jorge Galicia: las actividades se pueden marcar Terminada/Pendiente/Cancelada desde que se
+   registra la llegada, no hasta el regreso de comer. Son borrador local; el envío sigue al cerrar el servicio. */
+const APP_VER = "v71";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2111,10 +2113,21 @@ function pintarTrabajoAsig(){
     setTimeout(refrescarActividades, 0);
   }
   const lista = actividadesDelCliente();
+  /* v71: desde la llegada ya se pueden marcar Terminada / Pendiente / Cancelada (borrador en el teléfono);
+     el envío sigue siendo hasta cerrar el servicio. */
+  const puedeMarcar = !!estado.eventos.llegada;
   $("#trabajoAsigAyuda").textContent = lista.length
-    ? `${lista.length} actividad(es). Se marcan como Terminada, Pendiente o Cancelada al cerrar el servicio.`
+    ? (puedeMarcar
+        ? `${lista.length} actividad(es). Marca las que ya trabajaste, desde ahora. Terminada: detalla qué hiciste. Pendiente o Cancelada: explica por qué. Tus marcas se guardan en el teléfono y se envían al cerrar el servicio.`
+        : `${lista.length} actividad(es). Podrás marcarlas como Terminada, Pendiente o Cancelada en cuanto registres tu llegada.`)
     : (act.cargando ? "Cargando tus actividades…" : "No tienes actividades asignadas con este cliente. Si haces trabajos, regístralos al cerrar como actividad adicional.");
-  $("#trabajoAsigLista").innerHTML = lista.map(htmlActConsulta).join("");
+  const cont = $("#trabajoAsigLista");
+  if(!puedeMarcar){ cont.innerHTML = lista.map(htmlActConsulta).join(""); return; }
+  const f = document.activeElement;
+  if(f && /^(TEXTAREA|INPUT)$/.test(f.tagName) && cont.contains(f)) return;
+  cont.innerHTML = lista.map(htmlActItem).join("");
+  enlazarActItems(cont);
+  pintarContadoresNota();
 }
 let cierreActPedido = false;
 function prepararCierreAct(){

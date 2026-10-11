@@ -441,6 +441,7 @@ body{
 .inicio-estado{font-family:var(--dato);font-size:11.5px;color:var(--plata);text-align:center;margin-top:6px;line-height:1.5}
 .inicio-estado[data-pend="1"]{color:var(--ambar)}
 .inicio-estado[data-pend="2"]{color:#ff4d4d;font-weight:600}
+.inicio-version{font-family:var(--dato);font-size:10.5px;color:var(--plata);opacity:.55;text-align:center;margin:2px 0 0;letter-spacing:.04em}
 /* v36: instalar la app en el telefono */
 #btnInstalar{display:block;width:100%;margin:10px 0 2px;padding:12px 14px;border-radius:10px;border:1px solid var(--naranja-glow, #ff8a1f);background:transparent;color:var(--plata);font-family:var(--dato);font-size:12.5px;letter-spacing:.04em;cursor:pointer}
 #btnInstalar[hidden]{display:none}
@@ -980,6 +981,7 @@ body{
       <span id="inicioClienteDet">Panel de administrador: registra un cliente nuevo con su obra, correo y ubicación.</span>
     </button>
     <p class="inicio-estado" id="inicioEstado">—</p>
+    <p class="inicio-version" id="inicioVersion"></p>
     <button id="btnInstalar" type="button" hidden>Instalar la app en este teléfono</button>
     <button class="link-volver link-centro" id="btnMiBio" type="button" hidden>Activar huella o rostro en este teléfono</button>
     <button class="link-volver link-centro" id="btnMiClave" type="button">Cambiar mi contraseña</button>
@@ -1551,6 +1553,15 @@ async function cargarCola(){
     const nuevos = estado.cola.filter(x=> x._qid && !ya.has(x._qid));
     estado.cola = enBD.concat(nuevos).sort((a,b)=> a._qid < b._qid ? -1 : 1);
     estado.rechazados = await bdTodos("rechazados");
+    /* v69: limpia lo que dejaron las versiones anteriores: acciones de administrador rechazadas
+       (no son reportes). Esto es lo que mantenía el letrero rojo sin poder quitarse. Los reportes,
+       fotos, cancelaciones y registros de jornada rechazados NO se tocan. */
+    const admViejos = estado.rechazados.filter(s=> s && s.tipo === "asignar");
+    if(admViejos.length){
+      estado.rechazados = estado.rechazados.filter(s=> !(s && s.tipo === "asignar"));
+      for(const s of admViejos){ try{ await bdDel("rechazados", s._qid); }catch(e){} }
+      estado._admLimpiados = admViejos;
+    }
     await cargarFotosServicio();
     await cargarVideos();                            // v68
   }catch(e){
@@ -1558,6 +1569,13 @@ async function cargarCola(){
   }
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   _colaLista = true;
+  try{
+    if(estado._admLimpiados && estado._admLimpiados.length){
+      const l = estado._admLimpiados.map(s=> "• " + esc(descripcionAdmin(s)) + ": " + esc(humanizarError(s._ultimoError))).join("<br>");
+      estado._admLimpiados = [];
+      avisar("Se retiró un letrero viejo", "Eran cambios de administrador que el servidor no aceptó (no son reportes) y no se aplicaron:<br>" + l + "<br>Sus reportes no se tocaron.", "error");
+    }
+  }catch(e){}
 }
 
 function encolar(sobre){
@@ -1579,7 +1597,15 @@ function encolar(sobre){
 /* v62: buscador de colaboradores, filtro por colaborador en Pendientes del equipo y bloqueo de duplicados al asignar (solo app; el conector no cambia). */
 /* v63: editar actividad asignada, prioridad por actividad (Alta 1 / Media 3 / Baja 7 días hábiles, lunes a sábado) y aviso de atraso.
    Los botones nuevos solo salen si el conector los anuncia en equipo=1 (caps). Sin conector v63 la app se comporta como la v62b. */
-const APP_VER = "v68";
+/* v69 (10-oct-2026) — Letrero rojo "rechazados" que no se quitaba (Jorge Galicia).
+   Causa: las ediciones/cambios de administrador pasaban por la cola de reportes; si el servidor las rechazaba
+   3 veces ("El texto no cambió", "La actividad ya no está pendiente") quedaban apartadas como "Rechazados por el
+   servidor", sin decir cuál era, y reenviar volvía a fallar con el mismo motivo.
+   Ahora: (1) mandarAdmin espera el recibo y muestra el motivo al instante; (2) una acción de administrador
+   rechazada se retira y se avisa qué cambio fue y por qué; (3) al abrir la app se limpian las que quedaron de
+   versiones anteriores; (4) el menú muestra la versión. Los reportes del colaborador NO se tocan. */
+const APP_VER = "v69";
+try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
   delete limpio._qid; delete limpio._u; delete limpio._intentos; delete limpio._ultimoError;
@@ -1609,9 +1635,31 @@ async function enviarUno(sobre){
 
 const esErrorSesion = t => /sesi[oó]n\s+(no\s+v[aá]lida|vencida)/i.test(String(t||""));
 function nombreSobre(s){
+  if(s && s.tipo === "asignar") return descripcionAdmin(s);   /* v69 */
   const n = { foto:"Foto", foto_act:"Foto de actividad", reporte_act:"Reporte de actividades", hoja:"Correo del reporte al cliente",
               cancelacion:"Cancelación", asignar:"Asignación", cliente:"Alta de cliente", evento:"Registro de jornada" };
   return (n[s.tipo] || "Registro") + (s.folio ? " · folio " + s.folio : "") + (s.cliente ? " · " + s.cliente : "");
+}
+
+/* v69 · Acciones de ADMINISTRADOR (editar, prioridad, reasignar, fecha, cancelar, autorizar, asignar).
+   NO son reportes del colaborador: si el servidor las rechaza (la actividad ya no estaba pendiente,
+   el texto no cambió, ya existía una igual…) no deben quedarse en el teléfono como "rechazados"
+   ni hacer pensar que falta un reporte. Se retiran y se avisa QUÉ cambio fue y POR QUÉ no se aplicó. */
+function descripcionAdmin(s){
+  const a = String((s && s.accion) || "");
+  const n = { editar:"Edición de actividad", prioridad:"Cambio de prioridad", reasignar:"Reasignación de actividad",
+              fecha:"Cambio de fecha", cancelar:"Cancelación de actividad", pedir_reasignacion:"Solicitud de reasignación",
+              autorizar_reasignacion:"Autorización de reasignación", rechazar_reasignacion:"Rechazo de reasignación" };
+  if(n[a]) return n[a];
+  const k = Array.isArray(s && s.textos) ? s.textos.length : 0;
+  return "Asignación de actividades" + (k ? " (" + k + ")" : "");
+}
+function humanizarError(t){
+  const s = String(t || "").split("\n")[0].replace(/^Error:\s*/i, "").trim();
+  if(/texto no cambi/i.test(s)) return "el texto es igual al que ya tiene la actividad.";
+  if(/ya no est[aá] pendiente/i.test(s)) return "la actividad ya no está pendiente (otra persona la cerró o la cambió antes).";
+  if(/^Ya existe una pendiente/i.test(s)) return s.replace(/\s+No se asign[oó] nada\.?$/i, "").replace(/\.$/, "") + ".";
+  return (s || "el servidor no aceptó el cambio") + (/[.!]$/.test(s) ? "" : ".");
 }
 
 /* v41: aclaraciones enviadas con folio vacío (antes de v41). Se les pone su propio
@@ -1669,6 +1717,17 @@ async function enviarCola(){
         if(sobre._intentos < 3){
           if(!BD.sinBD) bdPut("cola", sobre).catch(fallaGuardado);
           break;                               // se reintenta en el siguiente ciclo
+        }
+        /* v69: una acción de administrador rechazada NO se aparta como "rechazado" (eso se leía como
+           "no mandó un reporte"): se retira y se dice qué cambio fue y por qué no se aplicó. */
+        if(sobre.tipo === "asignar"){
+          estado.cola.shift();
+          persistir();
+          if(!BD.sinBD) bdDel("cola", sobre._qid).catch(()=>{});
+          avisar("Cambio NO aplicado",
+            `${esc(descripcionAdmin(sobre))}: ${esc(humanizarError(res.error))} No se hizo ningún cambio y no falta ningún reporte.`, "error");
+          pintarCola(); pintarEstadoInicio();
+          continue;
         }
         /* Tercer rechazo: se aparta para no frenar todo lo demás. No se borra. */
         if(envio.activo){ envio.rechazos++; envio.motivo = res.error; }   /* v41 */
@@ -4270,7 +4329,7 @@ async function procesarSolicitud(sobre, titulo, exito){
       if(!BD.sinBD) bdDel("cola", qid).catch(()=>{});
       const ses = esErrorSesion(msg) || estado.sesionVencida;
       procMostrar("error", "No se pudo", ses ? "Su sesión venció" : "El servidor no aceptó el cambio",
-        msg + " · No se hizo ningún cambio. " + (ses ? "Cierre sesión, entre de nuevo con señal y repita." : "Intente otra vez."), true);
+        (ses ? msg : humanizarError(msg).replace(/^./, c=>c.toUpperCase())) + " · No se hizo ningún cambio. " + (ses ? "Cierre sesión, entre de nuevo con señal y repita." : "Intente otra vez."), true);
     }else if(it){
       procMostrar("error", "Pendiente de envío", "Aún no se envía", navigator.onLine
         ? "El servidor no respondió a tiempo. El cambio quedó guardado en el teléfono y se enviará solo; espere unos minutos y actualice."
@@ -4644,12 +4703,11 @@ async function esperarColaYClientes(){
 
 /* Envía el sobre y vuelve a leer el equipo para confirmar contra la hoja. */
 function mandarAdmin(sobre, titulo){
-  encolar(sobre);
+  /* v69: antes se encolaba y se avisaba "enviando" sin esperar al servidor; si lo rechazaba
+     (texto igual, actividad ya cerrada…) el cambio se quedaba como "registro rechazado" en el
+     teléfono para siempre. Ahora se espera el recibo y, si falla, se dice el motivo al instante. */
+  procesarSolicitud(sobre, "Guardando el cambio", titulo);
   pintarBotonAsignar();
-  avisar(titulo, navigator.onLine
-    ? "Enviando al servidor; la lista se actualiza sola al terminar."
-    : "Sin señal: quedó guardado en el teléfono y se enviará al recuperar la conexión.", "ok");
-  esperarColaYRefrescar();
 }
 async function esperarColaYRefrescar(){
   for(let i = 0; i < 40 && estado.cola.length; i++) await new Promise(r=>setTimeout(r, 500));

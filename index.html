@@ -730,6 +730,15 @@ body{
   cursor:pointer;user-select:none}
 .ver-clave input{width:19px;height:19px;min-height:0;padding:0;margin:0;
   accent-color:var(--naranja);flex:0 0 auto}
+.tipo-ops{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 12px}
+.tipo-op{min-height:56px;padding:8px;border:1px solid var(--linea);background:transparent;color:var(--plata);border-radius:3px;cursor:pointer;font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;white-space:normal;line-height:1.2}
+.tipo-op[aria-pressed="true"]{background:var(--naranja,#E8761E);border-color:var(--naranja,#E8761E);color:#fff}
+.tipo-campo{margin:8px 0}
+.tipo-in{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #3a4452;background:#0f141a;color:#e8eef5;font-size:16px}
+.tipo-in:disabled{opacity:.45}
+.tipo-ns{display:flex;gap:8px;align-items:center;font-size:13px;color:#9fb0c3;margin-top:4px}
+.tipo-cont{font-size:13px;margin-top:6px;color:#FFC24D}
+.tipo-cont[data-ok="1"]{color:var(--verde)}
 </style>
 </head>
 <body>
@@ -1612,7 +1621,10 @@ function encolar(sobre){
 /* v71 (10-oct-2026) — Jorge Galicia: las actividades se pueden marcar Terminada/Pendiente/Cancelada desde que se
    registra la llegada, no hasta el regreso de comer. Son borrador local; el envío sigue al cerrar el servicio. */
 /* v72 (10-oct-2026) — Aviso claro de fotos: DESPUÉS = obligatorias (mínimo 3) para cerrar; ANTES = recomendadas, no bloquean. */
-const APP_VER = "v72";
+/* v73 (10-oct-2026) — PILOTO (solo Manuel): al marcar Terminada en un servicio a cliente, formulario por tipo de trabajo
+   (calibración, instalación/reemplazo, traslado/maniobra, reparación/mantenimiento) con campos exactos y «No lo sé».
+   Compone la nota automáticamente; bloquea la salida si falta el tipo o algún campo. Servicios internos sin cambio. */
+const APP_VER = "v73";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2598,9 +2610,112 @@ function textoActividades(){
   const todo = hechasCierre().concat(adicionalesCierre());
   return todo.map((t,i)=>`${i+1}. ${t}`).join("\n");
 }
+
+/* ---------- v73: formulario por tipo de trabajo (PILOTO: solo usuarios de PILOTO_FORM, servicios a clientes) ---------- */
+const PILOTO_FORM = ["juanma.dichter.97@gmail.com"];
+const PLANTAS_BASE = ["Pragmacero","Santa María","NM-60","Bloquera","Concretera"];
+const TIPOS_TRABAJO = {
+  calibracion:{ t:"Calibración de básculas, celdas y cuenta litros", campos:[
+    ["equipo","¿Qué equipo se calibró? (báscula de cemento, de agregados, cuenta litros, celda…)","Equipo"],
+    ["planta","¿En qué planta o sitio?","Planta",true],
+    ["patron","¿Con qué se calibró? (pesas patrón, taras, tambo de 200 L…)","Patrón usado"],
+    ["resultado","¿Cuál fue el resultado? (error o lectura final)","Resultado"] ]},
+  instalacion:{ t:"Instalación o reemplazo de piezas", campos:[
+    ["pieza","¿Qué pieza o equipo se instaló o reemplazó?","Pieza"],
+    ["cantidad","¿Cuántas piezas?","Cantidad"],
+    ["medida","¿De qué medida, tipo o modelo?","Medida/tipo"],
+    ["planta","¿En qué planta o sitio?","Planta",true],
+    ["lugar","¿En qué parte quedó? (tablero, silo, banda…)","Lugar"],
+    ["motivo","¿Por qué se instaló o reemplazó?","Motivo"] ]},
+  traslado:{ t:"Traslado y maniobra con grúa", campos:[
+    ["que","¿Qué se movió o cargó?","Qué se movió"],
+    ["cuantos","¿Cuántos?","Cantidad"],
+    ["origen","¿De dónde salió?","Origen"],
+    ["destino","¿A dónde se llevó o dónde se colocó?","Destino"],
+    ["equipo","¿Qué equipo se usó? (grúa hiab, montacargas…)","Equipo usado"] ]},
+  reparacion:{ t:"Reparación o mantenimiento de tablero o planta", campos:[
+    ["equipo","¿Qué tablero o equipo se atendió?","Equipo"],
+    ["planta","¿En qué planta o sitio?","Planta",true],
+    ["falla","¿Qué falla o necesidad había?","Falla"],
+    ["hecho","¿Qué se hizo?","Trabajo realizado"],
+    ["prueba","¿Cómo se probó y qué resultado dio?","Prueba"],
+    ["prog","Si hubo programación: ¿qué programa o sistema se modificó y quedó respaldo? (escribe «No hubo» si no aplica)","Programación"] ]}
+};
+function formServicioActivo(){
+  return PILOTO_FORM.indexOf(String(estado.usuario||"").toLowerCase()) >= 0 && !esInterno();
+}
+function tipoDe(id){ const T = act.tipos && act.tipos[id]; return (T && TIPOS_TRABAJO[T.k]) ? T : null; }
+function camposFaltantes(id){
+  const T = tipoDe(id); if(!T) return 0;
+  return TIPOS_TRABAJO[T.k].campos.filter(([k])=> !(T.ns && T.ns[k]) && !limpiaTxt((T.v||{})[k])).length;
+}
+function componerNotaTipo(id){
+  const T = tipoDe(id); if(!T) return;
+  const def = TIPOS_TRABAJO[T.k];
+  const base = PLANTAS_BASE.map(x=>x.toLowerCase());
+  const partes = def.campos.map(([k,,lab,esP])=>{
+    const ns = T.ns && T.ns[k], v = limpiaTxt((T.v||{})[k]);
+    if(ns) return `${lab}: NO SABE (aclarar en oficina)`;
+    if(!v) return `${lab}: (falta)`;
+    return `${lab}: ${v}` + ((esP && base.indexOf(v.toLowerCase())<0) ? " (planta por confirmar)" : "");
+  });
+  const extra = limpiaTxt(T.extra);
+  act.notas[id] = `[TIPO: ${def.t}] ` + partes.join(". ") + "." + (extra ? ` Detalle adicional: ${extra}` : "");
+}
+function htmlFormTipo(id, m){
+  const T = tipoDe(id);
+  const chips = Object.keys(TIPOS_TRABAJO).map(k=>`<button type="button" class="tipo-op" data-id="${esc(id)}" data-k="${k}" aria-pressed="${!!(T && T.k===k)}">${esc(TIPOS_TRABAJO[k].t)}</button>`).join("");
+  let html = `<label class="act-nota-lbl">Tipo de trabajo (obligatorio)</label><div class="tipo-ops">${chips}</div>`;
+  if(T){
+    const def = TIPOS_TRABAJO[T.k];
+    html += def.campos.map(([k,q,lab,esP])=>{
+      const ns = !!(T.ns && T.ns[k]), v = (T.v||{})[k] || "";
+      return `<div class="tipo-campo"><label class="act-nota-lbl">${esc(q)}</label>
+        <input type="text" class="tipo-in" data-id="${esc(id)}" data-c="${k}" value="${esc(v)}" ${ns?"disabled":""} ${esP?'list="listaPlantas"':""} autocomplete="off" spellcheck="true" lang="es">
+        <label class="tipo-ns"><input type="checkbox" class="tipo-nosabe" data-id="${esc(id)}" data-c="${k}" ${ns?"checked":""}> No lo sé (la oficina lo aclara)</label></div>`;
+    }).join("");
+    html += `<label class="act-nota-lbl">Detalle adicional (opcional)</label>
+      <textarea class="act-nota tipo-extra" data-id="${esc(id)}" data-extra="1" spellcheck="true" lang="es" placeholder="Algo más que quieras dejar asentado">${esc(T.extra||"")}</textarea>
+      <div class="tipo-cont" data-id="${esc(id)}"></div>`;
+  }
+  return html;
+}
+function pintarContTipo(){
+  document.querySelectorAll(".tipo-cont").forEach(c=>{
+    const f = camposFaltantes(c.dataset.id);
+    c.dataset.ok = f ? "0" : "1";
+    c.textContent = f ? `Faltan ${f} campo(s) por contestar (o marcar «No lo sé»)` : "✓ Formulario completo";
+  });
+}
+function enlazarFormTipo(cont){
+  cont.querySelectorAll(".tipo-op").forEach(b=>{
+    b.onclick = ()=>{
+      const id = b.dataset.id, k = b.dataset.k;
+      act.tipos = act.tipos || {};
+      if(act.tipos[id] && act.tipos[id].k===k) delete act.tipos[id];
+      else act.tipos[id] = { k, v:{}, ns:{}, extra:"" };
+      if(tipoDe(id)) componerNotaTipo(id); else act.notas[id] = "";
+      guardarAct(); repintarAct();
+    };
+  });
+  cont.querySelectorAll(".tipo-in").forEach(i=>{
+    i.oninput = ()=>{ const T = tipoDe(i.dataset.id); if(!T) return; T.v[i.dataset.c] = i.value; componerNotaTipo(i.dataset.id); guardarAct(); pintarContTipo(); pintarContadoresNota(); pintarBoton(); };
+  });
+  cont.querySelectorAll(".tipo-nosabe").forEach(i=>{
+    i.onchange = ()=>{ const T = tipoDe(i.dataset.id); if(!T) return; T.ns[i.dataset.c] = i.checked; if(i.checked) T.v[i.dataset.c] = ""; componerNotaTipo(i.dataset.id); guardarAct(); repintarAct(); };
+  });
+  cont.querySelectorAll(".tipo-extra").forEach(t=>{
+    t.oninput = ()=>{ const T = tipoDe(t.dataset.id); if(!T) return; T.extra = t.value; componerNotaTipo(t.dataset.id); guardarAct(); pintarContTipo(); pintarContadoresNota(); pintarBoton(); };
+  });
+  pintarContTipo();
+}
+
 function medirActividades(){
   const ids = idsMarcadosCliente();
-  const terminadasCortas = ids.filter(id=>act.marcas[id]==="TERMINADA" && limpiaTxt(act.notas[id]).length < MIN_DETALLE).length;
+  const form = formServicioActivo();
+  const terminadasCortas = ids.filter(id=>act.marcas[id]==="TERMINADA" && !(form) && limpiaTxt(act.notas[id]).length < MIN_DETALLE).length;
+  const sinTipo = form ? ids.filter(id=>act.marcas[id]==="TERMINADA" && !tipoDe(id)).length : 0;
+  const conCamposFaltantes = form ? ids.filter(id=>act.marcas[id]==="TERMINADA" && tipoDe(id) && camposFaltantes(id)>0).length : 0;
   const sinMotivo = ids.filter(id=>act.marcas[id]!=="TERMINADA" && !limpiaTxt(act.notas[id])).length;
   const llenos = estado.renglones.map(normRenglon).filter(renglonLleno);
   const renglonesIncompletos = llenos.filter(r=>limpiaTxt(r.titulo).length < MIN_TITULO || limpiaTxt(r.detalle).length < MIN_DETALLE).length;
@@ -2608,6 +2723,8 @@ function medirActividades(){
   const ninguna = ids.length === 0 && llenos.length === 0;
   const faltan = [];
   if(terminadasCortas) faltan.push(`detallar ${terminadasCortas} actividad(es) terminada(s) (mínimo ${MIN_DETALLE} caracteres cada una)`);
+  if(sinTipo) faltan.push(`elegir el tipo de trabajo de ${sinTipo} actividad(es) terminada(s)`);
+  if(conCamposFaltantes) faltan.push(`contestar el formulario de ${conCamposFaltantes} actividad(es) terminada(s) (o marcar «No lo sé»)`);
   if(sinMotivo) faltan.push(`explicar ${sinMotivo} actividad(es) pendiente(s) o cancelada(s)`);
   if(renglonesIncompletos) faltan.push(`completar ${renglonesIncompletos} actividad(es) ${conAsig ? "adicional(es)" : ""} (título y detalle de mínimo ${MIN_DETALLE} caracteres)`.replace("  "," "));
   if(ninguna) faltan.push(conAsig ? "marcar al menos una actividad asignada o agregar una adicional" : "describir la Actividad 1 (título y detalle)");
@@ -3607,12 +3724,12 @@ function guardarAct(){
   try{
     localStorage.setItem(claveAct(), JSON.stringify({
       lista:act.lista, actualizado:act.actualizado, marcas:act.marcas,
-      notas:act.notas, adicionales:act.adicionales, detalle:act.detalle
+      notas:act.notas, adicionales:act.adicionales, detalle:act.detalle, tipos:act.tipos
     }));
   }catch(e){ /* almacenamiento lleno: el borrador sigue en memoria */ }
 }
 function cargarAct(){
-  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], cargando:false });
+  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, tipos:{}, adicionales:[], detalle:"", fotos:[], cargando:false });
   try{
     const g = JSON.parse(localStorage.getItem(claveAct()) || "null");
     if(g) Object.assign(act, g, { fotos:[], cargando:false });
@@ -3996,9 +4113,9 @@ function htmlActItem(a){
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     ${htmlReasig(a)}
     <div class="act-ops">${ops}</div>
-    ${pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
+    ${(m==="TERMINADA" && formServicioActivo()) ? htmlFormTipo(id, m) : (pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
     <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
-    ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : ""}
+    ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
   </div>`;
 }
 function enlazarActItems(cont){
@@ -4012,7 +4129,8 @@ function enlazarActItems(cont){
       }
     };
   });
-  cont.querySelectorAll(".act-nota").forEach(t=>{
+  enlazarFormTipo(cont);
+  cont.querySelectorAll(".act-nota:not([data-extra])").forEach(t=>{
     t.oninput = ()=>{ act.notas[t.dataset.id] = t.value; guardarAct(); pintarContadoresNota(); pintarEnvioAct(); pintarBoton(); };
   });
 }
@@ -4119,7 +4237,7 @@ function encolarReporteAct(o){
     if(a && act.marcas[id]==="PENDIENTE" && nota) a.nota = (a.nota ? a.nota + "\n" : "") + `[${sello}] ${nota}`;
   });
   act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
-  act.marcas = {}; act.notas = {}; act.adicionales = [];
+  act.marcas = {}; act.notas = {}; act.tipos = {}; act.adicionales = [];
   guardarAct();
 }
 
@@ -4274,7 +4392,7 @@ async function enviarActividades(){
     if(a && act.marcas[id]==="PENDIENTE" && nota) a.nota = (a.nota ? a.nota + "\n" : "") + `[${sello}] ${nota}`;
   });
   act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
-  act.marcas = {}; act.notas = {}; act.adicionales = []; act.detalle = ""; act.fotos = [];
+  act.marcas = {}; act.notas = {}; act.tipos = {}; act.adicionales = []; act.detalle = ""; act.fotos = [];
   $("#actDetalle").value = "";
   guardarAct(); guardarFotosAct();
   $("#actividadesPantalla").hidden = true;

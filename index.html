@@ -795,6 +795,7 @@ body{
       <div id="vidAviso"></div>
       <button class="btn btn-sec" id="btnVideo" type="button" disabled>+ Agregar video</button>
       <input type="file" id="camaraVid" accept="video/*" hidden>
+      <input type="file" id="camaraPorAct" accept="image/*" multiple hidden>
     </div>
   </section>
 
@@ -821,6 +822,16 @@ body{
     <div id="actRenglones"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar actividad adicional</button>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
+    <div id="bloqueRefac">
+    <label class="campo-lbl">Refacciones o materiales utilizados <b>(opcional)</b></label>
+    <p class="renglon-ayuda">Anote cada pieza o material que se usó y la cantidad. Si no se usó ninguno, marque la casilla de abajo.</p>
+    <div id="refacLista"></div>
+    <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
+    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
+    <label class="campo-lbl" for="comentCliente">Comentarios del cliente <b>(opcional)</b></label>
+    <textarea id="comentCliente" rows="3" maxlength="500" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Lo que el cliente quiera dejar asentado sobre el servicio"></textarea>
+    <p class="renglon-cont" id="comentCont">0 / 500</p>
+    </div>
     <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
     <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
     <div class="firma-caja" id="firmaTecCaja">
@@ -839,6 +850,7 @@ body{
 
   <section class="accion">
     <button class="btn" id="btnPaso">Registrar llegada</button>
+    <button class="btn btn-sec" id="btnCierreDirecto" type="button" hidden>Terminar servicio sin salir a comer</button>
     <p class="nota-btn" id="notaBtn">Se capturará su hora y ubicación al presionar.</p>
     <div class="cierre" id="cierre" hidden>
       <div class="cierre-icono" id="cierreIcono">✓</div>
@@ -1383,16 +1395,24 @@ const ORDENES_DEFAULT = [
 ];
 let ORDENES = ORDENES_DEFAULT.slice();
 
-const SECUENCIA = [
+/* v75: lunes a viernes = 4 momentos; sábado (8:00 a 13:00, sin hora de comida) = llegada y salida. */
+const SECUENCIA_COMPLETA = [
   { id:"llegada", nombre:"Llegada",  boton:"Registrar llegada",  fase:"antes"   },
   { id:"comida",  nombre:"Comida",   boton:"Salida a comida",    fase:"antes"   },
   { id:"regreso", nombre:"Regreso",  boton:"Regreso de comida",  fase:"despues" },
   { id:"salida",  nombre:"Salida",   boton:"Salida del servicio",fase:"despues" }
 ];
+const SECUENCIA_SABADO = [
+  { id:"llegada", nombre:"Llegada",  boton:"Registrar llegada",  fase:"despues" },
+  { id:"salida",  nombre:"Salida",   boton:"Salida del servicio",fase:"despues" }
+];
+const secuenciaActual = () => estado.sabado ? SECUENCIA_SABADO : SECUENCIA_COMPLETA;
 
 const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
+  sabado:false, cierreDirecto:false,   /* v75: se fijan al registrar la llegada / al elegir cerrar sin comida */
+  refacciones:[], sinRefacciones:false, comentarioCliente:"",
   actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0,   // sobres realmente entregados al conector en este servicio
@@ -1411,8 +1431,16 @@ function textoCola(){
 }
 
 const $ = s => document.querySelector(s);
-const faseActual = () => (estado.eventos.regreso ? "despues" : "antes");
-const pasoPendiente = () => SECUENCIA.find(p => !estado.eventos[p.id]) || null;
+const faseActual = () => ((estado.sabado || estado.cierreDirecto || estado.eventos.regreso) ? "despues" : "antes");
+const pasoPendiente = () => {
+  const sec = secuenciaActual();
+  if(estado.cierreDirecto && !estado.sabado && estado.eventos.llegada) return estado.eventos.salida ? null : sec.find(p=>p.id==="salida");
+  return sec.find(p => !estado.eventos[p.id]) || null;
+};
+/* v75: el formulario de cierre está disponible desde la llegada (lunes a sábado). */
+const enCierre = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida);
+/* ¿Puede cerrar sin comida? Solo entre semana, ya con llegada y sin haber salido a comer. */
+const puedeCierreDirecto = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida && !estado.sabado && !estado.cierreDirecto && !estado.eventos.comida);
 const hoy   = () => new Date().toLocaleDateString("es-MX");
 const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
 
@@ -1447,7 +1475,9 @@ function persistir(){
     };
     localStorage.setItem(LS.estado, JSON.stringify({
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
-      incluirFirma:estado.incluirFirma
+      incluirFirma:estado.incluirFirma,
+      sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
+      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, comentarioCliente:estado.comentarioCliente
     }));
     /* v36: la cola ya NO vive aquí sino en IndexedDB (ver "Almacén del
        teléfono"). Solo si el teléfono no tiene IndexedDB se usa el método viejo. */
@@ -1472,6 +1502,9 @@ function restaurar(){
       estado.renglones = Array.isArray(g.renglones) ? g.renglones.map(r=> (r && typeof r==="object") ? r : {titulo:"", detalle:String(r||"")})
         .filter(r=> String(r.titulo||"").trim() || String(r.detalle||"").trim()) : [];
       estado.incluirFirma = !!g.incluirFirma;
+      estado.sabado = !!g.sabado; estado.cierreDirecto = !!g.cierreDirecto;
+      estado.refacciones = Array.isArray(g.refacciones) ? g.refacciones : [];
+      estado.sinRefacciones = !!g.sinRefacciones; estado.comentarioCliente = String(g.comentarioCliente||"");
     }
     /* Cola vieja (v35 y anteriores) guardada en localStorage: se toma aquí y
        cargarCola() la pasa a IndexedDB sin perder nada. */
@@ -1625,7 +1658,14 @@ function encolar(sobre){
    (calibración, instalación/reemplazo, traslado/maniobra, reparación/mantenimiento) con campos exactos y «No lo sé».
    Compone la nota automáticamente; bloquea la salida si falta el tipo o algún campo. Servicios internos sin cambio. */
 /* v74 (10-oct-2026) — el Sr. Ernesto también ve el formulario por tipo de trabajo, para revisarlo. */
-const APP_VER = "v74";
+/* v75 (17-oct-2026) — (1) SÁBADO (8:00 a 13:00, sin hora de comida): solo Llegada y Salida, una sola evidencia con mínimo
+   3 fotos; el día se fija al registrar la llegada. (2) Lunes a viernes: el formulario de cierre aparece desde la llegada y
+   se puede cerrar sin salir a comer (botón «Terminar servicio sin salir a comer»); la comida no registrada queda como
+   sin registro. (3) Refacciones utilizadas (hasta 20 renglones o «no se utilizó ninguna») y comentarios del cliente
+   (500 caracteres), opcionales: no bloquean el cierre. (4) Tipo de trabajo «Otro» con descripción de mínimo 100
+   caracteres, sin «No lo sé». (5) Hasta 4 fotos OPCIONALES por actividad (además de las 3 del cierre, que siguen
+   siendo obligatorias). El conector de Google no cambia. */
+const APP_VER = "v75";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -1819,8 +1859,23 @@ async function cargarFotosServicio(){
     r.d.forEach((f, i)=>{ if(meta[i]){ if(!meta[i].url && f.url) meta[i].url = f.url; } else meta.push(f); });
     estado.fotos.despues = meta;
   }catch(e){}
+  cargarFotosAct2();
 }
 function borrarFotosServicio(){ if(!BD.sinBD) bdDel("servicio", "fotosDespues").catch(()=>{}); }
+/* v75: fotos opcionales por actividad, también en IndexedDB para no llenar el almacenamiento corto */
+function guardarFotosAct2(){
+  if(BD.sinBD) return;
+  bdPut("servicio", { k:"fotosAct", folio:(estado.orden && estado.orden.folio) || "", d:act.fotosAct || {} }).catch(fallaGuardado);
+}
+function borrarFotosAct(){ if(!BD.sinBD) bdDel("servicio", "fotosAct").catch(()=>{}); }
+async function cargarFotosAct2(){
+  try{
+    const r = await bdOp("servicio", "readonly", st => st.get("fotosAct"));
+    if(!r || !estado.orden || r.folio !== estado.orden.folio) return;
+    act.fotosAct = Object.assign({}, r.d || {}, act.fotosAct || {});
+    repintarAct();
+  }catch(e){}
+}
 
 function marcarFotoEnviada(fase){
   const f = (estado.fotos[fase]||[]).find(x=>!x.enviada);
@@ -2040,7 +2095,7 @@ function pintarOrden(){
 
 function pintarPasos(){
   const siguiente = pasoPendiente();
-  $("#pasos").innerHTML = SECUENCIA.filter(p => p.id==="salida" || !estado.eventos[p.id]).map((p,i)=>{
+  $("#pasos").innerHTML = secuenciaActual().filter(p => !(estado.cierreDirecto && (p.id==="comida" || p.id==="regreso")) && (p.id==="salida" || !estado.eventos[p.id])).map((p,i)=>{
     const ev = estado.eventos[p.id];
     const st = ev ? "hecho" : (siguiente && siguiente.id===p.id ? "activo" : "espera");
     const hora = ev ? ev.hora : "—";
@@ -2060,7 +2115,7 @@ function pintarEvidencia(){
   const bloqueado = !estado.eventos.llegada;
   const MAX = 12;
   $("#evTitulo").textContent = fase==="antes"
-    ? "Evidencia — ANTES de iniciar" : "Evidencia — DESPUÉS (al terminar)";
+    ? "Evidencia — ANTES de iniciar" : (estado.sabado ? "Evidencia del servicio" : "Evidencia — DESPUÉS (al terminar)");
   const faltanF = Math.max(0, 3 - fotos.length);
   /* v72: se aclara qué es obligatorio. DESPUÉS (cierre) bloquea la salida; ANTES solo se recomienda. */
   const oblig = fase !== "antes";
@@ -2097,7 +2152,7 @@ function esInterno(){
   return c.indexOf("blake inc") === 0 || si.indexOf("tezoyuca") >= 0;   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
 }
 function pintarCierreForm(){
-  const mostrar = estado.orden && estado.eventos.regreso && !estado.eventos.salida;
+  const mostrar = enCierre();
   $("#cierreForm").hidden = !mostrar;
   if(mostrar && esInterno()){
     estado.incluirFirma = false; estado.firma = null;
@@ -2111,6 +2166,7 @@ function pintarCierreForm(){
     prepararFirmaTec();
     prepararCierreAct();
     pintarCierreAct();
+    pintarRefac();
   }
 }
 
@@ -2123,7 +2179,7 @@ function pintarTrabajoAsig(){
   const sec = $("#trabajoAsig");
   /* Al llegar al cierre (regreso registrado) la lista ya aparece ahí para marcarse:
      se oculta arriba para no mostrar las actividades dos veces. */
-  if(!o || estado.eventos.salida || estado.eventos.regreso){ sec.hidden = true; return; }
+  if(!o || estado.eventos.salida || enCierre()){ sec.hidden = true; return; }
   sec.hidden = false;
   if(trabajoAsigFolio !== o.folio){
     trabajoAsigFolio = o.folio;
@@ -2159,6 +2215,7 @@ function pintarBoton(){
   const p = pasoPendiente();
   const btn=$("#btnPaso"), nota=$("#notaBtn");
   nota.classList.remove("alerta");
+  const bd = $("#btnCierreDirecto"); if(bd) bd.hidden = !puedeCierreDirecto();
 
   if(!p){ btn.hidden = true; nota.hidden = true; return; }
   btn.hidden = false; nota.hidden = false;
@@ -2187,6 +2244,8 @@ function pintarBoton(){
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
   } else if(p.id==="llegada"){
     nota.textContent="Se capturará su hora y ubicación al presionar.";
+  } else if(esSalida && estado.cierreDirecto){
+    nota.textContent="Cierre sin salida a comer: la comida quedará sin registro. Un registro no puede corregirse después de enviarse.";
   } else {
     nota.textContent="Un registro no puede corregirse después de enviarse.";
   }
@@ -2218,7 +2277,7 @@ function pintarCierre(){
     c.dataset.estado = "listo";
     $("#cierreIcono").textContent = "✓";
     $("#cierreTitulo").textContent = "Servicio completado";
-    $("#cierreTexto").innerHTML = "Se registraron los 4 momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
+    $("#cierreTexto").innerHTML = "Se registraron los ${Object.keys(estado.eventos).length} momentos y <b>toda la evidencia se envió correctamente</b>. Ya puede cerrar la aplicación.";
     $("#btnNuevo").hidden = false;
   } else {
     c.dataset.estado = "enviando";
@@ -2433,11 +2492,12 @@ async function registrar(){
   }
   estatus += " · ID: " + idm;   /* v48: cómo se comprobó quién registró */
   estado.leyendo = false;
+  if(paso.id==="llegada"){ estado.sabado = (new Date().getDay() === 6); estado.cierreDirecto = false; }   /* v75: el día se fija aquí */
 
   encolar({
     tipo:"evento", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", sitio:o.sitio||"",
     evento:paso.nombre, fecha:hoy(), hora,
-    actividades: paso.id==="salida" ? estado.actividades.trim() : "",
+    actividades: paso.id==="salida" ? (estado.actividades.trim() + textoExtraCierre()) : "",
     lat: lectura ? +lectura.lat.toFixed(6) : "", lon: lectura ? +lectura.lon.toFixed(6) : "",
     distancia: (lectura && tieneRef) ? dist : "", estatus,
     precision: lectura ? lectura.prec : "", folio:o.folio||""
@@ -2640,7 +2700,10 @@ const TIPOS_TRABAJO = {
     ["falla","¿Qué falla o necesidad había?","Falla"],
     ["hecho","¿Qué se hizo?","Trabajo realizado"],
     ["prueba","¿Cómo se probó y qué resultado dio?","Prueba"],
-    ["prog","Si hubo programación: ¿qué programa o sistema se modificó y quedó respaldo? (escribe «No hubo» si no aplica)","Programación"] ]}
+    ["prog","Si hubo programación: ¿qué programa o sistema se modificó y quedó respaldo? (escribe «No hubo» si no aplica)","Programación"] ]},
+  /* v75: «Otro» — descripción libre de mínimo 100 caracteres; no admite «No lo sé». */
+  otro:{ t:"Otro tipo de trabajo", sinNS:true, min:{ que:100 }, campos:[
+    ["que","Describe el trabajo realizado: qué se hizo, en qué equipo o lugar y con qué resultado (mínimo 100 caracteres)","Descripción"] ]}
 };
 function formServicioActivo(){
   return PILOTO_FORM.indexOf(String(estado.usuario||"").toLowerCase()) >= 0 && !esInterno();
@@ -2648,7 +2711,12 @@ function formServicioActivo(){
 function tipoDe(id){ const T = act.tipos && act.tipos[id]; return (T && TIPOS_TRABAJO[T.k]) ? T : null; }
 function camposFaltantes(id){
   const T = tipoDe(id); if(!T) return 0;
-  return TIPOS_TRABAJO[T.k].campos.filter(([k])=> !(T.ns && T.ns[k]) && !limpiaTxt((T.v||{})[k])).length;
+  const def = TIPOS_TRABAJO[T.k];
+  return def.campos.filter(([k])=>{
+    const v = limpiaTxt((T.v||{})[k]);
+    if(def.min && def.min[k]) return v.length < def.min[k];
+    return !(T.ns && T.ns[k]) && !v;
+  }).length;
 }
 function componerNotaTipo(id){
   const T = tipoDe(id); if(!T) return;
@@ -2671,6 +2739,8 @@ function htmlFormTipo(id, m){
     const def = TIPOS_TRABAJO[T.k];
     html += def.campos.map(([k,q,lab,esP])=>{
       const ns = !!(T.ns && T.ns[k]), v = (T.v||{})[k] || "";
+      if(def.sinNS) return `<div class="tipo-campo"><label class="act-nota-lbl">${esc(q)}</label>
+        <textarea class="tipo-in" rows="5" data-id="${esc(id)}" data-c="${k}" style="width:100%" autocomplete="off" spellcheck="true" lang="es" autocapitalize="sentences">${esc(v)}</textarea></div>`;
       return `<div class="tipo-campo"><label class="act-nota-lbl">${esc(q)}</label>
         <input type="text" class="tipo-in" data-id="${esc(id)}" data-c="${k}" value="${esc(v)}" ${ns?"disabled":""} ${esP?'list="listaPlantas"':""} autocomplete="off" spellcheck="true" lang="es">
         <label class="tipo-ns"><input type="checkbox" class="tipo-nosabe" data-id="${esc(id)}" data-c="${k}" ${ns?"checked":""}> No lo sé (la oficina lo aclara)</label></div>`;
@@ -2685,6 +2755,11 @@ function pintarContTipo(){
   document.querySelectorAll(".tipo-cont").forEach(c=>{
     const f = camposFaltantes(c.dataset.id);
     c.dataset.ok = f ? "0" : "1";
+    const T = tipoDe(c.dataset.id), def = T && TIPOS_TRABAJO[T.k];
+    if(def && def.sinNS){
+      const n = limpiaTxt((T.v||{}).que).length, m = def.min.que;
+      c.textContent = f ? `${n} / ${m} caracteres · faltan ${m-n}` : `✓ ${n} caracteres`;
+    } else
     c.textContent = f ? `Faltan ${f} campo(s) por contestar (o marcar «No lo sé»)` : "✓ Formulario completo";
   });
 }
@@ -2710,6 +2785,56 @@ function enlazarFormTipo(cont){
   });
   pintarContTipo();
 }
+
+/* ---------- v75: refacciones utilizadas y comentarios del cliente (opcionales, no bloquean el cierre) ---------- */
+const MAX_REFAC = 20, MAX_COMENT = 500;
+function refaccionesLimpias(){
+  return (estado.refacciones||[]).map(r=>({ desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant) })).filter(r=>r.desc || r.cant);
+}
+function textoExtraCierre(){
+  const rf = refaccionesLimpias();
+  let t = "\n\n";
+  if(estado.sinRefacciones && !rf.length) t += "REFACCIONES UTILIZADAS: ninguna";
+  else if(rf.length) t += "REFACCIONES UTILIZADAS:\n" + rf.map((r,i)=>`${i+1}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant : ""}`).join("\n");
+  else t += "REFACCIONES UTILIZADAS: no se capturaron";
+  const c = limpiaTxt(estado.comentarioCliente);
+  if(c) t += "\n\nCOMENTARIOS DEL CLIENTE: " + c;
+  return t;
+}
+function pintarRefac(){
+  const cont = $("#refacLista"); if(!cont) return;
+  estado.refacciones = Array.isArray(estado.refacciones) ? estado.refacciones : [];
+  $("#chkSinRefac").checked = !!estado.sinRefacciones;
+  $("#btnRefacAgregar").disabled = !!estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC;
+  const f = document.activeElement;
+  if(f && cont.contains(f) && cont.dataset.n === String(estado.refacciones.length)) return;
+  cont.dataset.n = String(estado.refacciones.length);
+  cont.innerHTML = estado.sinRefacciones ? "" : estado.refacciones.map((r,i)=>`
+    <div class="renglon" data-i="${i}">
+      <div class="renglon-cab"><span class="renglon-num">Refacción ${i+1}</span><button type="button" class="renglon-quitar refac-quitar" data-i="${i}">Quitar</button></div>
+      <input type="text" class="refac-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <input type="text" class="refac-cant" data-i="${i}" maxlength="30" placeholder="Cantidad (ej.: 2 piezas, 5 m)" value="${esc(r.cant||"")}" autocomplete="off">
+    </div>`).join("");
+  cont.querySelectorAll(".refac-desc").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].desc = i.value; persistir(); });
+  cont.querySelectorAll(".refac-cant").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cant = i.value; persistir(); });
+  cont.querySelectorAll(".refac-quitar").forEach(b=> b.onclick = ()=>{ estado.refacciones.splice(+b.dataset.i,1); persistir(); pintarRefac(); });
+  const t = $("#comentCliente"); if(t && t.value !== (estado.comentarioCliente||"")) t.value = estado.comentarioCliente || "";
+  $("#comentCont").textContent = (estado.comentarioCliente||"").length + " / " + MAX_COMENT;
+}
+$("#btnRefacAgregar").addEventListener("click", ()=>{
+  if(estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC) return;
+  estado.refacciones.push({ desc:"", cant:"" }); persistir(); pintarRefac();
+  const l = document.querySelectorAll("#refacLista .refac-desc"); if(l.length) l[l.length-1].focus();
+});
+$("#chkSinRefac").addEventListener("change", e=>{
+  estado.sinRefacciones = e.target.checked;
+  if(estado.sinRefacciones) estado.refacciones = [];
+  persistir(); const c = $("#refacLista"); if(c) c.dataset.n = "x"; pintarRefac();
+});
+$("#comentCliente").addEventListener("input", e=>{
+  estado.comentarioCliente = e.target.value.slice(0, MAX_COMENT);
+  $("#comentCont").textContent = estado.comentarioCliente.length + " / " + MAX_COMENT; persistir();
+});
 
 function medirActividades(){
   const ids = idsMarcadosCliente();
@@ -3627,6 +3752,8 @@ function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
+  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.comentarioCliente = "";
+  act.fotosAct = {}; borrarFotosAct();
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
   if(firmaTecnico) firmaTecnico.reiniciar();
@@ -3688,6 +3815,13 @@ function onClickPaso(){
   registrar();
 }
 $("#btnPaso").addEventListener("click", onClickPaso);
+$("#btnCierreDirecto").addEventListener("click", async ()=>{
+  if(!puedeCierreDirecto()) return;
+  if(!await confirmar("¿Terminar sin salir a comer?",
+      "Se pasará directo al cierre del servicio (fotos, actividades y firmas). La salida a comida y el regreso quedarán sin registro.",
+      "Sí, ir al cierre")) return;
+  estado.cierreDirecto = true; persistir(); pintar();
+});
 $("#btnRegresarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; });
 $("#btnConfirmarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; registrar(); });
 
@@ -3707,7 +3841,7 @@ const hoyISO = () => {
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 };
 
-const act = { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], cargando:false };
+const act = { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, cargando:false };
 
 function claveAct(){ return LS_ACT + "." + (estado.usuario || "").toLowerCase(); }
 function claveFotosAct(){ return LS_ACT + ".fotos." + (estado.usuario || "").toLowerCase(); }
@@ -3730,10 +3864,10 @@ function guardarAct(){
   }catch(e){ /* almacenamiento lleno: el borrador sigue en memoria */ }
 }
 function cargarAct(){
-  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, tipos:{}, adicionales:[], detalle:"", fotos:[], cargando:false });
+  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, tipos:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, cargando:false });
   try{
     const g = JSON.parse(localStorage.getItem(claveAct()) || "null");
-    if(g) Object.assign(act, g, { fotos:[], cargando:false });
+    if(g) Object.assign(act, g, { fotos:[], fotosAct:{}, cargando:false });
   }catch(e){}
   try{
     const f = JSON.parse(localStorage.getItem(claveFotosAct()) || "null");
@@ -4102,6 +4236,38 @@ function htmlActConsulta(a){
   </div>`;
 }
 
+/* ---------- v75: fotos OPCIONALES por actividad (de 1 a 4; no bloquean el cierre) ---------- */
+const MAX_FOTOS_ACT = 4;
+function htmlFotosAct(id){
+  const fs = (act.fotosAct && act.fotosAct[id]) || [];
+  const celdas = fs.map((f,i)=>`<div class="celda"><img src="${f.url}" alt="Foto ${i+1} de la actividad"><button type="button" class="quitar-foto fa-quitar" data-id="${esc(id)}" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join("");
+  const add = fs.length < MAX_FOTOS_ACT ? `<button class="celda add fa-add" type="button" data-id="${esc(id)}" aria-label="Agregar foto de esta actividad"><span>+</span></button>` : "";
+  return `<label class="act-nota-lbl">Fotos de esta actividad (opcional · hasta ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}</label><div class="rejilla fa-rejilla">${celdas}${add}</div>`;
+}
+let _fotoActId = "";
+document.addEventListener("click", e=>{
+  const a = e.target.closest && e.target.closest(".fa-add");
+  if(a){ _fotoActId = a.dataset.id; $("#camaraPorAct").click(); return; }
+  const q = e.target.closest && e.target.closest(".fa-quitar");
+  if(q){ const l = act.fotosAct[q.dataset.id] || []; l.splice(+q.dataset.i, 1); guardarFotosAct2(); repintarAct(); }
+});
+$("#camaraPorAct").addEventListener("change", async e=>{
+  const archivos = Array.from(e.target.files || []); e.target.value = "";
+  const id = _fotoActId; if(!id || !archivos.length) return;
+  act.fotosAct = act.fotosAct || {};
+  const lista = act.fotosAct[id] = act.fotosAct[id] || [];
+  const tomar = archivos.slice(0, Math.max(0, MAX_FOTOS_ACT - lista.length));
+  let n = 0, galeria = 0, fallidas = 0;
+  for(const archivo of tomar){
+    const r = await comprimirImagenP(archivo);
+    if(!r){ fallidas++; continue; }
+    lista.push({ url:r.url, kb:r.kb, galeria: !!(r.org && r.org.galeria) });
+    n++; if(r.org && r.org.galeria) galeria++;
+  }
+  guardarFotosAct2(); repintarAct();
+  avisoLote(n, galeria, fallidas, archivos.length - tomar.length, "agregadas a la actividad; se envían al cerrar el servicio");
+});
+
 function htmlActItem(a){
   const id = String(a.id), f = etiquetaAct(a), m = act.marcas[id] || "";
   const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
@@ -4117,6 +4283,7 @@ function htmlActItem(a){
     ${(m==="TERMINADA" && formServicioActivo()) ? htmlFormTipo(id, m) : (pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
     <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
     ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
+    ${m ? htmlFotosAct(id) : ""}
   </div>`;
 }
 function enlazarActItems(cont){
@@ -4200,6 +4367,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     actividadesDet: snap.actividadesDet,   /* v43: título y descripción por separado */
     noConcluidas: snap.noConcluidas || [],   /* v61: pendientes/canceladas con su justificación */
     detalle: "",
+    refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente),
     firma: estado.incluirFirma && estado.firma ? estado.firma : "",
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
@@ -4223,11 +4391,18 @@ function encolarReporteAct(o){
     cliente: o.titulo || o.cliente || "", folio: o.folio || "", sitio: o.sitio || "",
     items: ids.map(id=>({ id, estado:act.marcas[id], nota:(act.notas[id] || "").trim() })),
     adicionales: adicC,
-    detalle: estado.actividades.trim()
+    detalle: estado.actividades.trim() + textoExtraCierre(),
+    refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente)
   });
   estado.fotos.despues.filter(f=>f.url).forEach((f,i)=> encolar({
     tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (i+1), imagen:f.url
   }));
+  /* v75: fotos opcionales por actividad (hasta 4 c/u), etiquetadas con el id de la actividad */
+  let nA = 0;
+  ids.forEach(id=> (act.fotosAct[id] || []).forEach(f=>{ if(f && f.url) encolar({
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-A" + (++nA), imagen:f.url, actId:id
+  }); }));
+  act.fotosAct = {}; borrarFotosAct();
   /* Va al final, cuando las fotos ya subieron: dispara el correo al cliente. */
   encolarHojaCliente(o, reporteId, ids, snap);
 

@@ -1665,7 +1665,9 @@ function encolar(sobre){
    (500 caracteres), opcionales: no bloquean el cierre. (4) Tipo de trabajo «Otro» con descripción de mínimo 100
    caracteres, sin «No lo sé». (5) Hasta 4 fotos OPCIONALES por actividad (además de las 3 del cierre, que siguen
    siendo obligatorias). El conector de Google no cambia. */
-const APP_VER = "v75";
+/* v76 (18-oct-2026) — el cliente interno «Blake Inc · Ecatepec» NO pide firma del cliente aunque el nombre llegue con
+   otro formato (acentos, puntos, espacios, título distinto). */
+const APP_VER = "v76";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2147,9 +2149,12 @@ function pintarEvidencia(){
 /* v49: en trabajo interno (cliente "Blake Inc") el cliente somos nosotros: no hay firma de cliente. */
 function esInterno(){
   if(!estado.orden) return false;
-  const c = String(estado.orden.cliente||"").trim().toLowerCase();
-  const si = String(estado.orden.sitio||"").trim().toLowerCase();
-  return c.indexOf("blake inc") === 0 || si.indexOf("tezoyuca") >= 0;   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
+  /* v76: se compara sin acentos, signos ni espacios dobles, y se revisa también el título: «Blake Inc», «BLAKE  INC.»,
+     «Blake Inc · Ecatepec», «Ecatepec» con título Blake Inc, etc. */
+  const n = t => String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+  const c = n(estado.orden.cliente), t = n(estado.orden.titulo), si = n(estado.orden.sitio);
+  return c.indexOf("blakeinc") === 0 || t.indexOf("blakeinc") === 0 || si.indexOf("tezoyuca") >= 0
+      || (si.indexOf("ecatepec") >= 0 && (c.indexOf("blake") >= 0 || t.indexOf("blake") >= 0));   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
 }
 function pintarCierreForm(){
   const mostrar = enCierre();

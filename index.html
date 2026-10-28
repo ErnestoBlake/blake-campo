@@ -779,6 +779,9 @@ select.refac-org{width:100%;margin-top:8px}
 .acc-fl{width:16px;text-align:center;color:var(--naranja-glow)}
 .acc-cerrado > .acc-cuerpo{display:none}
 .acc-grupo{margin-top:6px}
+.act-elige{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px}
+.act-elige .btn[aria-pressed="true"]{border-color:var(--naranja-glow);color:var(--naranja-glow)}
+#notaBtn.alerta{cursor:pointer;text-decoration:underline dotted}
 .acc > .acc-cuerpo{padding-top:10px}
 .acc > .acc-cuerpo > .etiqueta:first-child{display:none}
 .escalera.acc,.trabajo-asig.acc,.evidencia.acc{padding-top:8px;padding-bottom:6px}
@@ -863,6 +866,13 @@ select.refac-org{width:100%;margin-top:8px}
     <span class="etiqueta">Cierre del servicio</span>
 
     <div class="acc-grupo" id="accAct" data-acc="Actividades del servicio" data-acc-abierto="1">
+    <div id="actPregunta" hidden>
+      <p class="renglon-ayuda"><b>¿Qué actividad va a declarar?</b> Elija una o ambas opciones.</p>
+      <div class="act-elige">
+        <button class="btn btn-sec" id="btnActAsig" type="button" aria-pressed="false">Una de mis actividades asignadas</button>
+        <button class="btn btn-sec" id="btnActNueva" type="button" aria-pressed="false">Una actividad nueva (no asignada)</button>
+      </div>
+    </div>
     <div id="cierreAsigBloque">
     <span class="etiqueta act-bloque">Actividades asignadas para este cliente</span>
     <p class="act-ayuda" id="cierreActAyuda">—</p>
@@ -877,10 +887,12 @@ select.refac-org{width:100%;margin-top:8px}
     <div id="cierreAdicLista"></div>
     </div>
 
+    <div id="panelNueva" hidden>
     <label class="campo-lbl" id="renglonTitulo">Actividades adicionales <b>(opcional)</b></label>
     <p class="renglon-ayuda" id="renglonAyuda">—</p>
     <div id="actRenglones"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar actividad adicional</button>
+    </div>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
     </div>
     <div id="bloqueComent" class="acc-grupo" data-acc="Comentarios del cliente (opcional)">
@@ -1816,7 +1828,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v82";
+const APP_VER = "v83";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2389,6 +2401,7 @@ function pintarBoton(){
   const vr = esSalida ? validaRefac() : { ok:true };
   const faltanRefac = !vr.ok;
   try{ const se=$("#secEvidencia"); if(se){ const oc = (faseActual()!=="antes") && !hayActividadDeclarada(); if(se.hidden!==oc) se.hidden = oc; } }catch(e){}
+  try{ pintarPanelesAct(); }catch(e){}
   try{ pintarAcordeon(); }catch(e){}
   try{ const sec=$("#refacSeccion"); if(sec){ const ver=!!(estado.orden && !estado.eventos.salida); if(sec.hidden===ver){ sec.hidden=!ver; if(ver) pintarRefac(); } } }catch(e){}
   try{ pintarBoxNoRefac(); }catch(e){}
@@ -2410,7 +2423,7 @@ function pintarBoton(){
     if(faltanRefac) faltan.push(vr.msg);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
-    nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
+    nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ". Toque aquí para abrir lo que falta.";
   } else if(p.id==="llegada"){
     nota.textContent="Se capturará su hora y ubicación al presionar.";
   } else if(esSalida && estado.cierreDirecto){
@@ -2469,7 +2482,17 @@ function chipAcc(id, txt, estadoChip){
   const ch = el.querySelector(":scope > .acc-cab .acc-chip"); if(!ch) return;
   ch.textContent = txt || ""; ch.className = "acc-chip" + (estadoChip ? " " + estadoChip : "");
 }
-let _accRefacAbierta = false;
+let _accRefacAbierta = false, _accSalidaFolio = null;
+function abrirAccFaltantes(){
+  let primero = null;
+  document.querySelectorAll(".acc").forEach(el=>{
+    if(el.hidden) return;
+    const ch = el.querySelector(":scope > .acc-cab .acc-chip");
+    if(ch && ch.classList.contains("falta")){ setAcc(el, true); if(!primero) primero = el; }
+  });
+  if(primero) try{ primero.scrollIntoView({ behavior:"smooth", block:"start" }); }catch(e){}
+}
+$("#notaBtn").addEventListener("click", ()=>{ if($("#notaBtn").classList.contains("alerta")) abrirAccFaltantes(); });
 function pintarAcordeon(){
   if(!document.querySelector(".acc")) return;
   try{
@@ -2490,6 +2513,10 @@ function pintarAcordeon(){
     const bx = $("#boxNoRefac"); const vis = !!(bx && !bx.hidden);
     if(vis && !_accRefacAbierta){ setAcc($("#refacSeccion"), true); }
     _accRefacAbierta = vis;
+  }catch(e){}
+  try{
+    const p = pasoPendiente(); const fol = (estado.orden && (estado.orden.folio || estado.orden.titulo)) || "";
+    if(p && p.id === "salida" && _accSalidaFolio !== fol){ _accSalidaFolio = fol; setTimeout(abrirAccFaltantes, 0); }
   }catch(e){}
   try{ const m = medirActividades(); chipAcc("accAct", m.ok ? "✓" : "falta", m.ok ? "ok" : "falta"); }catch(e){}
   try{ chipAcc("bloqueComent", limpiaTxt($("#comentCliente").value) ? "con comentario" : "", ""); }catch(e){}
@@ -3199,6 +3226,25 @@ function pintarContadoresRenglon(){
     el.dataset.corto = (renglonLleno(r) && !ok) ? "1" : "0";
   });
 }
+/* v83: el colaborador elige qué va a declarar: una actividad asignada (se despliega su lista) o una nueva (se abre el formulario). */
+const _panelAct = { asig:false, nueva:false };
+function pintarPanelesAct(conAsigParam){
+  try{
+    const conAsig = (conAsigParam === undefined) ? hayAsignadasCliente() : conAsigParam;
+    try{ if(idsMarcadosCliente().length) _panelAct.asig = true; }catch(e){}
+    try{ if((estado.renglones||[]).map(normRenglon).filter(renglonLleno).length) _panelAct.nueva = true; }catch(e){}
+    const verAsig = (conAsig || act.cargando) && _panelAct.asig;
+    const verNueva = _panelAct.nueva || !conAsig;     /* sin actividades asignadas no se pregunta: va directo al formulario */
+    const pg = $("#actPregunta"); if(pg) pg.hidden = !conAsig;
+    $("#cierreAsigBloque").hidden = !verAsig;
+    $("#panelNueva").hidden = !verNueva;
+    const a = $("#btnActAsig"), n = $("#btnActNueva");
+    if(a) a.setAttribute("aria-pressed", verAsig ? "true" : "false");
+    if(n) n.setAttribute("aria-pressed", verNueva ? "true" : "false");
+  }catch(e){}
+}
+$("#btnActAsig").addEventListener("click", ()=>{ _panelAct.asig = !_panelAct.asig; pintarPanelesAct(); });
+$("#btnActNueva").addEventListener("click", ()=>{ _panelAct.nueva = !_panelAct.nueva; pintarPanelesAct(); if(_panelAct.nueva){ const i = document.querySelector("#actRenglones input.renglon-tit"); if(i) try{ i.focus(); }catch(e){} } });
 let renglonModo = null, renglonUltimoConAsig = null;
 function pintarRenglones(){
   const cont = $("#actRenglones"); if(!cont) return;
@@ -3211,8 +3257,8 @@ function pintarRenglones(){
   if(!conAsig && !estado.renglones.length){
     estado.renglones = [{titulo:"", detalle:""}];                       // siempre la Actividad 1
   }
-  $("#cierreAsigBloque").hidden = !conAsig && !act.cargando;
-  $("#renglonTitulo").innerHTML = conAsig ? 'Actividades adicionales <b>(opcional)</b>' : 'Actividades realizadas <b>(obligatorio)</b>';
+  pintarPanelesAct(conAsig);
+  $("#renglonTitulo").innerHTML = conAsig ? 'Actividad nueva (no asignada)' : 'Actividades realizadas <b>(obligatorio)</b>';
   $("#renglonAyuda").innerHTML = conAsig
     ? 'Solo si hiciste <b>algo que no estaba asignado</b>. Escribe un título corto y el detalle de lo que hiciste.'
     : 'No tienes actividades asignadas con este cliente. Escribe <b>qué hiciste</b>: un título corto y el detalle. Si hiciste más de una, oprime <b>+ Agregar otra actividad</b>.';
@@ -4081,7 +4127,7 @@ function limpiarServicio(){
   persistir();
   $("#lectura").textContent = "Ubicación sin leer";
   const r=$("#rango"); r.textContent = "—"; r.dataset.fuera = "0";
-  $("#actividades").value = ""; $("#actRenglones").innerHTML = "";
+  _panelAct.asig = false; _panelAct.nueva = false; $("#actividades").value = ""; $("#actRenglones").innerHTML = "";
   cierreActPedido = false;
   $("#cierreActLista").innerHTML = "";
   $("#cierreAdicLista").innerHTML = "";

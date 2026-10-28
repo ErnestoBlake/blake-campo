@@ -1581,6 +1581,8 @@ const pasoPendiente = () => {
   return sec.find(p => !estado.eventos[p.id]) || null;
 };
 /* v75: el formulario de cierre está disponible desde la llegada (lunes a sábado). */
+/* v84: el formulario (actividades, refacciones, firmas) aparece solo cuando toca registrar la SALIDA: primero llegada, comida y regreso. */
+const enSalida = () => { const p = pasoPendiente(); return !!(p && p.id === "salida"); };
 const enCierre = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida);
 /* ¿Puede cerrar sin comida? Solo entre semana, ya con llegada y sin haber salido a comer. */
 const puedeCierreDirecto = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida && !estado.sabado && !estado.cierreDirecto && !estado.eventos.comida);
@@ -1828,7 +1830,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v83";
+const APP_VER = "v84";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2324,7 +2326,7 @@ function esInterno(){
       || (si.indexOf("ecatepec") >= 0 && (c.indexOf("blake") >= 0 || t.indexOf("blake") >= 0));   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
 }
 function pintarCierreForm(){
-  const mostrar = enCierre();
+  const mostrar = enCierre() && enSalida();
   $("#cierreForm").hidden = !mostrar;
   if(mostrar && esInterno()){
     estado.incluirFirma = false; estado.firma = null;
@@ -2351,7 +2353,7 @@ function pintarTrabajoAsig(){
   const sec = $("#trabajoAsig");
   /* Al llegar al cierre (regreso registrado) la lista ya aparece ahí para marcarse:
      se oculta arriba para no mostrar las actividades dos veces. */
-  if(!o || estado.eventos.salida || enCierre()){ sec.hidden = true; return; }
+  if(true || !o || estado.eventos.salida || enCierre()){ sec.hidden = true; return; }   /* v84: la lista asignada se ve en el cierre */
   sec.hidden = false;
   if(trabajoAsigFolio !== o.folio){
     trabajoAsigFolio = o.folio;
@@ -2403,7 +2405,7 @@ function pintarBoton(){
   try{ const se=$("#secEvidencia"); if(se){ const oc = (faseActual()!=="antes") && !hayActividadDeclarada(); if(se.hidden!==oc) se.hidden = oc; } }catch(e){}
   try{ pintarPanelesAct(); }catch(e){}
   try{ pintarAcordeon(); }catch(e){}
-  try{ const sec=$("#refacSeccion"); if(sec){ const ver=!!(estado.orden && !estado.eventos.salida); if(sec.hidden===ver){ sec.hidden=!ver; if(ver) pintarRefac(); } } }catch(e){}
+  try{ const sec=$("#refacSeccion"); if(sec){ const ver=!!(estado.orden && !estado.eventos.salida && enSalida()); if(sec.hidden===ver){ sec.hidden=!ver; if(ver) pintarRefac(); } } }catch(e){}
   try{ pintarBoxNoRefac(); }catch(e){}
   { const bi = $("#btnIncompleta"); if(bi) bi.hidden = !(esSalida && !validaRefacBase().ok && !(estado.incompleta && estado.incompleta.ok)); }
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el

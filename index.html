@@ -846,21 +846,6 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
   </section>
 
-  <!-- v81: Refacciones visibles desde que se elige el servicio (antes aparecían solo después de la llegada) -->
-  <section class="cierre-form" id="refacSeccion" data-acc="Refacciones y materiales" hidden>
-    <span class="etiqueta">Refacciones y materiales del servicio</span>
-    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
-    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
-    <div id="refacLista"></div>
-    <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
-    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
-    <div id="boxNoRefac" hidden>
-      <p class="renglon-ayuda" id="avisoNoRefac"></p>
-      <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
-    </div>
-    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
-  </section>
-
   <!-- Cierre del servicio: actividades + firma del cliente -->
   <section class="cierre-form" id="cierreForm" hidden>
     <span class="etiqueta">Cierre del servicio</span>
@@ -895,6 +880,20 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
     </div>
+  <!-- v85: Refacciones justo después de las actividades, en el paso de salida -->
+  <div class="acc-grupo" id="refacSeccion" data-acc="Refacciones y materiales" hidden>
+    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
+    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
+    <div id="refacLista"></div>
+    <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
+    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
+    <div id="boxNoRefac" hidden>
+      <p class="renglon-ayuda" id="avisoNoRefac"></p>
+      <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
+    </div>
+    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
+  </div>
+
     <div id="bloqueComent" class="acc-grupo" data-acc="Comentarios del cliente (opcional)">
     <label class="campo-lbl" for="comentCliente">Comentarios del cliente <b>(opcional)</b></label>
     <textarea id="comentCliente" rows="3" maxlength="500" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Lo que el cliente quiera dejar asentado sobre el servicio"></textarea>
@@ -1830,7 +1829,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v84";
+const APP_VER = "v85";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2403,6 +2402,7 @@ function pintarBoton(){
   const vr = esSalida ? validaRefac() : { ok:true };
   const faltanRefac = !vr.ok;
   try{ const se=$("#secEvidencia"); if(se){ const oc = (faseActual()!=="antes") && !hayActividadDeclarada(); if(se.hidden!==oc) se.hidden = oc; } }catch(e){}
+  try{ ordenarSalida(); }catch(e){}
   try{ pintarPanelesAct(); }catch(e){}
   try{ pintarAcordeon(); }catch(e){}
   try{ const sec=$("#refacSeccion"); if(sec){ const ver=!!(estado.orden && !estado.eventos.salida && enSalida()); if(sec.hidden===ver){ sec.hidden=!ver; if(ver) pintarRefac(); } } }catch(e){}
@@ -2479,6 +2479,13 @@ function initAcordeon(){
     cab.addEventListener("click", ()=> setAcc(el, el.classList.contains("acc-cerrado")));
   });
 }
+/* v85: en el paso de salida el orden es Actividades → Refacciones → Fotos → Comentarios → Firmas. */
+function ordenarSalida(){
+  const cf = $("#cierreForm"), se = $("#secEvidencia"); if(!cf || !se) return;
+  if(enSalida()){
+    if(se.parentNode !== cf){ const ref = $("#bloqueComent"); cf.insertBefore(se, ref); }
+  } else if(se.parentNode === cf){ cf.parentNode.insertBefore(se, cf); }
+}
 function chipAcc(id, txt, estadoChip){
   const el = document.getElementById(id); if(!el) return;
   const ch = el.querySelector(":scope > .acc-cab .acc-chip"); if(!ch) return;
@@ -2518,7 +2525,7 @@ function pintarAcordeon(){
   }catch(e){}
   try{
     const p = pasoPendiente(); const fol = (estado.orden && (estado.orden.folio || estado.orden.titulo)) || "";
-    if(p && p.id === "salida" && _accSalidaFolio !== fol){ _accSalidaFolio = fol; setTimeout(abrirAccFaltantes, 0); }
+    if(p && p.id === "salida" && _accSalidaFolio !== fol){ _accSalidaFolio = fol; try{ setAcc($("#secEscalera"), false); }catch(e){} setTimeout(abrirAccFaltantes, 0); }
   }catch(e){}
   try{ const m = medirActividades(); chipAcc("accAct", m.ok ? "✓" : "falta", m.ok ? "ok" : "falta"); }catch(e){}
   try{ chipAcc("bloqueComent", limpiaTxt($("#comentCliente").value) ? "con comentario" : "", ""); }catch(e){}

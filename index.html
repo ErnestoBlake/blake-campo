@@ -772,6 +772,16 @@ select.refac-org{width:100%;margin-top:8px}
 .refac-ticket-est.ok{color:#5fd08a}.refac-ticket-est.falta{color:#ff9e2c}
 #boxNoRefac{margin:8px 0 14px;padding:10px 12px;border:1px solid #ff9e2c;border-radius:3px;background:rgba(255,158,44,.08)}
 #boxNoRefac p{margin:0 0 8px}
+.acc-cab{display:flex;width:100%;align-items:center;gap:10px;background:none;border:0;border-bottom:1px solid var(--linea);padding:12px 0;margin:0;color:var(--plata-alta);font-family:var(--texto);font-size:15px;font-weight:700;text-align:left;cursor:pointer;min-height:48px}
+.acc-tit{flex:1}
+.acc-chip{font-size:12px;font-weight:600;padding:2px 9px;border-radius:11px;border:1px solid var(--linea);white-space:nowrap}
+.acc-chip.ok{color:#5fd08a;border-color:#5fd08a}.acc-chip.falta{color:#ff9e2c;border-color:#ff9e2c}.acc-chip:empty{display:none}
+.acc-fl{width:16px;text-align:center;color:var(--naranja-glow)}
+.acc-cerrado > .acc-cuerpo{display:none}
+.acc-grupo{margin-top:6px}
+.acc > .acc-cuerpo{padding-top:10px}
+.acc > .acc-cuerpo > .etiqueta:first-child{display:none}
+.escalera.acc,.trabajo-asig.acc,.evidencia.acc{padding-top:8px;padding-bottom:6px}
 .portada textarea{width:100%;padding:12px 16px;margin-bottom:14px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
 </style>
 </head>
@@ -798,18 +808,18 @@ select.refac-org{width:100%;margin-top:8px}
   </section>
 
   <!-- 16-sep: lo que el técnico tiene que hacer con este cliente, visible desde que lo elige -->
-  <section class="trabajo-asig" id="trabajoAsig" hidden>
+  <section class="trabajo-asig" id="trabajoAsig" data-acc="Trabajo asignado para este cliente" hidden>
     <span class="etiqueta act-bloque">Trabajo asignado para este cliente</span>
     <p class="pista" id="trabajoAsigAyuda">—</p>
     <div id="trabajoAsigLista"></div>
   </section>
 
-  <section class="escalera">
+  <section class="escalera" id="secEscalera" data-acc="Secuencia de jornada" data-acc-abierto="1">
     <span class="etiqueta">Secuencia de jornada</span>
     <div id="pasos"></div>
   </section>
 
-  <section class="evidencia">
+  <section class="evidencia" id="secEvidencia" data-acc="Fotos de evidencia">
     <div class="ev-cab">
       <span class="etiqueta" id="evTitulo">Evidencia — antes de iniciar</span>
       <span class="conteo" id="evConteo" data-completo="0">0 / 3</span>
@@ -833,10 +843,26 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
   </section>
 
+  <!-- v81: Refacciones visibles desde que se elige el servicio (antes aparecían solo después de la llegada) -->
+  <section class="cierre-form" id="refacSeccion" data-acc="Refacciones y materiales" hidden>
+    <span class="etiqueta">Refacciones y materiales del servicio</span>
+    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
+    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
+    <div id="refacLista"></div>
+    <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
+    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
+    <div id="boxNoRefac" hidden>
+      <p class="renglon-ayuda" id="avisoNoRefac"></p>
+      <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
+    </div>
+    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
+  </section>
+
   <!-- Cierre del servicio: actividades + firma del cliente -->
   <section class="cierre-form" id="cierreForm" hidden>
     <span class="etiqueta">Cierre del servicio</span>
 
+    <div class="acc-grupo" id="accAct" data-acc="Actividades del servicio" data-acc-abierto="1">
     <div id="cierreAsigBloque">
     <span class="etiqueta act-bloque">Actividades asignadas para este cliente</span>
     <p class="act-ayuda" id="cierreActAyuda">—</p>
@@ -856,21 +882,13 @@ select.refac-org{width:100%;margin-top:8px}
     <div id="actRenglones"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar actividad adicional</button>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
-    <div id="bloqueRefac">
-    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
-    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
-    <div id="refacLista"></div>
-    <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
-    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
-    <div id="boxNoRefac" hidden>
-      <p class="renglon-ayuda" id="avisoNoRefac"></p>
-      <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
     </div>
-    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
+    <div id="bloqueComent" class="acc-grupo" data-acc="Comentarios del cliente (opcional)">
     <label class="campo-lbl" for="comentCliente">Comentarios del cliente <b>(opcional)</b></label>
     <textarea id="comentCliente" rows="3" maxlength="500" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Lo que el cliente quiera dejar asentado sobre el servicio"></textarea>
     <p class="renglon-cont" id="comentCont">0 / 500</p>
     </div>
+    <div class="acc-grupo" id="accFirmas" data-acc="Firmas">
     <label class="campo-lbl">Firma del técnico <b>(obligatoria)</b></label>
     <p class="leyenda-firma" id="leyendaTec">Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí.</p>
     <div class="firma-caja" id="firmaTecCaja">
@@ -885,6 +903,7 @@ select.refac-org{width:100%;margin-top:8px}
       <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
     </div>
     <button class="firma-limpiar" id="btnLimpiarFirma" type="button" hidden>Limpiar firma</button>
+    </div>
   </section>
 
   <section class="accion">
@@ -1797,7 +1816,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v80";
+const APP_VER = "v82";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2241,6 +2260,12 @@ function pintarPasos(){
   }).join("");
 }
 
+/* v82: las fotos obligatorias del cierre solo se piden si el colaborador declaró al menos una actividad. */
+function hayActividadDeclarada(){
+  try{ if(idsMarcadosCliente().length) return true; }catch(e){}
+  try{ if((estado.renglones||[]).map(normRenglon).filter(renglonLleno).length) return true; }catch(e){}
+  return false;
+}
 function pintarEvidencia(){
   const fase = faseActual();
   const fotos = estado.fotos[fase];
@@ -2358,11 +2383,14 @@ function pintarBoton(){
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
 
   const esSalida = p.id==="salida";
-  const faltanFotos = esSalida && estado.fotos.despues.length<3;
+  const faltanFotos = esSalida && hayActividadDeclarada() && estado.fotos.despues.length<3;
   const medAct = medirActividades();
   const faltanActiv = esSalida && !medAct.ok;
   const vr = esSalida ? validaRefac() : { ok:true };
   const faltanRefac = !vr.ok;
+  try{ const se=$("#secEvidencia"); if(se){ const oc = (faseActual()!=="antes") && !hayActividadDeclarada(); if(se.hidden!==oc) se.hidden = oc; } }catch(e){}
+  try{ pintarAcordeon(); }catch(e){}
+  try{ const sec=$("#refacSeccion"); if(sec){ const ver=!!(estado.orden && !estado.eventos.salida); if(sec.hidden===ver){ sec.hidden=!ver; if(ver) pintarRefac(); } } }catch(e){}
   try{ pintarBoxNoRefac(); }catch(e){}
   { const bi = $("#btnIncompleta"); if(bi) bi.hidden = !(esSalida && !validaRefacBase().ok && !(estado.incompleta && estado.incompleta.ok)); }
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
@@ -2407,6 +2435,68 @@ function pintarCola(){
     et.textContent = "Rechazados por el servidor";
     val.innerHTML = `<b data-cero="0" style="color:#ff4d4d">${estado.rechazados.length}</b> apartados · ${estado.cola.length} por enviar`;
   }
+}
+
+/* ---------- v82: secciones plegables con resumen ---------- */
+function setAcc(el, abrir){
+  el.classList.toggle("acc-cerrado", !abrir);
+  const c = el.querySelector(":scope > .acc-cab"); if(!c) return;
+  c.setAttribute("aria-expanded", abrir ? "true" : "false");
+  c.querySelector(".acc-fl").textContent = abrir ? "▾" : "▸";
+  if(abrir){ try{
+    if(el.querySelector("#firmaTec")){
+      if(!estado.firmaTec && firmaTecnico) firmaTecnico.reiniciar();
+      if(firmaTecnico) firmaTecnico.preparar();
+      if(!estado.firma && firmaCliente && !$("#firmaCaja").hidden){ firmaCliente.reiniciar(); firmaCliente.preparar(); }
+    }
+  }catch(e){} }
+}
+function initAcordeon(){
+  document.querySelectorAll("[data-acc]").forEach(el=>{
+    if(el.dataset.accOk) return; el.dataset.accOk = "1";
+    const cab = document.createElement("button"); cab.type = "button"; cab.className = "acc-cab"; cab.setAttribute("aria-expanded","false");
+    cab.innerHTML = '<span class="acc-tit"></span><span class="acc-chip"></span><span class="acc-fl">▸</span>';
+    cab.querySelector(".acc-tit").textContent = el.dataset.acc;
+    const cuerpo = document.createElement("div"); cuerpo.className = "acc-cuerpo";
+    while(el.firstChild) cuerpo.appendChild(el.firstChild);
+    el.appendChild(cab); el.appendChild(cuerpo); el.classList.add("acc");
+    setAcc(el, el.dataset.accAbierto === "1");
+    cab.addEventListener("click", ()=> setAcc(el, el.classList.contains("acc-cerrado")));
+  });
+}
+function chipAcc(id, txt, estadoChip){
+  const el = document.getElementById(id); if(!el) return;
+  const ch = el.querySelector(":scope > .acc-cab .acc-chip"); if(!ch) return;
+  ch.textContent = txt || ""; ch.className = "acc-chip" + (estadoChip ? " " + estadoChip : "");
+}
+let _accRefacAbierta = false;
+function pintarAcordeon(){
+  if(!document.querySelector(".acc")) return;
+  try{
+    const ev = estado.eventos || {}; const hechos = ["llegada","comida","regreso","salida"].filter(k=>ev[k]).length;
+    chipAcc("secEscalera", hechos + " de 4", "");
+  }catch(e){}
+  try{
+    const n = document.querySelectorAll("#trabajoAsigLista .act-item").length;
+    chipAcc("trabajoAsig", n ? String(n) : "", "");
+  }catch(e){}
+  try{
+    const n = (estado.fotos[faseActual()] || []).length;
+    chipAcc("secEvidencia", n + " / 3", n>=3 ? "ok" : "falta");
+  }catch(e){}
+  try{
+    const v = validaRefacBase(); const n = refaccionesLimpias().length;
+    chipAcc("refacSeccion", estado.incompleta && estado.incompleta.ok ? "incompleta autorizada" : (v.ok ? (estado.sinRefacciones ? "ninguna ✓" : n + " ✓") : "falta"), v.ok ? "ok" : "falta");
+    const bx = $("#boxNoRefac"); const vis = !!(bx && !bx.hidden);
+    if(vis && !_accRefacAbierta){ setAcc($("#refacSeccion"), true); }
+    _accRefacAbierta = vis;
+  }catch(e){}
+  try{ const m = medirActividades(); chipAcc("accAct", m.ok ? "✓" : "falta", m.ok ? "ok" : "falta"); }catch(e){}
+  try{ chipAcc("bloqueComent", limpiaTxt($("#comentCliente").value) ? "con comentario" : "", ""); }catch(e){}
+  try{
+    const t = !!estado.firmaTec, c = esInterno() ? true : !!estado.firma;
+    chipAcc("accFirmas", (t && c) ? "✓" : (t || c ? "falta una" : "falta"), (t && c) ? "ok" : "falta");
+  }catch(e){}
 }
 
 function pintarCierre(){
@@ -4043,7 +4133,9 @@ function pistaRefaccion(){
   const quitar = t => String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
   const re = /(refaccion|repuesto|material(es)?\b|se\s+(cambi|reemplaz|sustituy|instal|coloc|utiliz|ocup|gast)|cambio\s+de|reemplazo|sustitucion|rodamiento|balero|fusible|contactor|relevador|manguera|valvula|sensor|sello\b|filtro|cilindro|cable\b|tornill)/i;
   const todo = hechasCierre().concat(adicionalesCierre());
-  for(const t of todo){ const m = re.exec(quitar(t)); if(m){ const i = quitar(t).toLowerCase().indexOf(m[0].toLowerCase()); return String(t).slice(Math.max(0,i-15), i+m[0].length+25).trim(); } }
+  /* v81: no cuenta cuando el texto solo menciona la sección de la app («opción de refacciones», «casilla de refacciones»…). */
+  const sinApp = x => quitar(x).replace(/(opcion(es)?|casilla|apartado|seccion|boton|campo|pantalla|modulo)\s+(de\s+|para\s+)?(las\s+)?(refaccion(es)?|materiales)/ig, " ");
+  for(const t of todo){ const m = re.exec(sinApp(t)); if(m){ const i = sinApp(t).toLowerCase().indexOf(m[0].toLowerCase()); return String(t).slice(Math.max(0,i-15), i+m[0].length+25).trim(); } }
   return "";
 }
 async function onClickPaso(){
@@ -4478,7 +4570,7 @@ function htmlActConsulta(a){
 }
 
 /* ---------- v75: fotos OPCIONALES por actividad (de 1 a 4; no bloquean el cierre) ---------- */
-const MAX_FOTOS_ACT = 4;
+const MAX_FOTOS_ACT = 3;
 function htmlFotosAct(id){
   const fs = (act.fotosAct && act.fotosAct[id]) || [];
   const celdas = fs.map((f,i)=>`<div class="celda"><img src="${f.url}" alt="Foto ${i+1} de la actividad"><button type="button" class="quitar-foto fa-quitar" data-id="${esc(id)}" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join("");
@@ -6528,6 +6620,7 @@ async function subirVideos(){
 setInterval(()=>{ try{ subirVideos(); }catch(e){} }, 30000);
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible"){ try{ subirVideos(); }catch(e){} } });
 try{ if(navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener("change", ()=>{ pintarVideos(); subirVideos(); }); }catch(e){}
+try{ initAcordeon(); pintarAcordeon(); }catch(e){ console.error(e); }
 </script>
 </body>
 </html>

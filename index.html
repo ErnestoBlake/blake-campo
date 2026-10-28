@@ -739,6 +739,40 @@ body{
 .tipo-ns{display:flex;gap:8px;align-items:center;font-size:13px;color:#9fb0c3;margin-top:4px}
 .tipo-cont{font-size:13px;margin-top:6px;color:#FFC24D}
 .tipo-cont[data-ok="1"]{color:var(--verde)}
+/* ---------- v77: recordatorios de comida y autorización con PIN ---------- */
+#bannerComida{position:fixed;left:0;right:0;top:0;z-index:95;display:flex;justify-content:center;padding:8px 10px;pointer-events:none}
+#bannerComida[hidden]{display:none}
+#bannerComida button{pointer-events:auto;width:100%;max-width:460px;min-height:56px;border:0;border-radius:3px;cursor:pointer;
+  background:var(--ambar);color:#1a1200;font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  animation:cmPulso 1.4s ease-in-out infinite;box-shadow:0 4px 18px rgba(0,0,0,.55)}
+@keyframes cmPulso{0%,100%{box-shadow:0 0 0 0 rgba(242,168,28,.65),0 4px 18px rgba(0,0,0,.55)}50%{box-shadow:0 0 0 10px rgba(242,168,28,0),0 4px 18px rgba(0,0,0,.55)}}
+body.conBannerComida{padding-top:76px}
+.cm-texto{text-align:left!important;font-size:13px!important;line-height:1.6!important;margin-bottom:14px}
+.cm-msg{font-family:var(--texto);font-size:14px;line-height:1.45;margin:10px 0;color:var(--ambar)}
+.cm-msg[data-t="error"]{color:#FF8A80;font-weight:600}
+.cm-msg:empty{display:none}
+.portada .cm-casilla{display:flex;gap:12px;align-items:flex-start;margin:6px 0 16px;padding:12px;border:1px solid var(--linea);background:var(--acero-800);border-radius:3px;font-size:14px;line-height:1.5;cursor:pointer}
+.portada .cm-casilla input{width:28px;min-width:28px;min-height:28px;height:28px;margin:2px 0 0;accent-color:var(--naranja)}
+.cm-lbl{display:block;font-family:var(--dato);font-size:11px;color:var(--plata);margin:0 0 6px;letter-spacing:.06em;text-transform:uppercase}
+#cmPinIn{text-align:center;font-family:var(--dato);font-size:28px;letter-spacing:.3em}
+.cm-card{border:1px solid var(--linea);border-left:5px solid var(--ambar);border-radius:3px;background:var(--acero-800);padding:14px;margin-bottom:14px}
+.cm-card b{font-family:var(--display);font-size:22px;letter-spacing:.05em;text-transform:uppercase}
+.cm-card p{font-size:14px;line-height:1.5;margin:6px 0}
+.cm-card .pista{font-size:12px}
+.cm-pin{font-family:var(--dato);font-size:44px;letter-spacing:.18em;text-align:center;color:var(--naranja-glow);margin:10px 0 2px}
+.cm-res{opacity:.75;border-left-color:var(--verde)}
+.refac-fila{display:flex;gap:8px;margin-bottom:8px}
+.refac-fila .refac-cant{flex:1;margin-bottom:0}
+select.refac-uni,select.refac-org{min-height:48px;padding:0 10px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
+select.refac-uni{width:96px}
+select.refac-org{width:100%;margin-top:8px}
+.refac-ticket{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.refac-ticket .btn{flex:1 1 220px}
+.refac-ticket-est{font-size:14px;font-weight:600}
+.refac-ticket-est.ok{color:#5fd08a}.refac-ticket-est.falta{color:#ff9e2c}
+#boxNoRefac{margin:8px 0 14px;padding:10px 12px;border:1px solid #ff9e2c;border-radius:3px;background:rgba(255,158,44,.08)}
+#boxNoRefac p{margin:0 0 8px}
+.portada textarea{width:100%;padding:12px 16px;margin-bottom:14px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
 </style>
 </head>
 <body>
@@ -823,11 +857,16 @@ body{
     <button class="btn btn-sec renglon-agregar" id="btnRenglonAgregar" type="button">+ Agregar actividad adicional</button>
     <textarea id="actividades" hidden aria-hidden="true" tabindex="-1"></textarea>
     <div id="bloqueRefac">
-    <label class="campo-lbl">Refacciones o materiales utilizados <b>(opcional)</b></label>
-    <p class="renglon-ayuda">Anote cada pieza o material que se usó y la cantidad. Si no se usó ninguno, marque la casilla de abajo.</p>
+    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
+    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
     <div id="refacLista"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
     <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
+    <div id="boxNoRefac" hidden>
+      <p class="renglon-ayuda" id="avisoNoRefac"></p>
+      <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
+    </div>
+    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
     <label class="campo-lbl" for="comentCliente">Comentarios del cliente <b>(opcional)</b></label>
     <textarea id="comentCliente" rows="3" maxlength="500" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Lo que el cliente quiera dejar asentado sobre el servicio"></textarea>
     <p class="renglon-cont" id="comentCont">0 / 500</p>
@@ -851,7 +890,9 @@ body{
   <section class="accion">
     <button class="btn" id="btnPaso">Registrar llegada</button>
     <button class="btn btn-sec" id="btnCierreDirecto" type="button" hidden>Terminar servicio sin salir a comer</button>
+    <button class="btn btn-sec" id="btnIncompleta" type="button" hidden>No puedo cumplir esto: pedir autorización de un supervisor</button>
     <p class="nota-btn" id="notaBtn">Se capturará su hora y ubicación al presionar.</p>
+    <button class="link-volver link-centro" id="btnLlegadaOlvidada" type="button" hidden>Olvidé registrar mi llegada</button>
     <div class="cierre" id="cierre" hidden>
       <div class="cierre-icono" id="cierreIcono">✓</div>
       <strong id="cierreTitulo">Servicio completado</strong>
@@ -994,6 +1035,10 @@ body{
       <b>Autorizar cambio de actividades</b>
       <span id="inicioSolDet">Administrador: revisa las solicitudes de reasignación de los colaboradores.</span>
     </button>
+    <button class="menu-op menu-op--acl" id="btnIrComida" type="button" hidden>
+      <b>Autorizar comida</b>
+      <span id="inicioComidaDet">Supervisor: da el PIN a quien pide no comer o comer más tarde.</span>
+    </button>
     <button class="menu-op" id="btnIrEquipo" type="button" hidden>
       <b>Actividades del equipo</b>
       <span id="inicioEquipoDet">Administrador: consulta los pendientes y aclaraciones de cada colaborador (solo consulta).</span>
@@ -1108,6 +1153,21 @@ body{
       <p class="pista" id="solSync">—</p>
     </div>
     <div id="admSolicitudes"></div>
+  </div>
+</div>
+<!-- v77: Pantalla del supervisor: autorizar comida con PIN -->
+<div class="pantalla" id="comidaPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnComidaMenu" type="button">← Menú</button>
+      <button class="link-volver" id="btnComidaRefrescar" type="button">↻ Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Autorizar comida</span>
+      <h2>Solicitudes de hoy</h2>
+      <p class="pista" id="comidaSync">—</p>
+    </div>
+    <div id="comidaLista"></div>
   </div>
 </div>
 <!-- Pantalla: panel de administrador (asignar actividades) -->
@@ -1297,6 +1357,57 @@ body{
   </div>
 </div>
 
+<!-- v78: llegada olvidada (hora real declarada + motivo) -->
+<div class="portada" id="modalLlegada" hidden role="dialog" aria-modal="true">
+  <div class="portada-caja">
+    <span class="etiqueta">Llegada olvidada</span>
+    <h2>¿A qué hora llegó realmente?</h2>
+    <p class="pista cm-texto">Se guardará la hora real que usted declara y, por separado, la hora en que presiona el botón: las dos quedan a la vista. Debe escribir el motivo.</p>
+    <span class="cm-lbl">Hora real de llegada</span>
+    <input type="time" id="llHora">
+    <span class="cm-lbl">Motivo (mínimo 20 caracteres)</span>
+    <textarea id="llMotivo" rows="3" maxlength="200" placeholder="Por qué no se registró al llegar"></textarea>
+    <label class="cm-casilla"><input type="checkbox" id="llCasilla"><span>Declaro que la hora indicada es la hora real en que llegué.</span></label>
+    <p class="cm-msg" id="llMsg"></p>
+    <button class="btn" id="llGuardar" type="button">Registrar llegada declarada</button>
+    <button class="btn btn-sec" id="llCerrar" type="button">Cancelar</button>
+  </div>
+</div>
+
+<!-- v77: recordatorio de comida y solicitud de PIN -->
+<div class="portada" id="modalComida" hidden role="dialog" aria-modal="true" aria-labelledby="cmTitulo">
+  <div class="portada-caja">
+    <span class="etiqueta" id="cmEtiqueta">Hora de comer</span>
+    <h2 id="cmTitulo">—</h2>
+    <p class="pista cm-texto" id="cmTexto"></p>
+    <div id="cmMenu">
+      <button class="btn" id="cmAhora" type="button">Salgo a comer ahora</button>
+      <button class="btn btn-sec" id="cmTarde" type="button">Comeré más tarde, a las…</button>
+      <button class="btn btn-sec" id="cmNo" type="button">Hoy no comeré</button>
+    </div>
+    <div id="cmForm" hidden>
+      <div id="cmHoraBox">
+        <span class="cm-lbl">¿A qué hora comerá? (hasta las 17:00)</span>
+        <input type="time" id="cmHora" max="17:00">
+      </div>
+      <div id="cmMotivoBox" hidden>
+        <span class="cm-lbl">Motivo (mínimo 30 caracteres)</span>
+        <textarea id="cmMotivo" rows="4" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Explique por qué no puede cumplir el requisito"></textarea>
+      </div>
+      <label class="cm-casilla" id="cmCasillaLbl"><input type="checkbox" id="cmCasilla"><span id="cmCasillaTxt"></span></label>
+      <button class="btn" id="cmPedir" type="button">Solicitar autorización</button>
+    </div>
+    <div id="cmPin" hidden>
+      <span class="cm-lbl">PIN que le dicte el supervisor</span>
+      <input type="text" id="cmPinIn" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="000000">
+      <button class="btn" id="cmValidar" type="button">Validar PIN</button>
+    </div>
+    <p class="cm-msg" id="cmMsg"></p>
+    <button class="btn btn-sec" id="cmAtras" type="button" hidden>← Regresar</button>
+    <button class="btn btn-sec" id="cmCerrar" type="button">Cerrar (el aviso seguirá visible)</button>
+  </div>
+</div>
+
 <!-- Modal genérico de confirmación (reemplaza la ventana nativa del navegador, que algunos navegadores bloquean) -->
 <div class="portada" id="modalConfirmar" hidden role="dialog" aria-modal="true" aria-labelledby="mcTitulo">
   <div class="portada-caja">
@@ -1308,6 +1419,7 @@ body{
   </div>
 </div>
 
+<div id="bannerComida" hidden><button type="button" id="bannerComidaBtn">⏰ Hora de comer</button></div>
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <script>
@@ -1412,7 +1524,7 @@ const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
   sabado:false, cierreDirecto:false,   /* v75: se fijan al registrar la llegada / al elegir cerrar sin comida */
-  refacciones:[], sinRefacciones:false, comentarioCliente:"",
+  refacciones:[], sinRefacciones:false, motivoNoRefac:"", incompleta:null, comentarioCliente:"",
   actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0,   // sobres realmente entregados al conector en este servicio
@@ -1445,12 +1557,13 @@ const hoy   = () => new Date().toLocaleDateString("es-MX");
 const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
 
 /* ---------- Confirmación dentro de la app (no usa la ventana nativa del navegador) ---------- */
-function confirmar(titulo, texto, textoSi){
+function confirmar(titulo, texto, textoSi, textoNo){
   return new Promise(resolve=>{
     const m = $("#modalConfirmar");
     $("#mcTitulo").textContent = titulo;
     $("#mcTexto").textContent = texto || "";
     $("#mcSi").textContent = textoSi || "Confirmar";
+    $("#mcNo").textContent = textoNo || "Regresar";
     const cerrar = (valor)=>{ m.hidden = true; $("#mcSi").onclick = null; $("#mcNo").onclick = null; resolve(valor); };
     $("#mcSi").onclick = ()=> cerrar(true);
     $("#mcNo").onclick = ()=> cerrar(false);
@@ -1477,7 +1590,7 @@ function persistir(){
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
       incluirFirma:estado.incluirFirma,
       sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
-      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, comentarioCliente:estado.comentarioCliente
+      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
     }));
     /* v36: la cola ya NO vive aquí sino en IndexedDB (ver "Almacén del
        teléfono"). Solo si el teléfono no tiene IndexedDB se usa el método viejo. */
@@ -1504,7 +1617,7 @@ function restaurar(){
       estado.incluirFirma = !!g.incluirFirma;
       estado.sabado = !!g.sabado; estado.cierreDirecto = !!g.cierreDirecto;
       estado.refacciones = Array.isArray(g.refacciones) ? g.refacciones : [];
-      estado.sinRefacciones = !!g.sinRefacciones; estado.comentarioCliente = String(g.comentarioCliente||"");
+      estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
     }
     /* Cola vieja (v35 y anteriores) guardada en localStorage: se toma aquí y
        cargarCola() la pasa a IndexedDB sin perder nada. */
@@ -1667,7 +1780,24 @@ function encolar(sobre){
    siendo obligatorias). El conector de Google no cambia. */
 /* v76 (18-oct-2026) — el cliente interno «Blake Inc · Ecatepec» NO pide firma del cliente aunque el nombre llegue con
    otro formato (acentos, puntos, espacios, título distinto). */
-const APP_VER = "v76";
+/* v77 (27-oct-2026) — RECORDATORIOS DE COMIDA (lunes a viernes). Operativos: 13:00 salida a comer y 14:00 regreso; administrativos
+   (Esther, Alejandra, Jorge, Brandon, Daniel, Lulú, Yuzzeth): 14:00 y 15:00. Opciones: «Salgo a comer ahora», «Comeré más tarde, a las…»
+   y «Hoy no comeré»; las dos últimas piden PIN de un supervisor (un solo uso, 15 min; Daniel, Brandon, Jorge o el Sr. Ernesto; nadie se
+   autoriza a sí mismo) y una casilla de decisión propia. «Terminar servicio sin salir a comer» también exige ese PIN. Sin señal al
+   solicitar: el sistema autoriza y lo reporta con el motivo. Pantalla nueva del supervisor «Autorizar comida». REQUIERE el bloque V78 del conector. */
+/* v80 (27-oct-2026) — SALIDA INCOMPLETA: si el técnico no puede cumplir el cierre de refacciones (cámara dañada, ticket perdido, texto mal detectado)
+   puede pedir autorización de un supervisor con PIN (mismo mecanismo de la comida) y escribir el motivo (mín. 30 caracteres); la salida se registra
+   marcada INCOMPLETA, se reporta a la dirección y nadie queda sin salida registrada. REQUIERE el conector único v80.
+   v79 (27-oct-2026) — REFACCIONES OBLIGATORIAS en todos los servicios: para cerrar hay que capturar al menos una (descripción, cantidad > 0 y origen)
+   o marcar «No se utilizó ninguna refacción». Si se marca «ninguna» y el texto de las actividades menciona material, se BLOQUEA: debe capturarla o
+   escribir un motivo (mín. 15 caracteres) de por qué no es refacción; el motivo se reporta al Sr. Ernesto. Si el origen es «Se compró en campo» es
+   obligatoria la FOTO del ticket o factura, tomada con la cámara en ese momento (no galería). REQUIERE el conector V79 actualizado.
+   v78 (27-oct-2026) — REFACCIONES para cobro: cada refacción lleva cantidad, unidad, código y origen (almacén Blake / comprada en campo);
+   si el texto de las actividades sugiere que se usó material y no se capturó nada, la app lo avisa antes de cerrar (no bloquea).
+   LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
+   LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
+   y el correo de cobranza a Esther y Yuzzeth. */
+const APP_VER = "v80";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -1700,7 +1830,7 @@ const esErrorSesion = t => /sesi[oó]n\s+(no\s+v[aá]lida|vencida)/i.test(String
 function nombreSobre(s){
   if(s && s.tipo === "asignar") return descripcionAdmin(s);   /* v69 */
   const n = { foto:"Foto", foto_act:"Foto de actividad", reporte_act:"Reporte de actividades", hoja:"Correo del reporte al cliente",
-              cancelacion:"Cancelación", asignar:"Asignación", cliente:"Alta de cliente", evento:"Registro de jornada" };
+              cancelacion:"Cancelación", comida_sin_senal:"Autorización de comida sin señal", asignar:"Asignación", cliente:"Alta de cliente", evento:"Registro de jornada" };
   return (n[s.tipo] || "Registro") + (s.folio ? " · folio " + s.folio : "") + (s.cliente ? " · " + s.cliente : "");
 }
 
@@ -2221,6 +2351,7 @@ function pintarBoton(){
   const btn=$("#btnPaso"), nota=$("#notaBtn");
   nota.classList.remove("alerta");
   const bd = $("#btnCierreDirecto"); if(bd) bd.hidden = !puedeCierreDirecto();
+  const bl = $("#btnLlegadaOlvidada"); if(bl) bl.hidden = !(p && p.id==="llegada" && !estado.leyendo);
 
   if(!p){ btn.hidden = true; nota.hidden = true; return; }
   btn.hidden = false; nota.hidden = false;
@@ -2230,20 +2361,25 @@ function pintarBoton(){
   const faltanFotos = esSalida && estado.fotos.despues.length<3;
   const medAct = medirActividades();
   const faltanActiv = esSalida && !medAct.ok;
+  const vr = esSalida ? validaRefac() : { ok:true };
+  const faltanRefac = !vr.ok;
+  try{ pintarBoxNoRefac(); }catch(e){}
+  { const bi = $("#btnIncompleta"); if(bi) bi.hidden = !(esSalida && !validaRefacBase().ok && !(estado.incompleta && estado.incompleta.ok)); }
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
   const faltanFirma = esSalida && !esInterno() && !estado.firma;
   const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
-  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || sinNota>0;
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || faltanRefac || sinNota>0;
 
-  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || sinNota)){
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || faltanRefac || sinNota)){
     nota.classList.add("alerta");
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
     if(sinNota) faltan.push(`explicar ${sinNota} actividad(es) pendiente(s) o cancelada(s)`);
     if(faltanActiv) medAct.faltan.forEach(t=>faltan.push(t));
+    if(faltanRefac) faltan.push(vr.msg);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ".";
@@ -2499,14 +2635,18 @@ async function registrar(){
   estado.leyendo = false;
   if(paso.id==="llegada"){ estado.sabado = (new Date().getDay() === 6); estado.cierreDirecto = false; }   /* v75: el día se fija aquí */
 
+  const _decl = (paso.id==="llegada") ? estado.llegadaDecl : null;
   encolar({
     tipo:"evento", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", sitio:o.sitio||"",
     evento:paso.nombre, fecha:hoy(), hora,
-    actividades: paso.id==="salida" ? (estado.actividades.trim() + textoExtraCierre()) : "",
+    actividades: paso.id==="salida" ? (estado.actividades.trim() + textoExtraCierre())
+      : ((paso.id==="llegada" && estado.llegadaDecl && estado.llegadaDecl.fecha === hoy())
+          ? ("LLEGADA DECLARADA " + estado.llegadaDecl.hora + " (hora real según el colaborador) · Hora del teléfono al registrar: " + hora + " · Motivo: " + estado.llegadaDecl.motivo) : ""),
     lat: lectura ? +lectura.lat.toFixed(6) : "", lon: lectura ? +lectura.lon.toFixed(6) : "",
     distancia: (lectura && tieneRef) ? dist : "", estatus,
     precision: lectura ? lectura.prec : "", folio:o.folio||""
   });
+  if(_decl) estado.llegadaDecl = null;
 
   // Al registrar la salida, también enviamos la firma del cliente (si se activó la casilla).
   if(paso.id==="salida" && estado.firma){
@@ -2794,14 +2934,66 @@ function enlazarFormTipo(cont){
 /* ---------- v75: refacciones utilizadas y comentarios del cliente (opcionales, no bloquean el cierre) ---------- */
 const MAX_REFAC = 20, MAX_COMENT = 500;
 function refaccionesLimpias(){
-  return (estado.refacciones||[]).map(r=>({ desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant) })).filter(r=>r.desc || r.cant);
+  return (estado.refacciones||[]).map(r=>({ desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant), uni:limpiaTxt(r && r.uni) || "pza", cod:limpiaTxt(r && r.cod), org:limpiaTxt(r && r.org), ticket:limpiaTxt(r && r.ticket) })).filter(r=>r.desc || r.cant);
+}
+/* v79: lo que el sistema detectó en el texto y el motivo con que el técnico dice que NO es refacción (solo si marcó «ninguna»). */
+function motivoNoRefacVigente(){
+  if(!estado.sinRefacciones || refaccionesLimpias().length) return null;
+  const p = pistaRefaccion(); if(!p) return null;
+  return { pista:p, motivo:limpiaTxt(estado.motivoNoRefac) };
+}
+/* v79: el cierre exige capturar refacciones o declarar que no hubo; con foto de ticket si se compró en campo. */
+function validaRefac(){
+  const v = validaRefacBase();
+  if(v.ok) return v;
+  if(estado.incompleta && estado.incompleta.ok) return { ok:true, incompleta:true, msg:v.msg };
+  return v;
+}
+/* v80: datos de la salida incompleta autorizada, solo si todavía falta algo. */
+function incompletaVigente(){
+  const i = estado.incompleta; if(!i || !i.ok) return null;
+  const v = validaRefacBase(); if(v.ok) return null;
+  return { falta:v.msg, motivo:i.motivo || "", autorizo:i.aut || "", sinSenal:!!i.sinSenal };
+}
+function validaRefacBase(){
+  const rf = refaccionesLimpias();
+  if(!rf.length){
+    if(!estado.sinRefacciones) return { ok:false, msg:"capturar las refacciones utilizadas o marcar «No se utilizó ninguna refacción»" };
+    const p = pistaRefaccion();
+    if(p && limpiaTxt(estado.motivoNoRefac).length < 15) return { ok:false, msg:"capturar la refacción que se detectó en sus actividades («…" + p + "…») o explicar por qué no es refacción" };
+    return { ok:true };
+  }
+  for(let i=0;i<rf.length;i++){
+    const r = rf[i], n = i + 1;
+    if(!r.desc) return { ok:false, msg:"describir la refacción " + n };
+    const c = parseFloat(String(r.cant).replace(",", "."));
+    if(!(c > 0)) return { ok:false, msg:"indicar la cantidad de la refacción " + n };
+    if(!r.org) return { ok:false, msg:"indicar el origen de la refacción " + n };
+    if(r.org === "Comprada en campo" && !r.ticket) return { ok:false, msg:"tomar la foto del ticket o factura de la refacción " + n };
+  }
+  return { ok:true };
+}
+function pintarBoxNoRefac(){
+  const b = $("#boxNoRefac"); if(!b) return;
+  const p = estado.sinRefacciones ? pistaRefaccion() : "";
+  b.hidden = !p;
+  if(p){
+    $("#avisoNoRefac").textContent = "En sus actividades dice: «…" + p + "…». Eso parece una refacción o material y no puede procesarse como «ninguna refacción». Desmarque la casilla y capture la refacción arriba; si de verdad NO es una refacción, explique por qué:";
+    const m = $("#motivoNoRefac"); if(m && document.activeElement !== m && m.value !== (estado.motivoNoRefac||"")) m.value = estado.motivoNoRefac || "";
+  }
 }
 function textoExtraCierre(){
   const rf = refaccionesLimpias();
   let t = "\n\n";
-  if(estado.sinRefacciones && !rf.length) t += "REFACCIONES UTILIZADAS: ninguna";
-  else if(rf.length) t += "REFACCIONES UTILIZADAS:\n" + rf.map((r,i)=>`${i+1}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant : ""}`).join("\n");
+  if(estado.sinRefacciones && !rf.length){
+    t += "REFACCIONES UTILIZADAS: ninguna";
+    const mo = motivoNoRefacVigente();
+    if(mo) t += "\nAVISO: el sistema detectó posible refacción en «…" + mo.pista + "…». El técnico declaró que NO es refacción. Motivo: " + mo.motivo;
+  }
+  else if(rf.length) t += "REFACCIONES UTILIZADAS:\n" + rf.map((r,i)=>`${i+1}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant + " " + r.uni : ""}${r.cod ? " — código: " + r.cod : ""}${r.org ? " — origen: " + r.org : ""}${r.ticket ? " — ticket: foto adjunta (" + r.ticket + ")" : ""}`).join("\n");
   else t += "REFACCIONES UTILIZADAS: no se capturaron";
+  const inc = incompletaVigente();
+  if(inc) t += "\nSALIDA INCOMPLETA AUTORIZADA " + (inc.sinSenal ? "POR EL SISTEMA (SIN SEÑAL)" : "POR " + inc.autorizo + " (PIN)") + ". Faltó: " + inc.falta + ". Motivo del técnico: " + inc.motivo;
   const c = limpiaTxt(estado.comentarioCliente);
   if(c) t += "\n\nCOMENTARIOS DEL CLIENTE: " + c;
   return t;
@@ -2811,6 +3003,7 @@ function pintarRefac(){
   estado.refacciones = Array.isArray(estado.refacciones) ? estado.refacciones : [];
   $("#chkSinRefac").checked = !!estado.sinRefacciones;
   $("#btnRefacAgregar").disabled = !!estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC;
+  pintarBoxNoRefac();
   const f = document.activeElement;
   if(f && cont.contains(f) && cont.dataset.n === String(estado.refacciones.length)) return;
   cont.dataset.n = String(estado.refacciones.length);
@@ -2818,23 +3011,52 @@ function pintarRefac(){
     <div class="renglon" data-i="${i}">
       <div class="renglon-cab"><span class="renglon-num">Refacción ${i+1}</span><button type="button" class="renglon-quitar refac-quitar" data-i="${i}">Quitar</button></div>
       <input type="text" class="refac-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
-      <input type="text" class="refac-cant" data-i="${i}" maxlength="30" placeholder="Cantidad (ej.: 2 piezas, 5 m)" value="${esc(r.cant||"")}" autocomplete="off">
+      <div class="refac-fila">
+        <input type="text" class="refac-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="Cantidad (ej.: 2)" value="${esc(r.cant||"")}" autocomplete="off">
+        <select class="refac-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
+      </div>
+      <input type="text" class="refac-cod" data-i="${i}" maxlength="40" placeholder="Código o número de parte (si lo tiene)" value="${esc(r.cod||"")}" autocomplete="off">
+      <select class="refac-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
+      ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec refac-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
     </div>`).join("");
-  cont.querySelectorAll(".refac-desc").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].desc = i.value; persistir(); });
-  cont.querySelectorAll(".refac-cant").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cant = i.value; persistir(); });
-  cont.querySelectorAll(".refac-quitar").forEach(b=> b.onclick = ()=>{ estado.refacciones.splice(+b.dataset.i,1); persistir(); pintarRefac(); });
+  cont.querySelectorAll(".refac-desc").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].desc = i.value; persistir(); pintarBoton(); });
+  cont.querySelectorAll(".refac-cant").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cant = i.value; persistir(); pintarBoton(); });
+  cont.querySelectorAll(".refac-uni").forEach(i=> i.onchange = ()=>{ estado.refacciones[+i.dataset.i].uni = i.value; persistir(); });
+  cont.querySelectorAll(".refac-cod").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cod = i.value; persistir(); });
+  cont.querySelectorAll(".refac-org").forEach(i=> i.onchange = ()=>{ estado.refacciones[+i.dataset.i].org = i.value; persistir(); cont.dataset.n = "x"; pintarRefac(); pintarBoton(); });
+  cont.querySelectorAll(".refac-foto").forEach(b=> b.onclick = ()=>{ ticketIdx = +b.dataset.i; $("#camaraTicket").click(); });
+  cont.querySelectorAll(".refac-quitar").forEach(b=> b.onclick = ()=>{ estado.refacciones.splice(+b.dataset.i,1); persistir(); cont.dataset.n = "x"; pintarRefac(); pintarBoton(); });
   const t = $("#comentCliente"); if(t && t.value !== (estado.comentarioCliente||"")) t.value = estado.comentarioCliente || "";
   $("#comentCont").textContent = (estado.comentarioCliente||"").length + " / " + MAX_COMENT;
 }
 $("#btnRefacAgregar").addEventListener("click", ()=>{
   if(estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC) return;
-  estado.refacciones.push({ desc:"", cant:"" }); persistir(); pintarRefac();
+  estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"" }); persistir(); pintarRefac(); pintarBoton();
   const l = document.querySelectorAll("#refacLista .refac-desc"); if(l.length) l[l.length-1].focus();
 });
 $("#chkSinRefac").addEventListener("change", e=>{
   estado.sinRefacciones = e.target.checked;
   if(estado.sinRefacciones) estado.refacciones = [];
   persistir(); const c = $("#refacLista"); if(c) c.dataset.n = "x"; pintarRefac();
+  if(estado.sinRefacciones){ const p = pistaRefaccion(); if(p) avisar("Posible refacción en su texto", "En sus actividades dice «…" + p + "…». Eso no puede procesarse como «ninguna refacción»: capture la refacción o explique por qué no lo es.", "alerta"); }
+  pintarBoton();
+});
+$("#motivoNoRefac").addEventListener("input", e=>{ estado.motivoNoRefac = e.target.value.slice(0, 300); persistir(); pintarBoton(); });
+/* v79: foto del ticket o factura (solo cámara, en el momento); se manda sola con fase «ticket» y el nombre queda en la refacción. */
+let ticketIdx = -1;
+$("#camaraTicket").addEventListener("change", async e=>{
+  const archivo = (e.target.files || [])[0]; e.target.value = "";
+  const i = ticketIdx; ticketIdx = -1;
+  if(!archivo || !estado.refacciones[i]) return;
+  if(origenArchivo(archivo).galeria){ avisar("Foto no válida", "El ticket o factura debe fotografiarse en este momento con la cámara; no se acepta una imagen de la galería o de otra fecha.", "error"); return; }
+  const r = await comprimirImagenP(archivo);
+  if(!r){ avisar("No se pudo leer la foto", "Intente tomarla de nuevo.", "error"); return; }
+  const o = estado.orden || {};
+  const nombre = "TICKET_" + (o.folio || "SINFOLIO") + "_R" + (i+1) + "_" + idCorto();
+  encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", fase:"ticket", fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"", origen:"camara", nombre });
+  estado.refacciones[i].ticket = nombre; persistir();
+  const c = $("#refacLista"); if(c) c.dataset.n = "x"; pintarRefac(); pintarBoton();
+  avisar("Ticket guardado", "Foto del ticket de la refacción " + (i+1) + " guardada; se envía sola.", "ok");
 });
 $("#comentCliente").addEventListener("input", e=>{
   estado.comentarioCliente = e.target.value.slice(0, MAX_COMENT);
@@ -3096,14 +3318,15 @@ const PANTALLAS_RETORNO = {
   actividades:  "#actividadesPantalla",
   admin:        "#adminPantalla",
   equipo:       "#equipoPantalla",
-  sol:          "#solPantalla"
+  sol:          "#solPantalla",
+  comida:       "#comidaPantalla"
 };
 function sesionVencidaEn(pantalla){
   _volverA = pantalla || "";
   estado.sesionVencida = true;
   Object.values(PANTALLAS_RETORNO).forEach(sel=>{ const p = $(sel); if(p) p.hidden = true; });
   $("#inicio").hidden = true;
-  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo", sol:"Autorizar cambio de actividades" }[_volverA] || "donde estaba";
+  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo", sol:"Autorizar cambio de actividades", comida:"Autorizar comida" }[_volverA] || "donde estaba";
   avisar("Entre de nuevo, con señal",
     `El servidor ya no reconoce la sesión de este teléfono. Escriba su correo y contraseña: al entrar regresará a ${nombre}. No se perdió nada.`, "error");
   pedirLogin();
@@ -3115,6 +3338,7 @@ function volverTrasLogin(){
   if(destino === "admin" && esAdminApp()){ $("#inicio").hidden = true; abrirAdmin(); return true; }
   if(destino === "equipo" && esAdminApp()){ $("#inicio").hidden = true; abrirEquipo(); return true; }
   if(destino === "sol" && esAdminApp()){ $("#inicio").hidden = true; abrirSol(); return true; }
+  if(destino === "comida" && esAdminApp()){ $("#inicio").hidden = true; abrirComidaSup(); return true; }
   return false;
 }
 function pedirLogin(){
@@ -3757,7 +3981,7 @@ function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
-  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.comentarioCliente = "";
+  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.incompleta = null; estado.comentarioCliente = "";
   act.fotosAct = {}; borrarFotosAct();
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
@@ -3814,18 +4038,27 @@ addEventListener("online", ()=>{ pintarRed(); avisar("Conexión recuperada","Env
 addEventListener("offline", ()=>{ pintarRed(); pintarEnvio(); avisar("Sin conexión","Sus registros se guardan en el teléfono y se enviarán solos.","info"); });
 
 /* Antes de enviar la Salida (cierre del servicio) se confirma con un modal. */
-function onClickPaso(){
+/* v78: si el texto de las actividades sugiere que se usó una refacción o material y no se capturó nada en el apartado, se avisa. */
+function pistaRefaccion(){
+  const quitar = t => String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const re = /(refaccion|repuesto|material(es)?\b|se\s+(cambi|reemplaz|sustituy|instal|coloc|utiliz|ocup|gast)|cambio\s+de|reemplazo|sustitucion|rodamiento|balero|fusible|contactor|relevador|manguera|valvula|sensor|sello\b|filtro|cilindro|cable\b|tornill)/i;
+  const todo = hechasCierre().concat(adicionalesCierre());
+  for(const t of todo){ const m = re.exec(quitar(t)); if(m){ const i = quitar(t).toLowerCase().indexOf(m[0].toLowerCase()); return String(t).slice(Math.max(0,i-15), i+m[0].length+25).trim(); } }
+  return "";
+}
+async function onClickPaso(){
   const p = pasoPendiente();
-  if(p && p.id==="salida"){ $("#modalCierre").hidden = false; return; }
+  if(p && p.id==="salida"){
+    $("#modalCierre").hidden = false; return;
+  }
   registrar();
 }
 $("#btnPaso").addEventListener("click", onClickPaso);
-$("#btnCierreDirecto").addEventListener("click", async ()=>{
+$("#btnCierreDirecto").addEventListener("click", ()=>{
   if(!puedeCierreDirecto()) return;
-  if(!await confirmar("¿Terminar sin salir a comer?",
-      "Se pasará directo al cierre del servicio (fotos, actividades y firmas). La salida a comida y el regreso quedarán sin registro.",
-      "Sí, ir al cierre")) return;
-  estado.cierreDirecto = true; persistir(); pintar();
+  /* v77: sin comida solo con autorización de un supervisor (PIN) y la casilla de decisión propia. */
+  if(cmAutorizadoNoComer()) cmIrCierreDirecto();
+  else abrirComida({ gate:true, despues: cmIrCierreDirecto });
 });
 $("#btnRegresarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; });
 $("#btnConfirmarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; registrar(); });
@@ -3926,10 +4159,12 @@ function mostrarInicio(){
   $("#btnIrEquipo").hidden = !esAdminApp();
   $("#equipoPantalla").hidden = true;
   $("#solPantalla").hidden = true;
+  $("#comidaPantalla").hidden = true;
   $("#clientePantalla").hidden = true;
   $("#aclaracionesPantalla").hidden = true;
   $("#portadaClave").hidden = true;
   pintarBotonSol();
+  try{ pintarBotonComida(); if(esAdminApp()) cmSupCargar(true); cmRevisar(); }catch(e){}
   if(esAdminApp() && navigator.onLine && !adm.cargando) refrescarEquipo();   /* v57: contador de solicitudes */
   pintarBotonAclaraciones();
   pintarBotonBio();   /* v48 */
@@ -3939,7 +4174,8 @@ async function cerrarSesion(){
   if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
   _claveDeEntrada = ""; _volverA = ""; $("#portadaClave").hidden = true;
-  adm.usuarios = []; adm.solicitudes = []; adm.actualizado = null; $("#solPantalla").hidden = true;
+  adm.usuarios = []; adm.solicitudes = []; adm.actualizado = null; $("#solPantalla").hidden = true; $("#comidaPantalla").hidden = true;
+  try{ cmSup.lista = []; cmSup.resueltas = []; cmSup.ts = 0; cmBanner(null); }catch(e){}
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
   $("#equipoPantalla").hidden = true;
@@ -4373,6 +4609,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     noConcluidas: snap.noConcluidas || [],   /* v61: pendientes/canceladas con su justificación */
     detalle: "",
     refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente),
+    motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
     firma: estado.incluirFirma && estado.firma ? estado.firma : "",
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
@@ -5661,6 +5898,401 @@ function aplicarLogos(){
   document.querySelectorAll("img[data-logo]").forEach(i=>{ if(!i.getAttribute("src")) i.src = src.getAttribute("src"); });
 }
 aplicarLogos();
+
+/* ============================================================
+   v77 · Recordatorios de comida y autorización con PIN de supervisor
+   - Lunes a viernes (sábado no). Operativos: 13:00 salida a comer, 14:00 regreso.
+     Administrativos: 14:00 y 15:00.
+   - "Comeré más tarde" y "Hoy no comeré" piden PIN de un supervisor (un solo uso, 15 min)
+     y una casilla de decisión propia. Un supervisor no puede autorizarse a sí mismo.
+   - Sin señal al solicitar: el sistema autoriza y lo REPORTA con el motivo (AUTORIZADA SIN SEÑAL).
+   - Etapa 1: el aviso funciona con la app abierta. Aviso al teléfono con la app cerrada: etapa 2.
+   ============================================================ */
+const CM_ADMINISTRATIVOS = ["esther","alejandra","jorge","brandon","daniel","lulu","yuzzeth"];
+const CM_TEXTO_NOCOMO = "Declaro que no saldré a comer hoy por decisión propia, que ningún jefe ni supervisor me lo impuso ni condicionó, y que sé que tengo derecho a mi descanso.";
+const CM_TEXTO_TARDE  = "Declaro que comeré más tarde, a la hora que indico, por decisión propia, que ningún jefe ni supervisor me lo impuso ni condicionó, y que sé que tengo derecho a mi descanso.";
+const CM_LIMITE_TARDE = "17:00";
+const LS_CM = "blake.comida";
+const cmVacio = (f,u) => ({ fecha:f, u:u, modo:"", hora:"", sinSenal:false, reqId:"", reqTipo:"", reqHora:"", reqTs:0, incId:"", incTs:0, incMotivo:"", incFalta:"" });
+let CM = cmVacio("","");
+const cmYmd = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
+const cmMin = h => { const m = /^(\d{1,2}):(\d{2})/.exec(String(h||"")); return m ? (+m[1])*60 + (+m[2]) : NaN; };
+const cmAhoraMin = () => { const d = new Date(); return d.getHours()*60 + d.getMinutes(); };
+const cmPrimerNombre = () => normCliente(estado.tecnico || "").split(" ")[0];
+const cmEsDirector = () => cmPrimerNombre() === "ernesto";
+const cmEsAdministrativo = () => CM_ADMINISTRATIVOS.indexOf(cmPrimerNombre()) >= 0;
+const cmHoras = () => cmEsAdministrativo() ? { sal:"14:00", reg:"15:00" } : { sal:"13:00", reg:"14:00" };
+function cmGuardar(){ try{ localStorage.setItem(LS_CM, JSON.stringify(CM)); }catch(e){} }
+function cmHoy(){
+  const f = cmYmd(), u = estado.usuario || "";
+  if(CM.fecha !== f || CM.u !== u){
+    let g = null; try{ g = JSON.parse(localStorage.getItem(LS_CM) || "null"); }catch(e){}
+    CM = (g && g.fecha === f && g.u === u) ? Object.assign(cmVacio(f,u), g) : cmVacio(f,u);
+  }
+  return CM;
+}
+const cmAutorizadoNoComer = () => cmHoy().modo === "nocomo";
+
+/* Llamada directa al conector con respuesta leída (el PIN necesita contestación al instante). */
+async function cmLlamar(obj){
+  const sobre = Object.assign({}, obj, { token: estado.token, _quien: String(estado.usuario || ""), _ver: APP_VER });
+  const ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+  const reloj = ctrl ? setTimeout(()=> ctrl.abort(), 30000) : null;
+  try{
+    const r = await fetch(CONFIG.url, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify(sobre), redirect:"follow", signal: ctrl ? ctrl.signal : undefined });
+    const j = JSON.parse(await r.text());
+    return (j && typeof j === "object") ? j : { red:true };
+  }catch(e){ return { red:true }; }
+  finally{ if(reloj) clearTimeout(reloj); }
+}
+
+/* ---------- Aviso (banner) y disparo de recordatorios ---------- */
+let cmBannerTipo = "", cmAbiertoKey = "";
+function cmBanner(tipo){
+  const b = $("#bannerComida"); if(!b) return;
+  cmBannerTipo = tipo || "";
+  if(!tipo){ b.hidden = true; document.body.classList.remove("conBannerComida"); return; }
+  $("#bannerComidaBtn").textContent = tipo === "salida" ? "⏰ Hora de comer · toque aquí" : "⏰ Registre su regreso de comer";
+  b.hidden = false; document.body.classList.add("conBannerComida");
+}
+function cmHayModal(){
+  if(document.querySelector(".portada:not([hidden]):not(#inicio)")) return true;   /* el menú de inicio no cuenta como ventana ocupada */
+  const e = $("#envio"); return !!(e && !e.hidden);
+}
+function cmRevisar(){
+  const activo = !!(estado.token && estado.usuario && !estado.sesionVencida && $("#portada").hidden && !cmEsDirector());
+  const dow = new Date().getDay();
+  if(!activo || dow < 1 || dow > 5){ cmBanner(null); return; }
+  const c = cmHoy(), H = cmHoras(), m = cmAhoraMin(), ev = estado.eventos || {};
+  let tipo = "", llave = "";
+  if(ev.comida && !ev.regreso && !ev.salida && m >= cmMin(H.reg)){ tipo = "regreso"; llave = "regreso|" + c.fecha; }
+  else if(!ev.comida && !ev.salida && !estado.cierreDirecto && c.modo !== "nocomo" && c.modo !== "sinServicio"){
+    const desde = (c.modo === "tarde" && c.hora) ? c.hora : H.sal;
+    if(m >= cmMin(desde)){ tipo = "salida"; llave = "salida|" + c.fecha + "|" + desde; }
+  }
+  cmBanner(tipo || null);
+  if(tipo && llave !== cmAbiertoKey && !cmHayModal()){
+    cmAbiertoKey = llave;
+    try{ if(navigator.vibrate) navigator.vibrate([200,100,200,100,300]); }catch(e){}
+    if(tipo === "salida") abrirComida({ auto:true });
+    else avisar("Registre su regreso de comer", "Ya pasó la hora de regreso (" + H.reg + "). Toque el aviso amarillo para ir a su servicio y registrar el regreso.", "alerta");
+  }
+}
+function irAServicioAbierto(){
+  ["#inicio","#actividadesPantalla","#adminPantalla","#equipoPantalla","#solPantalla","#clientePantalla","#aclaracionesPantalla","#portadaClave","#comidaPantalla","#ordenes"]
+    .forEach(s=>{ const e = $(s); if(e) e.hidden = true; });
+  pintar(); window.scrollTo(0,0);
+}
+$("#bannerComidaBtn").addEventListener("click", ()=>{
+  if(cmBannerTipo === "salida") abrirComida({});
+  else if(cmBannerTipo === "regreso"){ irAServicioAbierto(); avisar("Registre su regreso", "Presione «Registrar regreso».", "alerta"); }
+});
+
+/* ---------- Ventana de recordatorio / solicitud ---------- */
+let cmOpts = {}, cmTipoForm = "", cmOcupado = false;
+function cmMsg(t, tipo){ const e = $("#cmMsg"); e.textContent = t || ""; e.dataset.t = tipo || ""; }
+function cmVista(v){
+  $("#cmMenu").hidden = v !== "menu"; $("#cmForm").hidden = v !== "form"; $("#cmPin").hidden = v !== "pin";
+  $("#cmAtras").hidden = v === "menu" || (v === "form" && !!cmOpts.gate);
+  $("#cmCerrar").textContent = cmOpts.gate ? "Cerrar" : "Cerrar (el aviso seguirá visible)";
+}
+function cmMostrarMenu(){
+  const c = cmHoy(), H = cmHoras();
+  const ahoraTxt = ahora();
+  $("#cmTitulo").textContent = "Es hora de comer";
+  let t = "Son las " + ahoraTxt + ". Su hora de comida es a las " + H.sal + " y su regreso a las " + H.reg + ".";
+  if(c.modo === "tarde" && c.hora) t += " Usted avisó que comería a las " + c.hora + ".";
+  t += " Elija una opción. «Comeré más tarde» y «Hoy no comeré» requieren el PIN de un supervisor.";
+  $("#cmTexto").textContent = t;
+  const ev = estado.eventos || {};
+  const hayServ = !!(estado.orden && ev.llegada && !ev.salida && !ev.comida && !estado.cierreDirecto);
+  $("#cmAhora").textContent = hayServ ? "Salgo a comer ahora" : "Voy a comer ahora";
+  cmMsg(""); cmVista("menu");
+}
+function cmMostrarForm(tipo){
+  cmTipoForm = tipo;
+  if(tipo === "incompleta"){
+    $("#cmTitulo").textContent = "Registrar la salida sin cumplir un requisito";
+    $("#cmTexto").textContent = "Falta: " + (cmOpts.falta || "") + ". Para registrar su salida así se necesita la autorización de un supervisor (PIN). La salida quedará marcada INCOMPLETA y se reporta a la dirección; su salida se registra de todos modos.";
+    $("#cmHoraBox").hidden = true; $("#cmMotivoBox").hidden = false; $("#cmCasillaLbl").hidden = true; $("#cmMotivo").value = "";
+    $("#cmPedir").textContent = "Solicitar autorización"; cmMsg(""); cmVista("form"); return;
+  }
+  $("#cmMotivoBox").hidden = true; $("#cmCasillaLbl").hidden = false;
+  $("#cmTitulo").textContent = tipo === "nocomo" ? "Hoy no comeré" : "Comeré más tarde";
+  $("#cmTexto").textContent = tipo === "nocomo"
+    ? "Para no tomar su descanso se necesita la autorización de un supervisor (PIN). Tiene derecho a su descanso: solo marque la casilla si es su decisión."
+    : "Indique la hora a la que comerá. Se necesita la autorización de un supervisor (PIN).";
+  $("#cmHoraBox").hidden = tipo !== "tarde";
+  $("#cmHora").value = "";
+  $("#cmCasilla").checked = false;
+  $("#cmCasillaTxt").textContent = tipo === "nocomo" ? CM_TEXTO_NOCOMO : CM_TEXTO_TARDE;
+  cmMsg(""); cmVista("form");
+}
+function cmMostrarPin(){
+  const c = cmHoy();
+  if(cmOpts.incompleta){
+    cmTipoForm = "incompleta";
+    $("#cmTitulo").textContent = "Pida su PIN";
+    $("#cmTexto").textContent = "Su solicitud de salida incompleta ya está con los supervisores: Daniel, Brandon, Jorge o el Señor Ernesto. Pídale a uno el PIN de 6 dígitos y escríbalo aquí. Sirve una sola vez y por 15 minutos.";
+    $("#cmPinIn").value = ""; cmMsg(""); cmVista("pin");
+    setTimeout(()=>{ try{ $("#cmPinIn").focus(); }catch(e){} }, 80);
+    return;
+  }
+  cmTipoForm = c.reqTipo;
+  $("#cmTitulo").textContent = "Pida su PIN";
+  $("#cmTexto").textContent = "Su solicitud (" + (c.reqTipo === "nocomo" ? "hoy no comeré" : "comeré más tarde, a las " + c.reqHora) + ") ya está con los supervisores: Daniel, Brandon, Jorge o el Señor Ernesto. Pídale a uno el PIN de 6 dígitos y escríbalo aquí. Sirve una sola vez y por 15 minutos. Si nadie lo atiende, salga a comer: es su derecho.";
+  $("#cmPinIn").value = ""; cmMsg(""); cmVista("pin");
+  setTimeout(()=>{ try{ $("#cmPinIn").focus(); }catch(e){} }, 80);
+}
+function abrirComida(opts){
+  cmOpts = opts || {}; const c = cmHoy();
+  $("#cmEtiqueta").textContent = cmOpts.gate ? "Terminar sin salir a comer" : "Hora de comer";
+  const pendiente = c.reqId && (Date.now() - c.reqTs) < 60*60000 && (!cmOpts.gate || c.reqTipo === "nocomo");
+  if(pendiente) cmMostrarPin();
+  else if(cmOpts.gate) cmMostrarForm("nocomo");
+  else cmMostrarMenu();
+  $("#modalComida").hidden = false;
+}
+function cmCerrar(){ $("#modalComida").hidden = true; cmOcupado = false; }
+
+function cmAutorizar(tipo, hora, sinSenal){
+  const c = cmHoy();
+  c.modo = tipo; c.hora = hora || ""; c.sinSenal = !!sinSenal;
+  c.reqId = ""; c.reqTipo = ""; c.reqHora = ""; c.reqTs = 0; cmGuardar();
+  const despues = cmOpts.despues; cmOpts = {};
+  cmCerrar(); cmRevisar();
+  const que = tipo === "nocomo" ? "Hoy no saldrá a comer." : "Comerá más tarde, a las " + hora + ".";
+  if(sinSenal) avisar("Autorizada SIN SEÑAL", que + " No hubo señal para pedir el PIN: el sistema lo autorizó y quedó REPORTADO a la dirección con ese motivo. Recuerde: tiene derecho a su descanso.", "alerta");
+  else avisar("Autorizado con PIN", que + " Quedó registrado quién lo autorizó y a qué hora. Recuerde: tiene derecho a su descanso.", "ok");
+  if(typeof despues === "function") setTimeout(despues, 250);
+}
+function cmSinSenal(tipo, hora, motivo){
+  const c = cmHoy();
+  encolar({ tipo:"comida_sin_senal", token:estado.token, idLocal:"CMS" + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    idSolicitud:c.reqId || "", accion: tipo === "nocomo" ? "no_comere" : "mas_tarde", horaNueva: hora || "",
+    casilla: tipo === "nocomo" ? CM_TEXTO_NOCOMO : CM_TEXTO_TARDE, motivo, horaCelular: ahora(), fechaCelular: hoy() });
+  cmAutorizar(tipo, hora, true);
+}
+/* ---------- v80: salida incompleta con PIN de supervisor ---------- */
+function abrirIncompleta(){
+  const v = validaRefacBase(); if(v.ok) return;
+  cmOpts = { incompleta:true, falta:v.msg }; const c = cmHoy();
+  $("#cmEtiqueta").textContent = "Salida incompleta";
+  if(c.incId && (Date.now() - c.incTs) < 60*60000) cmMostrarPin(); else cmMostrarForm("incompleta");
+  $("#modalComida").hidden = false;
+}
+function cmAutorizarInc(aut, sinSenal, motivo, falta){
+  estado.incompleta = { ok:true, aut:String(aut || ""), sinSenal:!!sinSenal, motivo:String(motivo || ""), falta:String(falta || ""), ts:Date.now() };
+  const c = cmHoy(); c.incId = ""; c.incTs = 0; cmGuardar(); persistir();
+  cmOpts = {}; cmCerrar(); try{ pintarBoton(); }catch(e){}
+  if(sinSenal) avisar("Autorizada SIN SEÑAL", "No hubo señal para pedir el PIN: el sistema autorizó la salida incompleta y quedó REPORTADO a la dirección con ese motivo. Ya puede registrar su salida.", "alerta");
+  else avisar("Autorizada con PIN", "Salida incompleta autorizada por " + String(aut || "un supervisor") + ". Ya puede registrar su salida.", "ok");
+}
+function cmIncSinSenal(motivo, falta, razon){
+  encolar({ tipo:"comida_sin_senal", token:estado.token, idLocal:"INC" + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    idSolicitud:cmHoy().incId || "", accion:"salida_incompleta", horaNueva:"", casilla:("Faltante: " + falta + ". Motivo: " + motivo).slice(0,500), motivo:razon,
+    horaCelular: ahora(), fechaCelular: hoy() });
+  cmAutorizarInc("SISTEMA (sin señal)", true, motivo, falta);
+}
+async function cmPedirInc(){
+  const motivo = limpiaTxt($("#cmMotivo").value), falta = String(cmOpts.falta || "");
+  if(motivo.length < 30){ cmMsg("Explique el motivo con al menos 30 caracteres (lleva " + motivo.length + ").", "error"); return; }
+  cmOcupado = true; $("#cmPedir").disabled = true; cmMsg("Enviando la solicitud a los supervisores…");
+  let r = null;
+  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_solicitar", accion:"salida_incompleta", casilla:("Faltante: " + falta + ". Motivo: " + motivo).slice(0,500), horaCelular: ahora() });
+  cmOcupado = false; $("#cmPedir").disabled = false;
+  if(!r || r.red){ cmIncSinSenal(motivo, falta, "No había señal (o el servidor no respondió) cuando el técnico solicitó la autorización"); return; }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ cmCerrar(); sesionVencidaEn(""); return; }
+    cmMsg(String(r.error || "El servidor no aceptó la solicitud."), "error"); return;
+  }
+  const c = cmHoy(); c.incId = r.id; c.incTs = Date.now(); c.incMotivo = motivo; c.incFalta = falta; cmGuardar();
+  cmMostrarPin();
+}
+$("#btnIncompleta").addEventListener("click", abrirIncompleta);
+async function cmPedir(){
+  if(cmOcupado) return;
+  const tipo = cmTipoForm;
+  if(tipo === "incompleta") return cmPedirInc();
+  if(!$("#cmCasilla").checked){ cmMsg("Debe marcar la casilla de declaración para continuar.", "error"); return; }
+  let hora = "";
+  if(tipo === "tarde"){
+    hora = $("#cmHora").value;
+    if(!/^\d{2}:\d{2}$/.test(hora)){ cmMsg("Escriba la hora a la que comerá.", "error"); return; }
+    if(cmMin(hora) <= cmAhoraMin()){ cmMsg("La hora debe ser posterior a la actual (" + ahora() + ").", "error"); return; }
+    if(cmMin(hora) > cmMin(CM_LIMITE_TARDE)){ cmMsg("La hora no puede ser después de las " + CM_LIMITE_TARDE + ".", "error"); return; }
+  }
+  cmOcupado = true; $("#cmPedir").disabled = true; cmMsg("Enviando la solicitud a los supervisores…");
+  const casilla = tipo === "nocomo" ? CM_TEXTO_NOCOMO : CM_TEXTO_TARDE;
+  let r = null;
+  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_solicitar", accion: tipo === "nocomo" ? "no_comere" : "mas_tarde", horaNueva:hora, casilla, horaCelular: ahora() });
+  cmOcupado = false; $("#cmPedir").disabled = false;
+  if(!r || r.red){ cmSinSenal(tipo, hora, "No había señal (o el servidor no respondió) cuando el colaborador solicitó el PIN"); return; }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ cmCerrar(); sesionVencidaEn(""); return; }
+    cmMsg(String(r.error || "El servidor no aceptó la solicitud."), "error"); return;
+  }
+  const c = cmHoy(); c.reqId = r.id; c.reqTipo = tipo; c.reqHora = hora; c.reqTs = Date.now(); cmGuardar();
+  cmMostrarPin();
+}
+async function cmValidar(){
+  if(cmOcupado) return;
+  const pin = $("#cmPinIn").value.replace(/\D/g, "");
+  if(pin.length !== 6){ cmMsg("El PIN tiene 6 dígitos.", "error"); return; }
+  const c = cmHoy(), esInc = !!cmOpts.incompleta;
+  cmOcupado = true; $("#cmValidar").disabled = true; cmMsg("Validando el PIN…");
+  let r = null;
+  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_pin_validar", id:(esInc ? c.incId : c.reqId), pin });
+  cmOcupado = false; $("#cmValidar").disabled = false;
+  if(!r || r.red){
+    if(esInc){ cmIncSinSenal(c.incMotivo || "", c.incFalta || cmOpts.falta || "", "Se perdió la señal (o el servidor no respondió) cuando el técnico validó el PIN"); return; }
+    cmSinSenal(c.reqTipo, c.reqHora, "Se perdió la señal (o el servidor no respondió) cuando el colaborador validó el PIN"); return;
+  }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ cmCerrar(); sesionVencidaEn(""); return; }
+    const e = String(r.error || "PIN no válido.");
+    if(r.final && esInc){ c.incId = ""; c.incTs = 0; cmGuardar(); cmMostrarForm("incompleta"); cmMsg(e + " Haga una solicitud nueva.", "error"); return; }
+    if(r.final){ c.reqId = ""; c.reqTipo = ""; c.reqHora = ""; c.reqTs = 0; cmGuardar(); cmMostrarMenu(); cmMsg(e + " Haga una solicitud nueva.", "error"); return; }
+    cmMsg(e, "error"); return;
+  }
+  if(esInc){ cmAutorizarInc(r.autorizo || "un supervisor", false, c.incMotivo || "", c.incFalta || cmOpts.falta || ""); return; }
+  cmAutorizar(r.accion === "no_comere" ? "nocomo" : "tarde", r.horaNueva || "", false);
+}
+function cmAhoraClick(){
+  cmCerrar();
+  const ev = estado.eventos || {};
+  const p = pasoPendiente();
+  if(estado.orden && ev.llegada && !ev.salida && !ev.comida && !estado.cierreDirecto && p && p.id === "comida"){
+    irAServicioAbierto();
+    setTimeout(()=>{ const q = pasoPendiente(); if(q && q.id === "comida") onClickPaso(); }, 400);
+  } else {
+    const c = cmHoy(); c.modo = "sinServicio"; cmGuardar(); cmRevisar();
+    avisar("Buen provecho", "No tiene un servicio abierto en la app, así que no hay salida a comer que registrar.", "ok");
+  }
+}
+$("#cmAhora").addEventListener("click", cmAhoraClick);
+$("#cmTarde").addEventListener("click", ()=> cmMostrarForm("tarde"));
+$("#cmNo").addEventListener("click", ()=> cmMostrarForm("nocomo"));
+$("#cmPedir").addEventListener("click", cmPedir);
+$("#cmValidar").addEventListener("click", cmValidar);
+$("#cmCerrar").addEventListener("click", cmCerrar);
+$("#cmAtras").addEventListener("click", ()=>{ if(cmOpts.gate || cmOpts.incompleta) cmCerrar(); else cmMostrarMenu(); });
+
+/* Cierre sin comida (v75) ahora exige autorización. */
+async function cmIrCierreDirecto(){
+  if(!puedeCierreDirecto()) return;
+  if(!await confirmar("¿Terminar sin salir a comer?",
+      "Se pasará directo al cierre del servicio (fotos, actividades y firmas). La salida a comida y el regreso quedarán sin registro.",
+      "Sí, ir al cierre")) return;
+  estado.cierreDirecto = true; persistir(); pintar(); cmRevisar();
+}
+
+/* ---------- Supervisor: pantalla «Autorizar comida» ---------- */
+const cmSup = { lista:[], resueltas:[], cargando:false, ts:0, pins:{}, vistos:new Set() };
+function pintarBotonComida(){
+  const b = $("#btnIrComida"); if(!b) return;
+  b.hidden = !esAdminApp(); if(b.hidden) return;
+  const n = cmSup.lista.filter(x=> !x.propia).length;
+  $("#inicioComidaDet").textContent = n ? "⚠ " + n + " colaborador" + (n === 1 ? "" : "es") + " pide" + (n === 1 ? "" : "n") + " autorización para su comida."
+                                         : "Supervisor: da el PIN a quien pide no comer o comer más tarde.";
+}
+function cmQue(x){
+  if(x.accion === "salida_incompleta") return "SALIDA INCOMPLETA (refacciones)";
+  return x.accion === "no_comere" ? "NO COMERÁ HOY" : "Comerá más tarde, a las " + esc(x.horaNueva);
+}
+function pintarSupComida(){
+  const cont = $("#comidaLista"); if(!cont) return;
+  const hora = cmSup.ts ? new Date(cmSup.ts).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}) : "";
+  $("#comidaSync").textContent = (cmSup.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar")) + (navigator.onLine ? "" : " · sin conexión");
+  let h = "";
+  if(!cmSup.lista.length) h += `<p class="pista">No hay solicitudes pendientes.</p>`;
+  cmSup.lista.forEach(x=>{
+    const que = cmQue(x);
+    const p = cmSup.pins[x.id];
+    h += `<div class="cm-card"><b>${esc(x.nombre)}</b> <span class="pista">· solicitó ${esc(x.hora)}</span><p>${que}</p>
+      <p class="pista">Declaró: «${esc(x.casilla)}»</p>`;
+    if(x.propia) h += `<p class="pista">Es su propia solicitud: otro supervisor debe darle el PIN.</p>`;
+    else {
+      if(p && p.vence > Date.now()){
+        h += `<div class="cm-pin">${esc(p.pin)}</div><p class="pista" style="text-align:center">Válido hasta ${new Date(p.vence).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false})} · un solo uso. Dígaselo a ${esc(x.nombre)}.</p>`;
+      }
+      h += `<button class="btn ${p ? "btn-sec" : ""}" type="button" data-gen="${esc(x.id)}">${p ? "Generar otro PIN (anula el anterior)" : (x.estatus === "PIN EMITIDO" ? "Generar PIN nuevo (anula el anterior)" : "Generar PIN")}</button>`;
+    }
+    h += `</div>`;
+  });
+  if(cmSup.resueltas.length){
+    h += `<span class="etiqueta" style="margin-top:18px;display:block">Resueltas hoy</span>`;
+    cmSup.resueltas.forEach(x=>{
+      h += `<div class="cm-card cm-res"><b>${esc(x.nombre)}</b><p>${esc(x.estatus)} · ${x.accion === "salida_incompleta" ? "salida incompleta" : (x.accion === "no_comere" ? "no comerá" : "comerá a las " + esc(x.horaNueva))}${x.autorizo ? " · autorizó " + esc(x.autorizo) : ""}</p></div>`;
+    });
+  }
+  cont.innerHTML = h;
+}
+async function cmSupCargar(silencioso){
+  if(!esAdminApp() || !estado.token || !navigator.onLine || cmSup.cargando) return;
+  cmSup.cargando = true; if(!silencioso) pintarSupComida();
+  const r = await cmLlamar({ tipo:"comida_lista" });
+  cmSup.cargando = false;
+  if(r.red || r.ok === false){
+    if(!silencioso && r.ok === false && esErrorSesion(r.error)){ sesionVencidaEn("comida"); return; }
+    if(!silencioso && r.red) avisar("Sin respuesta", "No se pudo leer la lista de solicitudes de comida. Intente de nuevo.", "error");
+    pintarSupComida(); return;
+  }
+  cmSup.lista = r.pendientes || []; cmSup.resueltas = r.resueltas || []; cmSup.ts = Date.now();
+  const nuevas = cmSup.lista.filter(x=> !x.propia && !cmSup.vistos.has(x.id));
+  cmSup.lista.forEach(x=> cmSup.vistos.add(x.id));
+  if(nuevas.length) avisar("Solicitud de comida", nuevas.map(x=> x.nombre + (x.accion === "salida_incompleta" ? " pide autorizar una salida incompleta" : (x.accion === "no_comere" ? " no comerá hoy" : " comerá a las " + x.horaNueva))).join(" · ") + ". Entre a «Autorizar comida» para darle el PIN.", "alerta");
+  pintarSupComida(); pintarBotonComida();
+}
+function abrirComidaSup(){
+  const p = $("#comidaPantalla"); p.hidden = false; p.scrollTop = 0;
+  pintarSupComida(); cmSupCargar(false);
+}
+$("#btnIrComida").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirComidaSup(); });
+$("#btnComidaMenu").addEventListener("click", ()=>{ $("#comidaPantalla").hidden = true; mostrarInicio(); });
+$("#btnComidaRefrescar").addEventListener("click", ()=> cmSupCargar(false));
+$("#comidaLista").addEventListener("click", async ev=>{
+  const b = ev.target.closest("[data-gen]"); if(!b || b.disabled) return;
+  const id = b.getAttribute("data-gen");
+  b.disabled = true; b.textContent = "Generando…";
+  const r = await cmLlamar({ tipo:"comida_pin_generar", id });
+  if(r.red){ avisar("Sin respuesta", "No se pudo generar el PIN (sin señal). Intente de nuevo.", "error"); pintarSupComida(); return; }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ sesionVencidaEn("comida"); return; }
+    avisar("No se generó el PIN", String(r.error || "Error del servidor"), "error"); cmSupCargar(true); return;
+  }
+  cmSup.pins[id] = { pin:r.pin, vence: Date.now() + (r.minutos || 15)*60000 };
+  pintarSupComida();
+});
+function cmSupSondeo(){
+  if(!esAdminApp() || document.hidden || !navigator.onLine) return;
+  const d = new Date(), h = d.getHours() + d.getMinutes()/60;
+  if(d.getDay() < 1 || d.getDay() > 5 || h < 10.5 || h > 18.5) return;
+  if(Date.now() - cmSup.ts > 45000) cmSupCargar(true);
+}
+function cmTick(){ try{ cmRevisar(); cmSupSondeo(); }catch(e){} }
+setInterval(cmTick, 20000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cmTick(); });
+
+
+/* ---------- v78: llegada olvidada ---------- */
+function llMsg(t){ const e = $("#llMsg"); e.textContent = t || ""; e.dataset.t = t ? "error" : ""; }
+$("#btnLlegadaOlvidada").addEventListener("click", ()=>{
+  $("#llHora").value = ""; $("#llMotivo").value = ""; $("#llCasilla").checked = false; llMsg(""); $("#modalLlegada").hidden = false;
+});
+$("#llCerrar").addEventListener("click", ()=>{ $("#modalLlegada").hidden = true; });
+$("#llGuardar").addEventListener("click", ()=>{
+  const h = $("#llHora").value, mot = limpiaTxt($("#llMotivo").value);
+  if(!/^\d{2}:\d{2}$/.test(h)){ llMsg("Escriba la hora real de llegada."); return; }
+  if(cmMin(h) > cmAhoraMin()){ llMsg("La hora no puede ser posterior a la actual (" + ahora() + ")."); return; }
+  if(cmMin(h) < 5*60){ llMsg("La hora no puede ser antes de las 05:00."); return; }
+  if(mot.length < 20){ llMsg("Escriba el motivo (mínimo 20 caracteres). Lleva " + mot.length + "."); return; }
+  if(!$("#llCasilla").checked){ llMsg("Marque la casilla de declaración."); return; }
+  estado.llegadaDecl = { hora:h, motivo:mot, fecha:hoy() };
+  $("#modalLlegada").hidden = true;
+  registrar();
+});
 
 /* ---------- Arranque ---------- */
 restaurar();

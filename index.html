@@ -715,6 +715,14 @@ body{
 .renglon input.renglon-tit{width:100%;min-height:48px;padding:10px 12px;margin-bottom:8px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:#FFFFFF;font-family:var(--texto);font-size:16px;font-weight:600}
 .renglon input.renglon-tit:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
 .fa-lbl[data-falta="1"]{color:#FFC24D}
+.renglon-refac{margin-top:8px}
+.ra-bloque{margin-top:12px;padding-top:10px;border-top:1px dashed var(--linea)}
+.ra-item{margin:0 0 10px;padding:10px;background:var(--acero-900);border:1px solid var(--linea);border-left:4px solid var(--naranja);border-radius:4px}
+.ra-cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.ra-num{font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--plata-alta)}
+.ra-quitar{background:none;border:0;color:var(--plata);font-family:var(--dato);font-size:13px;text-decoration:underline;cursor:pointer;padding:6px}
+.ra-box{margin-top:8px}
+.ra-box textarea{width:100%;min-height:78px;padding:10px 12px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
 .renglon-fotos{margin-top:8px}
 .renglon-cont,.act-nota-cont{font-family:var(--dato);font-size:12px;color:#FFC24D;text-align:right;margin-top:4px}
 .renglon-cont[data-ok="1"],.act-nota-cont[data-ok="1"]{color:var(--verde)}
@@ -884,11 +892,11 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
   <!-- v85: Refacciones justo después de las actividades, en el paso de salida -->
   <div class="acc-grupo" id="refacSeccion" data-acc="Refacciones y materiales" hidden>
-    <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
-    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe adjuntar la foto del ticket o factura (puede tomarla en el momento o elegirla de la galería).</p>
+    <label class="campo-lbl">Otras refacciones o materiales <b>(opcional)</b></label>
+    <p class="renglon-ayuda">Las refacciones de cada actividad se capturan <b>dentro de la propia actividad</b> (con la casilla «No se utilizaron refacciones»). Aquí solo anote lo que se usó en el servicio y <b>no corresponde a ninguna actividad</b> declarada. Si la compró en campo, debe anexar la foto del ticket o factura (cámara o galería).</p>
     <div id="refacLista"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
-    <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
+    <label class="chk-linea" for="chkSinRefac" hidden><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
     <div id="boxNoRefac" hidden>
       <p class="renglon-ayuda" id="avisoNoRefac"></p>
       <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
@@ -1556,7 +1564,7 @@ const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
   sabado:false, cierreDirecto:false,   /* v75: se fijan al registrar la llegada / al elegir cerrar sin comida */
-  refacciones:[], sinRefacciones:false, motivoNoRefac:"", incompleta:null, comentarioCliente:"",
+  refacciones:[], sinRefacciones:false, motivoNoRefac:"", sinRefacPorAct:{}, motivoPorAct:{}, incompleta:null, comentarioCliente:"",
   actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0,   // sobres realmente entregados al conector en este servicio
@@ -1624,7 +1632,7 @@ function persistir(){
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
       incluirFirma:estado.incluirFirma,
       sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
-      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
+      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", sinRefacPorAct:estado.sinRefacPorAct||{}, motivoPorAct:estado.motivoPorAct||{}, incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
     }));
     /* v36: la cola ya NO vive aquí sino en IndexedDB (ver "Almacén del
        teléfono"). Solo si el teléfono no tiene IndexedDB se usa el método viejo. */
@@ -1651,7 +1659,7 @@ function restaurar(){
       estado.incluirFirma = !!g.incluirFirma;
       estado.sabado = !!g.sabado; estado.cierreDirecto = !!g.cierreDirecto;
       estado.refacciones = Array.isArray(g.refacciones) ? g.refacciones : [];
-      estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
+      estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.sinRefacPorAct = (g.sinRefacPorAct && typeof g.sinRefacPorAct==="object") ? g.sinRefacPorAct : {}; estado.motivoPorAct = (g.motivoPorAct && typeof g.motivoPorAct==="object") ? g.motivoPorAct : {}; estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
     }
     /* Cola vieja (v35 y anteriores) guardada en localStorage: se toma aquí y
        cargarCola() la pasa a IndexedDB sin perder nada. */
@@ -1831,7 +1839,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v87";
+const APP_VER = "v88";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2519,7 +2527,8 @@ function pintarAcordeon(){
   }catch(e){}
   try{
     const v = validaRefacBase(); const n = refaccionesLimpias().length;
-    chipAcc("refacSeccion", estado.incompleta && estado.incompleta.ok ? "incompleta autorizada" : (v.ok ? (estado.sinRefacciones ? "ninguna ✓" : n + " ✓") : "falta"), v.ok ? "ok" : "falta");
+    const nGenR = refaccionesLimpias().filter(r=>r.ak==="").length;
+    chipAcc("refacSeccion", estado.incompleta && estado.incompleta.ok ? "incompleta autorizada" : (v.ok ? (nGenR ? nGenR + " ✓" : "opcional") : "falta"), v.ok ? "ok" : "falta");
     const bx = $("#boxNoRefac"); const vis = !!(bx && !bx.hidden);
     if(vis && !_accRefacAbierta){ setAcc($("#refacSeccion"), true); }
     _accRefacAbierta = vis;
@@ -3060,64 +3069,107 @@ function enlazarFormTipo(cont){
 
 /* ---------- v75: refacciones utilizadas y comentarios del cliente (opcionales, no bloquean el cierre) ---------- */
 const MAX_REFAC = 20, MAX_COMENT = 500;
+/* v88: las refacciones se declaran POR ACTIVIDAD (asignada o adicional, en cualquier estado). Clave: id de la asignada, o "R<n>" de la adicional. El bloque general (ak "") es opcional. */
+function refacClaves(){
+  const out = [];
+  try{ idsMarcadosCliente().forEach(id=>{
+    const a = act.lista.find(x=>String(x.id)===id);
+    const t = limpiaTxt((a && (a.titulo || a.texto)) || "") || "Actividad asignada";
+    out.push({ key:id, titulo:t, texto:t + ": " + limpiaTxt(act.notas[id]) });
+  }); }catch(e){}
+  (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{
+    if(!renglonLleno(r)) return;
+    const t = limpiaTxt(r.titulo) || ("Actividad adicional " + (i+1));
+    out.push({ key:"R"+i, titulo:t, texto:t + ": " + limpiaTxt(r.detalle) });
+  });
+  return out;
+}
+const sinDe = k => !!(estado.sinRefacPorAct && estado.sinRefacPorAct[k]);
 function refaccionesLimpias(){
-  return (estado.refacciones||[]).map(r=>({ desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant), uni:limpiaTxt(r && r.uni) || "pza", cod:limpiaTxt(r && r.cod), org:limpiaTxt(r && r.org), ticket:limpiaTxt(r && r.ticket) })).filter(r=>r.desc || r.cant);
+  const ks = {}; refacClaves().forEach(k=>{ ks[k.key] = k.titulo; });
+  return (estado.refacciones||[]).filter(r=>{ const k = (r && r.ak) || ""; return k==="" || (k in ks); })
+    .map(r=>{ const k = (r && r.ak) || ""; return { desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant), uni:limpiaTxt(r && r.uni) || "pza", cod:limpiaTxt(r && r.cod), org:limpiaTxt(r && r.org), ticket:limpiaTxt(r && r.ticket), ak:k, actividad: k ? ks[k] : "" }; })
+    .filter(r=>r.desc || r.cant);
 }
-/* v79: lo que el sistema detectó en el texto y el motivo con que el técnico dice que NO es refacción (solo si marcó «ninguna»). */
+/* true cuando TODAS las actividades declaradas dijeron «no se utilizaron refacciones» y no hay ninguna capturada. */
+function sinRefacTodo(){
+  const ks = refacClaves();
+  return ks.length > 0 && refaccionesLimpias().length === 0 && ks.every(k=>sinDe(k.key));
+}
+/* v79/v88: lo que el sistema detectó en el texto de cada actividad que dijo «ninguna» y el motivo con que el técnico dice que NO es refacción. */
 function motivoNoRefacVigente(){
-  if(!estado.sinRefacciones || refaccionesLimpias().length) return null;
-  const p = pistaRefaccion(); if(!p) return null;
-  return { pista:p, motivo:limpiaTxt(estado.motivoNoRefac) };
+  const pistas = [], motivos = [];
+  refacClaves().forEach(k=>{
+    if(!sinDe(k.key)) return;
+    if(refaccionesLimpias().some(r=>r.ak===k.key)) return;
+    const p = pistaRefaccion([k.texto]); if(!p) return;
+    pistas.push(k.titulo + ": " + p);
+    motivos.push(k.titulo + ": " + limpiaTxt((estado.motivoPorAct||{})[k.key]));
+  });
+  if(!pistas.length) return null;
+  return { pista:pistas.join(" | "), motivo:motivos.join(" | ") };
 }
-/* v79: el cierre exige capturar refacciones o declarar que no hubo; con foto de ticket si se compró en campo. */
 function validaRefac(){
   const v = validaRefacBase();
   if(v.ok) return v;
   if(estado.incompleta && estado.incompleta.ok) return { ok:true, incompleta:true, msg:v.msg };
   return v;
 }
-/* v80: datos de la salida incompleta autorizada, solo si todavía falta algo. */
 function incompletaVigente(){
   const i = estado.incompleta; if(!i || !i.ok) return null;
   const v = validaRefacBase(); if(v.ok) return null;
   return { falta:v.msg, motivo:i.motivo || "", autorizo:i.aut || "", sinSenal:!!i.sinSenal };
 }
-function validaRefacBase(){
-  const rf = refaccionesLimpias();
-  if(!rf.length){
-    if(!estado.sinRefacciones) return { ok:false, msg:"capturar las refacciones utilizadas o marcar «No se utilizó ninguna refacción»" };
-    const p = pistaRefaccion();
-    if(p && limpiaTxt(estado.motivoNoRefac).length < 15) return { ok:false, msg:"capturar la refacción que se detectó en sus actividades («…" + p + "…») o explicar por qué no es refacción" };
-    return { ok:true };
-  }
+function validaItemsRefac(rf, etiqueta){
   for(let i=0;i<rf.length;i++){
-    const r = rf[i], n = i + 1;
-    if(!r.desc) return { ok:false, msg:"describir la refacción " + n };
+    const r = rf[i], n = i + 1, e = etiqueta ? " (" + etiqueta + ")" : "";
+    if(!r.desc) return { ok:false, msg:"describir la refacción " + n + e };
     const c = parseFloat(String(r.cant).replace(",", "."));
-    if(!(c > 0)) return { ok:false, msg:"indicar la cantidad de la refacción " + n };
-    if(!r.org) return { ok:false, msg:"indicar el origen de la refacción " + n };
-    if(r.org === "Comprada en campo" && !r.ticket) return { ok:false, msg:"tomar la foto del ticket o factura de la refacción " + n };
+    if(!(c > 0)) return { ok:false, msg:"indicar la cantidad de la refacción " + n + e };
+    if(!r.org) return { ok:false, msg:"indicar el origen de la refacción " + n + e };
+    if(r.org === "Comprada en campo" && !r.ticket) return { ok:false, msg:"tomar la foto del ticket o factura de la refacción " + n + e };
   }
   return { ok:true };
 }
-function pintarBoxNoRefac(){
-  const b = $("#boxNoRefac"); if(!b) return;
-  const p = estado.sinRefacciones ? pistaRefaccion() : "";
-  b.hidden = !p;
-  if(p){
-    $("#avisoNoRefac").textContent = "En sus actividades dice: «…" + p + "…». Eso parece una refacción o material y no puede procesarse como «ninguna refacción». Desmarque la casilla y capture la refacción arriba; si de verdad NO es una refacción, explique por qué:";
-    const m = $("#motivoNoRefac"); if(m && document.activeElement !== m && m.value !== (estado.motivoNoRefac||"")) m.value = estado.motivoNoRefac || "";
+function validaRefacActividad(k, rfTodas){
+  const rf = rfTodas.filter(r=>r.ak===k.key);
+  if(!rf.length){
+    if(!sinDe(k.key)) return { ok:false, msg:"las refacciones de «" + k.titulo + "»: capturarlas o marcar «No se utilizaron refacciones»" };
+    const p = pistaRefaccion([k.texto]);
+    if(p && limpiaTxt((estado.motivoPorAct||{})[k.key]).length < 15) return { ok:false, msg:"«" + k.titulo + "»: capturar la refacción que se detectó («…" + p + "…») o explicar por qué no es refacción" };
+    return { ok:true };
   }
+  return validaItemsRefac(rf, k.titulo);
 }
+function validaRefacBase(){
+  const rf = refaccionesLimpias();
+  const ks = refacClaves();
+  for(const k of ks){ const v = validaRefacActividad(k, rf); if(!v.ok) return v; }
+  const gen = rf.filter(r=>r.ak === "");
+  const vg = validaItemsRefac(gen, "otras refacciones");
+  if(!vg.ok) return vg;
+  return { ok:true };
+}
+/* El aviso de «posible refacción» ahora vive dentro de cada actividad. */
+function pintarBoxNoRefac(){ const b = $("#boxNoRefac"); if(b) b.hidden = true; }
 function textoExtraCierre(){
   const rf = refaccionesLimpias();
+  const ks = refacClaves();
   let t = "\n\n";
-  if(estado.sinRefacciones && !rf.length){
-    t += "REFACCIONES UTILIZADAS: ninguna";
+  const linea = (r,n)=>`${n}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant + " " + r.uni : ""}${r.cod ? " — código: " + r.cod : ""}${r.org ? " — origen: " + r.org : ""}${r.ticket ? " — ticket: foto adjunta (" + r.ticket + ")" : ""}`;
+  if(ks.length){
+    t += "REFACCIONES UTILIZADAS POR ACTIVIDAD:";
+    let n = 0;
+    ks.forEach(k=>{
+      const l = rf.filter(r=>r.ak===k.key);
+      t += "\n• " + k.titulo + ": " + (l.length ? "\n" + l.map(r=>"   " + linea(r, ++n)).join("\n") : (sinDe(k.key) ? "ninguna" : "no se capturaron"));
+    });
+    const g = rf.filter(r=>r.ak === "");
+    if(g.length) t += "\n• Otras (sin actividad específica):\n" + g.map(r=>"   " + linea(r, ++n)).join("\n");
     const mo = motivoNoRefacVigente();
     if(mo) t += "\nAVISO: el sistema detectó posible refacción en «…" + mo.pista + "…». El técnico declaró que NO es refacción. Motivo: " + mo.motivo;
   }
-  else if(rf.length) t += "REFACCIONES UTILIZADAS:\n" + rf.map((r,i)=>`${i+1}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant + " " + r.uni : ""}${r.cod ? " — código: " + r.cod : ""}${r.org ? " — origen: " + r.org : ""}${r.ticket ? " — ticket: foto adjunta (" + r.ticket + ")" : ""}`).join("\n");
+  else if(rf.length) t += "REFACCIONES UTILIZADAS:\n" + rf.map((r,i)=>linea(r,i+1)).join("\n");
   else t += "REFACCIONES UTILIZADAS: no se capturaron";
   const inc = incompletaVigente();
   if(inc) t += "\nSALIDA INCOMPLETA AUTORIZADA " + (inc.sinSenal ? "POR EL SISTEMA (SIN SEÑAL)" : "POR " + inc.autorizo + " (PIN)") + ". Faltó: " + inc.falta + ". Motivo del técnico: " + inc.motivo;
@@ -3125,18 +3177,100 @@ function textoExtraCierre(){
   if(c) t += "\n\nCOMENTARIOS DEL CLIENTE: " + c;
   return t;
 }
+/* ---- v88: bloque de refacciones DENTRO de cada actividad (se maneja con eventos delegados) ---- */
+function htmlRefacAct(key){
+  const k = refacClaves().find(x=>x.key===key); if(!k) return "";
+  const sin = sinDe(key);
+  const lst = [];
+  (estado.refacciones||[]).forEach((r,i)=>{ if(r && (r.ak||"")===key) lst.push([r,i]); });
+  const rf = refaccionesLimpias().filter(r=>r.ak===key);
+  const falta = !validaRefacActividad(k, refaccionesLimpias()).ok;
+  const items = sin ? "" : lst.map(([r,i],n)=>`
+    <div class="ra-item">
+      <div class="ra-cab"><span class="ra-num">Refacción ${n+1}</span><button type="button" class="ra-quitar" data-i="${i}">Quitar</button></div>
+      <input type="text" class="refac-desc ra-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <div class="refac-fila">
+        <input type="text" class="refac-cant ra-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="Cantidad (ej.: 2)" value="${esc(r.cant||"")}" autocomplete="off">
+        <select class="refac-uni ra-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
+      </div>
+      <input type="text" class="refac-cod ra-cod" data-i="${i}" maxlength="40" placeholder="Código o número de parte (si lo tiene)" value="${esc(r.cod||"")}" autocomplete="off">
+      <select class="refac-org ra-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
+      ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec ra-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
+    </div>`).join("");
+  const p = (sin && !rf.length) ? pistaRefaccion([k.texto]) : "";
+  const box = p ? `<div class="ra-box"><p class="renglon-ayuda">En esta actividad dice: «…${esc(p)}…». Eso parece una refacción o material y no puede procesarse como «ninguna». Desmarque la casilla y capture la refacción; si de verdad NO es una refacción, explique por qué:</p><textarea class="ra-motivo" data-k="${esc(key)}" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué NO es una refacción ni material (mínimo 15 caracteres)">${esc((estado.motivoPorAct||{})[key]||"")}</textarea></div>` : "";
+  return `<div class="ra-bloque" data-k="${esc(key)}">
+    <label class="act-nota-lbl fa-lbl" data-falta="${falta ? 1 : 0}">Refacciones o materiales usados en esta actividad <b>(obligatorio)</b>${(!sin && lst.length) ? " · " + rf.length : ""}</label>
+    ${items}
+    ${sin ? "" : `<button type="button" class="btn btn-sec renglon-agregar ra-add" data-k="${esc(key)}"${lst.length>=MAX_REFAC ? " disabled" : ""}>+ Agregar refacción</button>`}
+    <label class="chk-linea"><input type="checkbox" class="ra-sin" data-k="${esc(key)}"${sin ? " checked" : ""}> No se utilizaron refacciones en esta actividad</label>
+    ${box}
+  </div>`;
+}
+function repintarRefacTodo(){ persistir(); repintarAct(); try{ pintarRefac(); }catch(e){} pintarBoton(); }
+document.addEventListener("click", e=>{
+  const t = e.target; if(!t || !t.closest) return;
+  const add = t.closest(".ra-add");
+  if(add){
+    const k = add.dataset.k;
+    if((estado.refacciones||[]).filter(r=>r && (r.ak||"")===k).length >= MAX_REFAC) return;
+    estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", ak:k });
+    repintarRefacTodo();
+    const l = document.querySelectorAll('.ra-bloque[data-k="' + CSS.escape(k) + '"] .ra-desc'); if(l.length) try{ l[l.length-1].focus(); }catch(_){}
+    return;
+  }
+  const q = t.closest(".ra-quitar");
+  if(q){ estado.refacciones.splice(+q.dataset.i, 1); repintarRefacTodo(); return; }
+  const f = t.closest(".ra-foto");
+  if(f){ ticketIdx = +f.dataset.i; $("#camaraTicket").click(); return; }
+});
+document.addEventListener("input", e=>{
+  const t = e.target; if(!t || !t.classList) return;
+  const campo = c => { const r = estado.refacciones[+t.dataset.i]; if(r){ r[c] = t.value; persistir(); } };
+  if(t.classList.contains("ra-desc")){ campo("desc"); pintarBoton(); }
+  else if(t.classList.contains("ra-cant")){ campo("cant"); pintarBoton(); }
+  else if(t.classList.contains("ra-cod")){ campo("cod"); }
+  else if(t.classList.contains("ra-motivo")){ estado.motivoPorAct = estado.motivoPorAct || {}; estado.motivoPorAct[t.dataset.k] = t.value.slice(0,300); persistir(); pintarBoton(); }
+});
+document.addEventListener("change", e=>{
+  const t = e.target; if(!t || !t.classList) return;
+  if(t.classList.contains("ra-uni")){ const r = estado.refacciones[+t.dataset.i]; if(r){ r.uni = t.value; persistir(); } }
+  else if(t.classList.contains("ra-org")){ const r = estado.refacciones[+t.dataset.i]; if(r){ r.org = t.value; repintarRefacTodo(); } }
+  else if(t.classList.contains("ra-sin")){
+    const k = t.dataset.k; estado.sinRefacPorAct = estado.sinRefacPorAct || {};
+    if(t.checked){
+      estado.sinRefacPorAct[k] = true;
+      estado.refacciones = estado.refacciones.filter(r=>!(r && (r.ak||"")===k));
+    } else delete estado.sinRefacPorAct[k];
+    repintarRefacTodo();
+    if(t.checked){ const kk = refacClaves().find(x=>x.key===k); const p = kk ? pistaRefaccion([kk.texto]) : ""; if(p) avisar("Posible refacción en su texto", "En esta actividad dice «…" + p + "…». Eso no puede procesarse como «ninguna»: capture la refacción o explique por qué no lo es.", "alerta"); }
+  }
+});
+/* Al quitar una actividad adicional, las refacciones de las siguientes se recorren. */
+function moverRefacRenglon(quitado){
+  const mover = k => { const m = /^R(\d+)$/.exec(k||""); if(!m) return k; const n = +m[1]; return n > quitado ? "R"+(n-1) : "R"+n; };
+  const q = "R" + quitado;
+  estado.refacciones = (estado.refacciones||[]).filter(r=>!(r && r.ak === q)).map(r=>{ if(r && r.ak) r.ak = mover(r.ak); return r; });
+  [ "sinRefacPorAct", "motivoPorAct" ].forEach(campo=>{
+    const o = estado[campo] || {}, n = {};
+    Object.keys(o).forEach(k=>{ if(k === q) return; n[mover(k)] = o[k]; });
+    estado[campo] = n;
+  });
+  persistir();
+}
 function pintarRefac(){
   const cont = $("#refacLista"); if(!cont) return;
   estado.refacciones = Array.isArray(estado.refacciones) ? estado.refacciones : [];
-  $("#chkSinRefac").checked = !!estado.sinRefacciones;
-  $("#btnRefacAgregar").disabled = !!estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC;
+  estado.sinRefacciones = false;
+  $("#btnRefacAgregar").disabled = estado.refacciones.filter(r=>r && !(r.ak||"")).length >= MAX_REFAC;
   pintarBoxNoRefac();
   const f = document.activeElement;
   if(f && cont.contains(f) && cont.dataset.n === String(estado.refacciones.length)) return;
   cont.dataset.n = String(estado.refacciones.length);
-  cont.innerHTML = estado.sinRefacciones ? "" : estado.refacciones.map((r,i)=>`
+  let nGen = 0;
+  cont.innerHTML = estado.refacciones.map((r,i)=> (r.ak||"") !== "" ? "" : `
     <div class="renglon" data-i="${i}">
-      <div class="renglon-cab"><span class="renglon-num">Refacción ${i+1}</span><button type="button" class="renglon-quitar refac-quitar" data-i="${i}">Quitar</button></div>
+      <div class="renglon-cab"><span class="renglon-num">Refacción ${++nGen}</span><button type="button" class="renglon-quitar refac-quitar" data-i="${i}">Quitar</button></div>
       <input type="text" class="refac-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
       <div class="refac-fila">
         <input type="text" class="refac-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="Cantidad (ej.: 2)" value="${esc(r.cant||"")}" autocomplete="off">
@@ -3157,8 +3291,8 @@ function pintarRefac(){
   $("#comentCont").textContent = (estado.comentarioCliente||"").length + " / " + MAX_COMENT;
 }
 $("#btnRefacAgregar").addEventListener("click", ()=>{
-  if(estado.sinRefacciones || estado.refacciones.length >= MAX_REFAC) return;
-  estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"" }); persistir(); pintarRefac(); pintarBoton();
+  if(estado.refacciones.filter(r=>r && !(r.ak||"")).length >= MAX_REFAC) return;
+  estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", ak:"" }); persistir(); pintarRefac(); pintarBoton();
   const l = document.querySelectorAll("#refacLista .refac-desc"); if(l.length) l[l.length-1].focus();
 });
 $("#chkSinRefac").addEventListener("change", e=>{
@@ -3248,6 +3382,16 @@ function pintarFotosRenglones(){
     c.dataset.sig = sig;
     c.innerHTML = lleno ? htmlFotosAct("R"+i, true) : "";
   });
+  document.querySelectorAll("#actRenglones .renglon").forEach(el=>{
+    const i = +el.dataset.i, c = el.querySelector(".renglon-refac"); if(!c) return;
+    const key = "R"+i;
+    const lleno = renglonLleno(normRenglon(estado.renglones[i] || {}));
+    const its = (estado.refacciones||[]).filter(r=>r && r.ak===key);
+    const sig = [lleno?1:0, sinDe(key)?1:0, its.length, its.map(r=>(r.org||"-")+(r.ticket?"t":"")).join(","), (estado.motivoPorAct||{})[key]?1:0, validaRefacActividad({key, titulo:"x", texto:""}, refaccionesLimpias()).ok?1:0].join("|");
+    if(c.dataset.sig === sig) return;
+    c.dataset.sig = sig;
+    c.innerHTML = lleno ? htmlRefacAct(key) : "";
+  });
 }
 function faltanFotosActs(){
   const fa = act.fotosAct || {};
@@ -3326,6 +3470,7 @@ function pintarRenglones(){
         placeholder="Detalle: qué hiciste, en qué equipo y cómo quedó (mínimo ${MIN_DETALLE} caracteres).">${esc(r.detalle)}</textarea>
       <div class="renglon-cont"></div>
       <div class="renglon-fotos" data-i="${i}"></div>
+      <div class="renglon-refac" data-i="${i}"></div>
     </div>`).join("");
   cont.querySelectorAll("input.renglon-tit").forEach(inp=>{
     inp.addEventListener("input", ()=>{ estado.renglones[+inp.dataset.i].titulo = inp.value; sincronizarActividades(); });
@@ -3339,7 +3484,7 @@ function pintarRenglones(){
       if(renglonLleno(estado.renglones[i]) &&
          !await confirmar("¿Quitar esta actividad?", "Se borrará lo escrito en esta actividad.", "Quitar")) return;
       estado.renglones.splice(i,1);
-      try{ moverFotosRenglon(i); }catch(e){}
+      try{ moverFotosRenglon(i); moverRefacRenglon(i); }catch(e){}
       renglonModo = null; pintarRenglones(); sincronizarActividades();
     });
   });
@@ -4162,7 +4307,7 @@ function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
-  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.incompleta = null; estado.comentarioCliente = "";
+  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.sinRefacPorAct = {}; estado.motivoPorAct = {}; estado.incompleta = null; estado.comentarioCliente = "";
   act.fotosAct = {}; borrarFotosAct();
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
@@ -4220,10 +4365,10 @@ addEventListener("offline", ()=>{ pintarRed(); pintarEnvio(); avisar("Sin conexi
 
 /* Antes de enviar la Salida (cierre del servicio) se confirma con un modal. */
 /* v78: si el texto de las actividades sugiere que se usó una refacción o material y no se capturó nada en el apartado, se avisa. */
-function pistaRefaccion(){
+function pistaRefaccion(textos){
   const quitar = t => String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  const re = /(refaccion|repuesto|material(es)?\b|se\s+(cambi|reemplaz|sustituy|instal|coloc|utiliz|ocup|gast)|cambio\s+de|reemplazo|sustitucion|rodamiento|balero|fusible|contactor|relevador|manguera|valvula|sensor|sello\b|filtro|cilindro|cable\b|tornill)/i;
-  const todo = hechasCierre().concat(adicionalesCierre());
+  const re = /(refaccion|repuesto|material(es)?\b|se\s+(cambi|reemplaz|sustituy|instal|coloc|utiliz|ocup|gast)|cambio\s+de|reemplazo|sustitucion|rodamiento|balero|fusible|contactor|relevador|manguera|valvula|sensor|sello\b|filtro|cilindro|\bcable\b|tornill)/i;
+  const todo = Array.isArray(textos) ? textos : hechasCierre().concat(adicionalesCierre());
   /* v81: no cuenta cuando el texto solo menciona la sección de la app («opción de refacciones», «casilla de refacciones»…). */
   const sinApp = x => quitar(x).replace(/(opcion(es)?|casilla|apartado|seccion|boton|campo|pantalla|modulo)\s+(de\s+|para\s+)?(las\s+)?(refaccion(es)?|materiales)/ig, " ");
   for(const t of todo){ const m = re.exec(sinApp(t)); if(m){ const i = sinApp(t).toLowerCase().indexOf(m[0].toLowerCase()); return String(t).slice(Math.max(0,i-15), i+m[0].length+25).trim(); } }
@@ -4709,6 +4854,7 @@ function htmlActItem(a){
     <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
     ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
     ${m ? htmlFotosAct(id, m==="TERMINADA") : ""}
+    ${m ? htmlRefacAct(id) : ""}
   </div>`;
 }
 function enlazarActItems(cont){
@@ -4792,7 +4938,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     actividadesDet: snap.actividadesDet,   /* v43: título y descripción por separado */
     noConcluidas: snap.noConcluidas || [],   /* v61: pendientes/canceladas con su justificación */
     detalle: "",
-    refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente),
+    refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente),
     motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
     firma: estado.incluirFirma && estado.firma ? estado.firma : "",
     firmaTecnico: estado.firmaTec || "",
@@ -4818,7 +4964,7 @@ function encolarReporteAct(o){
     items: ids.map(id=>({ id, estado:act.marcas[id], nota:(act.notas[id] || "").trim() })),
     adicionales: adicC,
     detalle: estado.actividades.trim() + textoExtraCierre(),
-    refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente)
+    refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente)
   });
   let nF = 0;
   estado.fotos.despues.filter(f=>f.url).forEach((f)=> encolar({

@@ -714,6 +714,8 @@ body{
 /* ---------- 16-sep (v30): detalle por actividad y adicionales con título ---------- */
 .renglon input.renglon-tit{width:100%;min-height:48px;padding:10px 12px;margin-bottom:8px;background:var(--acero-900);border:1px solid var(--linea);border-radius:3px;color:#FFFFFF;font-family:var(--texto);font-size:16px;font-weight:600}
 .renglon input.renglon-tit:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
+.fa-lbl[data-falta="1"]{color:#FFC24D}
+.renglon-fotos{margin-top:8px}
 .renglon-cont,.act-nota-cont{font-family:var(--dato);font-size:12px;color:#FFC24D;text-align:right;margin-top:4px}
 .renglon-cont[data-ok="1"],.act-nota-cont[data-ok="1"]{color:var(--verde)}
 .act-nota-lbl{display:block;margin:12px 0 6px;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--seccion-texto)}
@@ -883,7 +885,7 @@ select.refac-org{width:100%;margin-top:8px}
   <!-- v85: Refacciones justo después de las actividades, en el paso de salida -->
   <div class="acc-grupo" id="refacSeccion" data-acc="Refacciones y materiales" hidden>
     <label class="campo-lbl">Refacciones o materiales utilizados <b>(obligatorio)</b></label>
-    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe tomar con la cámara la foto del ticket o factura.</p>
+    <p class="renglon-ayuda">Anote cada pieza o material que se instaló o se gastó (no las herramientas), con su cantidad, unidad y origen. De aquí se cobra al cliente: si usó algo, debe quedar aquí. Es obligatorio capturar al menos una o marcar la casilla de abajo. Si la compró en campo, debe adjuntar la foto del ticket o factura (puede tomarla en el momento o elegirla de la galería).</p>
     <div id="refacLista"></div>
     <button class="btn btn-sec renglon-agregar" id="btnRefacAgregar" type="button">+ Agregar refacción</button>
     <label class="chk-linea" for="chkSinRefac"><input type="checkbox" id="chkSinRefac"> No se utilizó ninguna refacción</label>
@@ -891,7 +893,7 @@ select.refac-org{width:100%;margin-top:8px}
       <p class="renglon-ayuda" id="avisoNoRefac"></p>
       <textarea id="motivoNoRefac" rows="3" maxlength="300" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="Motivo: por qué lo que menciona NO es una refacción ni material (mínimo 15 caracteres)"></textarea>
     </div>
-    <input type="file" id="camaraTicket" accept="image/*" capture="environment" hidden>
+    <input type="file" id="camaraTicket" accept="image/*" hidden>
   </div>
 
     <div id="bloqueComent" class="acc-grupo" data-acc="Comentarios del cliente (opcional)">
@@ -1829,7 +1831,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v85";
+const APP_VER = "v87";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2396,12 +2398,12 @@ function pintarBoton(){
   btn.textContent = estado.leyendo ? "Leyendo ubicación…" : p.boton;
 
   const esSalida = p.id==="salida";
-  const faltanFotos = esSalida && hayActividadDeclarada() && estado.fotos.despues.length<3;
+  const faltanFotos = false; /* v87: las fotos se validan por actividad en medirActividades() */
   const medAct = medirActividades();
   const faltanActiv = esSalida && !medAct.ok;
   const vr = esSalida ? validaRefac() : { ok:true };
   const faltanRefac = !vr.ok;
-  try{ const se=$("#secEvidencia"); if(se){ const oc = (faseActual()!=="antes") && !hayActividadDeclarada(); if(se.hidden!==oc) se.hidden = oc; } }catch(e){}
+  try{ const se=$("#secEvidencia"); if(se){ if(!se.hidden) se.hidden = true; /* v87: ya no hay bloque global de fotos */ } }catch(e){}
   try{ ordenarSalida(); }catch(e){}
   try{ pintarPanelesAct(); }catch(e){}
   try{ pintarAcordeon(); }catch(e){}
@@ -2513,8 +2515,7 @@ function pintarAcordeon(){
     chipAcc("trabajoAsig", n ? String(n) : "", "");
   }catch(e){}
   try{
-    const n = (estado.fotos[faseActual()] || []).length;
-    chipAcc("secEvidencia", n + " / 3", n>=3 ? "ok" : "falta");
+    /* v87: sin bloque global de evidencia */
   }catch(e){}
   try{
     const v = validaRefacBase(); const n = refaccionesLimpias().length;
@@ -3143,7 +3144,7 @@ function pintarRefac(){
       </div>
       <input type="text" class="refac-cod" data-i="${i}" maxlength="40" placeholder="Código o número de parte (si lo tiene)" value="${esc(r.cod||"")}" autocomplete="off">
       <select class="refac-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
-      ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec refac-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
+      ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec refac-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
     </div>`).join("");
   cont.querySelectorAll(".refac-desc").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].desc = i.value; persistir(); pintarBoton(); });
   cont.querySelectorAll(".refac-cant").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cant = i.value; persistir(); pintarBoton(); });
@@ -3174,12 +3175,12 @@ $("#camaraTicket").addEventListener("change", async e=>{
   const archivo = (e.target.files || [])[0]; e.target.value = "";
   const i = ticketIdx; ticketIdx = -1;
   if(!archivo || !estado.refacciones[i]) return;
-  if(origenArchivo(archivo).galeria){ avisar("Foto no válida", "El ticket o factura debe fotografiarse en este momento con la cámara; no se acepta una imagen de la galería o de otra fecha.", "error"); return; }
+  const orgT = origenArchivo(archivo);   /* v86: se acepta cámara o galería (almacén y cobranza revisan esta foto); se registra el origen real. */
   const r = await comprimirImagenP(archivo);
   if(!r){ avisar("No se pudo leer la foto", "Intente tomarla de nuevo.", "error"); return; }
   const o = estado.orden || {};
   const nombre = "TICKET_" + (o.folio || "SINFOLIO") + "_R" + (i+1) + "_" + idCorto();
-  encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", fase:"ticket", fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"", origen:"camara", nombre });
+  encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", fase:"ticket", fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"", origen: orgT.galeria ? "galeria" : "camara", nombre });
   estado.refacciones[i].ticket = nombre; persistir();
   const c = $("#refacLista"); if(c) c.dataset.n = "x"; pintarRefac(); pintarBoton();
   avisar("Ticket guardado", "Foto del ticket de la refacción " + (i+1) + " guardada; se envía sola.", "ok");
@@ -3206,6 +3207,7 @@ function medirActividades(){
   if(conCamposFaltantes) faltan.push(`contestar el formulario de ${conCamposFaltantes} actividad(es) terminada(s) (o marcar «No lo sé»)`);
   if(sinMotivo) faltan.push(`explicar ${sinMotivo} actividad(es) pendiente(s) o cancelada(s)`);
   if(renglonesIncompletos) faltan.push(`completar ${renglonesIncompletos} actividad(es) ${conAsig ? "adicional(es)" : ""} (título y detalle de mínimo ${MIN_DETALLE} caracteres)`.replace("  "," "));
+  { const nf = faltanFotosActs(); if(nf) faltan.push(`tomar las 3 fotos de ${nf} actividad(es) (van dentro de cada actividad)`); }
   if(ninguna) faltan.push(conAsig ? "marcar al menos una actividad asignada o agregar una adicional" : "describir la Actividad 1 (título y detalle)");
   return { ok: faltan.length === 0, faltan };
 }
@@ -3223,7 +3225,39 @@ function pintarContadoresNota(){
   });
   estado.actividades = textoActividades();
 }
+/* v87: 3 fotos por actividad, dentro de la misma actividad. Las adicionales usan la clave "R<n>" en act.fotosAct. */
+function moverFotosRenglon(quitado){
+  const fa = act.fotosAct = act.fotosAct || {};
+  const nuevo = {};
+  Object.keys(fa).forEach(k=>{
+    const m = /^R(\d+)$/.exec(k);
+    if(!m){ nuevo[k] = fa[k]; return; }
+    const n = +m[1];
+    if(n === quitado) return;
+    nuevo["R" + (n > quitado ? n-1 : n)] = fa[k];
+  });
+  act.fotosAct = nuevo; guardarFotosAct2();
+}
+function pintarFotosRenglones(){
+  document.querySelectorAll("#actRenglones .renglon").forEach(el=>{
+    const i = +el.dataset.i, c = el.querySelector(".renglon-fotos"); if(!c) return;
+    const lleno = renglonLleno(normRenglon(estado.renglones[i] || {}));
+    const n = ((act.fotosAct || {})["R"+i] || []).length;
+    const sig = (lleno ? 1 : 0) + "|" + n;
+    if(c.dataset.sig === sig) return;
+    c.dataset.sig = sig;
+    c.innerHTML = lleno ? htmlFotosAct("R"+i, true) : "";
+  });
+}
+function faltanFotosActs(){
+  const fa = act.fotosAct || {};
+  let n = 0;
+  idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").forEach(id=>{ if(((fa[id]||[]).length) < MAX_FOTOS_ACT) n++; });
+  (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{ if(renglonLleno(r) && ((fa["R"+i]||[]).length) < MAX_FOTOS_ACT) n++; });
+  return n;
+}
 function pintarContadoresRenglon(){
+  try{ pintarFotosRenglones(); }catch(e){}
   document.querySelectorAll("#actRenglones .renglon").forEach((el,i)=>{
     const r = normRenglon(estado.renglones[i]);
     const n = limpiaTxt(r.detalle).length, t = limpiaTxt(r.titulo).length;
@@ -3291,6 +3325,7 @@ function pintarRenglones(){
       <textarea data-i="${i}" spellcheck="true" lang="es" autocorrect="on" autocapitalize="sentences"
         placeholder="Detalle: qué hiciste, en qué equipo y cómo quedó (mínimo ${MIN_DETALLE} caracteres).">${esc(r.detalle)}</textarea>
       <div class="renglon-cont"></div>
+      <div class="renglon-fotos" data-i="${i}"></div>
     </div>`).join("");
   cont.querySelectorAll("input.renglon-tit").forEach(inp=>{
     inp.addEventListener("input", ()=>{ estado.renglones[+inp.dataset.i].titulo = inp.value; sincronizarActividades(); });
@@ -3304,6 +3339,7 @@ function pintarRenglones(){
       if(renglonLleno(estado.renglones[i]) &&
          !await confirmar("¿Quitar esta actividad?", "Se borrará lo escrito en esta actividad.", "Quitar")) return;
       estado.renglones.splice(i,1);
+      try{ moverFotosRenglon(i); }catch(e){}
       renglonModo = null; pintarRenglones(); sincronizarActividades();
     });
   });
@@ -4626,11 +4662,12 @@ function htmlActConsulta(a){
 
 /* ---------- v75: fotos OPCIONALES por actividad (de 1 a 4; no bloquean el cierre) ---------- */
 const MAX_FOTOS_ACT = 3;
-function htmlFotosAct(id){
+function htmlFotosAct(id, oblig){
   const fs = (act.fotosAct && act.fotosAct[id]) || [];
   const celdas = fs.map((f,i)=>`<div class="celda"><img src="${f.url}" alt="Foto ${i+1} de la actividad"><button type="button" class="quitar-foto fa-quitar" data-id="${esc(id)}" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join("");
   const add = fs.length < MAX_FOTOS_ACT ? `<button class="celda add fa-add" type="button" data-id="${esc(id)}" aria-label="Agregar foto de esta actividad"><span>+</span></button>` : "";
-  return `<label class="act-nota-lbl">Fotos de esta actividad (opcional · hasta ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}</label><div class="rejilla fa-rejilla">${celdas}${add}</div>`;
+  const lbl = oblig ? `Fotos de esta actividad (obligatorio · ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}${fs.length>=MAX_FOTOS_ACT ? " ✓" : ""}` : `Fotos de esta actividad (opcional · hasta ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}`;
+  return `<label class="act-nota-lbl fa-lbl" data-falta="${(oblig && fs.length<MAX_FOTOS_ACT) ? 1 : 0}">${lbl}</label><div class="rejilla fa-rejilla">${celdas}${add}</div>`;
 }
 let _fotoActId = "";
 document.addEventListener("click", e=>{
@@ -4671,7 +4708,7 @@ function htmlActItem(a){
     ${(m==="TERMINADA" && formServicioActivo()) ? htmlFormTipo(id, m) : (pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
     <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
     ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
-    ${m ? htmlFotosAct(id) : ""}
+    ${m ? htmlFotosAct(id, m==="TERMINADA") : ""}
   </div>`;
 }
 function enlazarActItems(cont){
@@ -4783,9 +4820,16 @@ function encolarReporteAct(o){
     detalle: estado.actividades.trim() + textoExtraCierre(),
     refacciones: refaccionesLimpias(), sinRefacciones: !!estado.sinRefacciones, comentarioCliente: limpiaTxt(estado.comentarioCliente)
   });
-  estado.fotos.despues.filter(f=>f.url).forEach((f,i)=> encolar({
-    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (i+1), imagen:f.url
+  let nF = 0;
+  estado.fotos.despues.filter(f=>f.url).forEach((f)=> encolar({
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url
   }));
+  /* v87: fotos de las actividades adicionales (clave R<n>), sin actId */
+  (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{ if(!renglonLleno(r)) return;
+    (act.fotosAct["R"+i] || []).forEach(f=>{ if(f && f.url) encolar({
+      tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url
+    }); });
+  });
   /* v75: fotos opcionales por actividad (hasta 4 c/u), etiquetadas con el id de la actividad */
   let nA = 0;
   ids.forEach(id=> (act.fotosAct[id] || []).forEach(f=>{ if(f && f.url) encolar({

@@ -1855,7 +1855,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v92";
+const APP_VER = "v93";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -2890,14 +2890,20 @@ function datosSello(){
    No hay forma de saberlo con certeza desde el navegador, pero la fecha
    del archivo lo delata: si tiene mas de 5 minutos, no se tomo ahorita. */
 function origenArchivo(archivo){
+  /* v93: ademas del texto del sello, devuelve la fecha del archivo (fa) y la marca de fecha (marca) que se guardan en las hojas Fotos y FotosAct. */
   const t = archivo && archivo.lastModified;
-  if(!t || !isFinite(t)) return { galeria:true, texto:"ARCHIVO SIN FECHA · origen no verificable" };
-  const min = (Date.now() - t) / 60000;
-  if(min <= 5) return { galeria:false, texto:"" };
-  const f = new Date(t);
-  const dd = String(f.getDate()).padStart(2,"0"), mm = String(f.getMonth()+1).padStart(2,"0");
-  const hh = String(f.getHours()).padStart(2,"0"), mi = String(f.getMinutes()).padStart(2,"0");
-  return { galeria:true, texto:`DE GALERIA · archivo del ${dd}/${mm}/${f.getFullYear()} ${hh}:${mi}` };
+  if(!t || !isFinite(t)) return { galeria:true, texto:"ARCHIVO SIN FECHA · origen no verificable", fa:"", marca:"SIN FECHA" };
+  const ahora_ = Date.now(), min = (ahora_ - t) / 60000;
+  const f = new Date(t), n = new Date(ahora_);
+  const p2 = x=>String(x).padStart(2,"0");
+  const dd = p2(f.getDate()), mm = p2(f.getMonth()+1);
+  const hh = p2(f.getHours()), mi = p2(f.getMinutes());
+  const fa = `${dd}/${mm}/${f.getFullYear()} ${hh}:${mi}`;
+  if(min < -10) return { galeria:true, texto:`DE GALERIA · archivo del ${dd}/${mm}/${f.getFullYear()} ${hh}:${mi}`, fa, marca:"FECHA INCONSISTENTE (posterior a hoy)" };
+  if(min <= 5) return { galeria:false, texto:"", fa, marca:"OK · tomada al momento" };
+  const mismoDia = f.getFullYear()===n.getFullYear() && f.getMonth()===n.getMonth() && f.getDate()===n.getDate();
+  return { galeria:true, texto:`DE GALERIA · archivo del ${dd}/${mm}/${f.getFullYear()} ${hh}:${mi}`, fa,
+           marca: mismoDia ? "GALERIA · MISMO DIA (no tomada al momento)" : `ANTIGUA · OTRO DIA (${dd}/${mm}/${f.getFullYear()})` };
 }
 
 function sellarLienzo(lienzo, extra){
@@ -2934,10 +2940,10 @@ $("#camara").addEventListener("change", async e=>{
     const r = await comprimirImagenP(archivo);
     if(!r){ fallidas++; continue; }
     const o = estado.orden || {};
-    estado.fotos[fase].push({ url:r.url, kb:r.kb, enviada:false });
+    estado.fotos[fase].push({ url:r.url, kb:r.kb, enviada:false, fa:(r.org&&r.org.fa)||"", mf:(r.org&&r.org.marca)||"" });
     encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
               fase, fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"",
-              origen: r.org && r.org.galeria ? "galeria" : "camara" });
+              origen: r.org && r.org.galeria ? "galeria" : "camara", fechaArchivo:(r.org&&r.org.fa)||"", marcaFecha:(r.org&&r.org.marca)||"" });
     n++; if(r.org && r.org.galeria) galeria++;
     persistir(); pintar();
   }
@@ -3360,7 +3366,7 @@ $("#camaraTicket").addEventListener("change", async e=>{
   if(!r){ avisar("No se pudo leer la foto", "Intente tomarla de nuevo.", "error"); return; }
   const o = estado.orden || {};
   const nombre = "TICKET_" + (o.folio || "SINFOLIO") + "_R" + (i+1) + "_" + idCorto();
-  encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", fase:"ticket", fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"", origen: orgT.galeria ? "galeria" : "camara", nombre });
+  encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"", fase:"ticket", fecha:hoy(), hora:ahora(), imagen:r.url, folio:o.folio||"", origen: orgT.galeria ? "galeria" : "camara", fechaArchivo:orgT.fa||"", marcaFecha:orgT.marca||"", nombre });
   estado.refacciones[i].ticket = nombre; persistir();
   const c = $("#refacLista"); if(c) c.dataset.n = "x"; pintarRefac(); pintarBoton();
   avisar("Ticket guardado", "Foto del ticket de la refacción " + (i+1) + " guardada; se envía sola.", "ok");
@@ -4953,7 +4959,7 @@ $("#camaraPorAct").addEventListener("change", async e=>{
   for(const archivo of tomar){
     const r = await comprimirImagenP(archivo);
     if(!r){ fallidas++; continue; }
-    lista.push({ url:r.url, kb:r.kb, galeria: !!(r.org && r.org.galeria) });
+    lista.push({ url:r.url, kb:r.kb, galeria: !!(r.org && r.org.galeria), fa:(r.org&&r.org.fa)||"", mf:(r.org&&r.org.marca)||"" });
     n++; if(r.org && r.org.galeria) galeria++;
   }
   guardarFotosAct2(); repintarAct();
@@ -5094,18 +5100,18 @@ function encolarReporteAct(o){
   });
   let nF = 0;
   estado.fotos.despues.filter(f=>f.url).forEach((f)=> encolar({
-    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url, origen:(f&&f.mf&&!/^OK/.test(f.mf))?"galeria":"camara", fechaArchivo:(f&&f.fa)||"", marcaFecha:(f&&f.mf)||""
   }));
   /* v87: fotos de las actividades adicionales (clave R<n>), sin actId */
   (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{ if(!renglonLleno(r)) return;
     (act.fotosAct["R"+i] || []).forEach(f=>{ if(f && f.url) encolar({
-      tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url
+      tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (++nF), imagen:f.url, origen:(f&&f.mf&&!/^OK/.test(f.mf))?"galeria":"camara", fechaArchivo:(f&&f.fa)||"", marcaFecha:(f&&f.mf)||""
     }); });
   });
   /* v75: fotos opcionales por actividad (hasta 4 c/u), etiquetadas con el id de la actividad */
   let nA = 0;
   ids.forEach(id=> (act.fotosAct[id] || []).forEach(f=>{ if(f && f.url) encolar({
-    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-A" + (++nA), imagen:f.url, actId:id
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-A" + (++nA), imagen:f.url, actId:id, origen:(f&&f.mf&&!/^OK/.test(f.mf))?"galeria":"camara", fechaArchivo:(f&&f.fa)||"", marcaFecha:(f&&f.mf)||""
   }); }));
   act.fotosAct = {}; borrarFotosAct();
   /* Va al final, cuando las fotos ya subieron: dispara el correo al cliente. */
@@ -5201,7 +5207,7 @@ $("#camaraAct").addEventListener("change", async e=>{
   for(const archivo of tomar){
     const r = await comprimirImagenP(archivo);
     if(!r){ fallidas++; continue; }
-    act.fotos.push({ url:r.url, kb:r.kb, galeria: !!(r.org && r.org.galeria) });
+    act.fotos.push({ url:r.url, kb:r.kb, galeria: !!(r.org && r.org.galeria), fa:(r.org&&r.org.fa)||"", mf:(r.org&&r.org.marca)||"" });
     n++; if(r.org && r.org.galeria) galeria++;
     pintarFotosAct(); pintarEnvioAct();
   }
@@ -5263,7 +5269,7 @@ async function enviarActividades(){
     detalle: act.detalle.trim()
   });
   act.fotos.forEach((f,i)=> encolar({
-    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (i+1), imagen:f.url
+    tipo:"foto_act", token:estado.token, reporteId, fotoId: reporteId + "-F" + (i+1), imagen:f.url, origen:(f&&f.mf&&!/^OK/.test(f.mf))?"galeria":"camara", fechaArchivo:(f&&f.fa)||"", marcaFecha:(f&&f.mf)||""
   }));
 
   // Las pendientes siguen en la lista con su nota; las terminadas y canceladas salen.

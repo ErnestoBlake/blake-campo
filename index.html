@@ -467,6 +467,14 @@ body{
 .act-meta .atr{color:#F2D29B}
 .act-bloque{display:block;margin:22px 0 10px}
 .act-item{background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;padding:14px;margin-bottom:10px}
+.act-cab{display:flex;width:100%;align-items:center;gap:10px;background:none;border:0;padding:0;margin:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.act-cab-txt{flex:1;min-width:0;display:block}
+.act-cab-fila{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px}
+.act-cab .act-titulo{display:block}
+.act-cab .acc-fl{flex:0 0 auto;font-size:18px}
+.act-marca[data-m="TERMINADA"]{color:var(--verde)}.act-marca[data-m="PENDIENTE"]{color:var(--ambar)}.act-marca[data-m="CANCELADA"]{color:var(--rojo)}
+.act-cuerpo{margin-top:10px;border-top:1px dashed var(--linea);padding-top:10px}
+.act-plegada > .act-cuerpo{display:none}
 .act-item[data-marca="TERMINADA"]{border-color:var(--verde)}
 .act-item[data-marca="PENDIENTE"]{border-color:var(--ambar)}
 .act-item[data-marca="CANCELADA"]{border-color:var(--rojo)}
@@ -1839,7 +1847,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v89";
+const APP_VER = "v90";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -4792,15 +4800,37 @@ $("#mrEnviar").addEventListener("click", ()=>{
   pintarActividades();
 });
 
+/* v90: cada actividad se muestra plegada con solo un encabezado; se despliega con el triángulo. Las que ya tienen estado (Terminada, etc.) se abren solas, salvo que el colaborador las pliegue. */
+const _actEstado = {};
+const actAbierta = (id, m) => (id in _actEstado) ? !!_actEstado[id] : !!m;
+function cabAct(id, a, f, m, abierta, extra){
+  const mt = { TERMINADA:"Terminada", PENDIENTE:"Pendiente", CANCELADA:"Cancelada" }[m] || "";
+  return `<button type="button" class="act-cab" data-id="${esc(id)}" aria-expanded="${abierta}">
+    <span class="act-cab-txt">
+      <span class="act-cab-fila"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}${mt ? `<span class="act-fecha act-marca" data-m="${m}">${mt}</span>` : `<span class="act-fecha">Sin declarar</span>`}${extra || ""}</span>
+      <span class="act-titulo">${esc(a.titulo || a.texto)}</span>
+    </span><span class="acc-fl">${abierta ? "▾" : "▸"}</span></button>`;
+}
+document.addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest(".act-cab"); if(!b) return;
+  const it = b.closest(".act-item"); if(!it) return;
+  const id = b.dataset.id, ab = it.classList.contains("act-plegada");
+  _actEstado[id] = ab;
+  it.classList.toggle("act-plegada", !ab);
+  b.setAttribute("aria-expanded", ab ? "true" : "false");
+  b.querySelector(".acc-fl").textContent = ab ? "▾" : "▸";
+});
 /* Renglón de solo lectura para la consulta "Todos tus pendientes". */
 function htmlActConsulta(a){
-  const f = etiquetaAct(a);
+  const f = etiquetaAct(a), id = "c" + String(a.id), ab = actAbierta(id, "");
   const cli = a.cliente ? esc(a.cliente) + (a.sitio ? " · " + esc(a.sitio) : "") : "Sin cliente asignado";
-  return `<div class="act-item" data-solo="1">
-    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}<span class="act-fecha">${cli}</span></div>
-    <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
+  return `<div class="act-item${ab ? "" : " act-plegada"}" data-solo="1">
+    ${cabAct(id, a, f, "", ab, "")}
+    <div class="act-cuerpo">
+    <div class="act-top"><span class="act-fecha">${cli}</span></div>
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     ${htmlReasig(a)}
+    </div>
   </div>`;
 }
 
@@ -4843,9 +4873,10 @@ function htmlActItem(a){
     .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
   const pideNota = m==="PENDIENTE" || m==="CANCELADA" || m==="TERMINADA";
   const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
-  return `<div class="act-item" data-marca="${m}">
-    <div class="act-top"><span class="act-fecha ${f.cls}">${f.txt}</span>${chipsPrio(a)}${origen}</div>
-    <div class="act-titulo">${esc(a.titulo || a.texto)}</div>
+  const ab = actAbierta(id, m);
+  return `<div class="act-item${ab ? "" : " act-plegada"}" data-marca="${m}">
+    ${cabAct(id, a, f, m, ab, origen)}
+    <div class="act-cuerpo">
     ${a.nota ? `<div class="act-nota-previa">${esc(a.nota).replace(/\n/g,"<br>")}</div>` : ""}
     ${htmlReasig(a)}
     <div class="act-ops">${ops}</div>
@@ -4854,6 +4885,7 @@ function htmlActItem(a){
     ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
     ${m ? htmlFotosAct(id, m==="TERMINADA") : ""}
     ${m ? htmlRefacAct(id) : ""}
+    </div>
   </div>`;
 }
 function enlazarActItems(cont){

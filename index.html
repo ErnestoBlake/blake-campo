@@ -1839,7 +1839,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v88";
+const APP_VER = "v89";
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
   const limpio = Object.assign({}, sobre);
@@ -2526,16 +2526,15 @@ function pintarAcordeon(){
     /* v87: sin bloque global de evidencia */
   }catch(e){}
   try{
-    const v = validaRefacBase(); const n = refaccionesLimpias().length;
-    const nGenR = refaccionesLimpias().filter(r=>r.ak==="").length;
-    chipAcc("refacSeccion", estado.incompleta && estado.incompleta.ok ? "incompleta autorizada" : (v.ok ? (nGenR ? nGenR + " ✓" : "opcional") : "falta"), v.ok ? "ok" : "falta");
+    const gen = refaccionesLimpias().filter(r=>r.ak==="");
+    const vg = validaItemsRefac(gen, "otras refacciones");
+    chipAcc("refacSeccion", vg.ok ? (gen.length ? gen.length + " ✓" : "opcional") : "falta", vg.ok ? (gen.length ? "ok" : "") : "falta");
     const bx = $("#boxNoRefac"); const vis = !!(bx && !bx.hidden);
-    if(vis && !_accRefacAbierta){ setAcc($("#refacSeccion"), true); }
     _accRefacAbierta = vis;
   }catch(e){}
   try{
     const p = pasoPendiente(); const fol = (estado.orden && (estado.orden.folio || estado.orden.titulo)) || "";
-    if(p && p.id === "salida" && _accSalidaFolio !== fol){ _accSalidaFolio = fol; try{ setAcc($("#secEscalera"), false); }catch(e){} setTimeout(abrirAccFaltantes, 0); }
+    if(p && p.id === "salida" && _accSalidaFolio !== fol){ _accSalidaFolio = fol; try{ setAcc($("#secEscalera"), false); }catch(e){} /* v89: las secciones quedan plegadas con su resumen; solo se abren al tocarlas o al tocar la nota de lo que falta */ }
   }catch(e){}
   try{ const m = medirActividades(); chipAcc("accAct", m.ok ? "✓" : "falta", m.ok ? "ok" : "falta"); }catch(e){}
   try{ chipAcc("bloqueComent", limpiaTxt($("#comentCliente").value) ? "con comentario" : "", ""); }catch(e){}

@@ -926,6 +926,14 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
     <button class="firma-limpiar" id="btnLimpiarFirmaTec" type="button">Limpiar firma del técnico</button>
 
+    <div id="bloqueValSup" hidden>
+      <label class="campo-lbl">Validación del supervisor <b>(obligatoria)</b></label>
+      <p class="renglon-ayuda">Servicio interno: un supervisor (Daniel, Brandon, Jorge o el Señor Ernesto, que no sea quien hizo el trabajo) debe <b>leer este reporte y validar que las actividades se realizaron</b>. Entréguele el teléfono: que lo lea, <b>firme abajo</b> y confirme con su PIN.</p>
+      <div class="renglon-ayuda" id="valSupEstado"></div>
+      <button class="btn" id="btnValSup" type="button">Validar con PIN del supervisor</button>
+      <button class="btn btn-sec" id="btnValPend" type="button">Supervisor no disponible: dejar pendiente de validar</button>
+    </div>
+    <label class="campo-lbl" id="lblFirmaSup" hidden>Firma del supervisor</label>
     <label class="chk-linea" id="lineaFirmaCli" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
@@ -1572,7 +1580,7 @@ const estado = {
   tecnico:"", usuario:"", token:"", rol:"", orden:null,
   eventos:{}, fotos:{ antes:[], despues:[] },
   sabado:false, cierreDirecto:false,   /* v75: se fijan al registrar la llegada / al elegir cerrar sin comida */
-  refacciones:[], sinRefacciones:false, motivoNoRefac:"", sinRefacPorAct:{}, motivoPorAct:{}, incompleta:null, comentarioCliente:"",
+  refacciones:[], sinRefacciones:false, motivoNoRefac:"", sinRefacPorAct:{}, motivoPorAct:{}, valSup:null, incompleta:null, comentarioCliente:"",
   actividades:"", renglones:[], firma:null, firmaTec:null, incluirFirma:false,
   cola:[], leyendo:false,
   enviados:0,   // sobres realmente entregados al conector en este servicio
@@ -1640,7 +1648,7 @@ function persistir(){
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
       incluirFirma:estado.incluirFirma,
       sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
-      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", sinRefacPorAct:estado.sinRefacPorAct||{}, motivoPorAct:estado.motivoPorAct||{}, incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
+      refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", sinRefacPorAct:estado.sinRefacPorAct||{}, motivoPorAct:estado.motivoPorAct||{}, valSup:estado.valSup||null, incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
     }));
     /* v36: la cola ya NO vive aquí sino en IndexedDB (ver "Almacén del
        teléfono"). Solo si el teléfono no tiene IndexedDB se usa el método viejo. */
@@ -1667,7 +1675,7 @@ function restaurar(){
       estado.incluirFirma = !!g.incluirFirma;
       estado.sabado = !!g.sabado; estado.cierreDirecto = !!g.cierreDirecto;
       estado.refacciones = Array.isArray(g.refacciones) ? g.refacciones : [];
-      estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.sinRefacPorAct = (g.sinRefacPorAct && typeof g.sinRefacPorAct==="object") ? g.sinRefacPorAct : {}; estado.motivoPorAct = (g.motivoPorAct && typeof g.motivoPorAct==="object") ? g.motivoPorAct : {}; estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
+      estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.sinRefacPorAct = (g.sinRefacPorAct && typeof g.sinRefacPorAct==="object") ? g.sinRefacPorAct : {}; estado.motivoPorAct = (g.motivoPorAct && typeof g.motivoPorAct==="object") ? g.motivoPorAct : {}; estado.valSup = (g.valSup && typeof g.valSup==="object") ? g.valSup : null; estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
     }
     /* Cola vieja (v35 y anteriores) guardada en localStorage: se toma aquí y
        cargarCola() la pasa a IndexedDB sin perder nada. */
@@ -1847,7 +1855,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v91";
+const APP_VER = "v92";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -2372,9 +2380,12 @@ function pintarCierreForm(){
   const mostrar = enCierre() && enSalida();
   $("#cierreForm").hidden = !mostrar;
   if(mostrar && esInterno()){
-    estado.incluirFirma = false; estado.firma = null;
-    $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true;
-  } else if(mostrar){ $("#lineaFirmaCli").hidden = false; }
+    /* v92: servicio interno → la firma del cuadro es la del SUPERVISOR que valida el reporte (con su PIN). */
+    estado.incluirFirma = false;
+    $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = false; $("#btnLimpiarFirma").hidden = false;
+    $("#bloqueValSup").hidden = false; $("#lblFirmaSup").hidden = false;
+    prepararFirma(); pintarValSup();
+  } else if(mostrar){ $("#lineaFirmaCli").hidden = false; $("#bloqueValSup").hidden = true; $("#lblFirmaSup").hidden = true; }
   if(mostrar){
     pintarRenglones();
     if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
@@ -2455,12 +2466,13 @@ function pintarBoton(){
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
   const faltanFirma = esSalida && !esInterno() && !estado.firma;
+  const faltanValSup = esSalida && esInterno() && !valSupOk();
   const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
   // Los pasos intermedios (comida, regreso) NO se bloquean: la evidencia se pide al final.
-  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || faltanRefac || sinNota>0;
+  btn.disabled = estado.leyendo || faltanFotos || faltanActiv || faltanFirma || faltanValSup || faltanFirmaTec || faltanRefac || sinNota>0;
 
-  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || faltanFirmaTec || faltanRefac || sinNota)){
+  if(esSalida && (faltanFotos || faltanActiv || faltanFirma || faltanValSup || faltanFirmaTec || faltanRefac || sinNota)){
     nota.classList.add("alerta");
     const faltan = [];
     if(faltanFotos) faltan.push("las 3 fotos del cierre");
@@ -2468,6 +2480,7 @@ function pintarBoton(){
     if(faltanActiv) medAct.faltan.forEach(t=>faltan.push(t));
     if(faltanRefac) faltan.push(vr.msg);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
+    if(faltanValSup) faltan.push("la validación del supervisor (firma y PIN) o marcar «supervisor no disponible»");
     if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ". Toque aquí para abrir lo que falta.";
   } else if(p.id==="llegada"){
@@ -2573,7 +2586,7 @@ function pintarAcordeon(){
   try{ const m = medirActividades(); chipAcc("accAct", m.ok ? "✓" : "falta", m.ok ? "ok" : "falta"); }catch(e){}
   try{ chipAcc("bloqueComent", limpiaTxt($("#comentCliente").value) ? "con comentario" : "", ""); }catch(e){}
   try{
-    const t = !!estado.firmaTec, c = esInterno() ? true : !!estado.firma;
+    const t = !!estado.firmaTec, c = esInterno() ? valSupOk() : !!estado.firma;
     chipAcc("accFirmas", (t && c) ? "✓" : (t || c ? "falta una" : "falta"), (t && c) ? "ok" : "falta");
   }catch(e){}
 }
@@ -2820,7 +2833,7 @@ async function registrar(){
   // Al registrar la salida, también enviamos la firma del cliente (si se activó la casilla).
   if(paso.id==="salida" && estado.firma){
     encolar({ tipo:"foto", tecnico:estado.tecnico, cliente:o.cliente||"", orden:o.orden||"",
-              fase:"firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
+              fase: esInterno() ? "firma_supervisor" : "firma", fecha:hoy(), hora, imagen:estado.firma, folio:o.folio||"" });
   }
   // La firma del tecnico se guarda como evidencia aparte, ya sellada.
   if(paso.id==="salida" && estado.firmaTec){
@@ -3638,8 +3651,62 @@ function firmaSellada(c){ return firmaDocumento(c, true); }
 
 const firmaCliente = montarFirma({
   canvas:"firma", pista:"firmaPista", limpiar:"btnLimpiarFirma", sellar:false,
-  guardar: d => { estado.firma = d; }
+  guardar: d => { estado.firma = d; try{ pintarValSup(); pintarBoton(); }catch(e){} }
 });
+/* v92: validación del supervisor en servicios internos (Blake Inc, Tezoyuca 1 y 2). */
+function valSupOk(){
+  const v = estado.valSup; if(!v) return false;
+  if(v.pend) return true;
+  return !!(v.ok && estado.firma);
+}
+function pintarValSup(){
+  const e = $("#valSupEstado"); if(!e) return;
+  const v = estado.valSup, b = $("#btnValSup"), p = $("#btnValPend");
+  if(v && v.ok){
+    e.innerHTML = estado.firma ? `✓ <b>Validado por ${esc(v.aut || "un supervisor")}</b> a las ${esc(v.hora || "")}.` : `PIN aceptado (${esc(v.aut || "supervisor")}), pero falta la <b>firma del supervisor</b> en el recuadro de abajo.`;
+    b.hidden = true; p.hidden = true;
+  } else if(v && v.pend){
+    e.innerHTML = `⏳ <b>Pendiente de validar</b>${v.sinSenal ? " (sin señal)" : ""}: se reportará a los supervisores y a la dirección. <a href="#" id="valSupDeshacer">Intentar validar ahora</a>`;
+    b.hidden = true; p.hidden = true;
+    const d = $("#valSupDeshacer"); if(d) d.onclick = ev=>{ ev.preventDefault(); estado.valSup = null; persistir(); pintarValSup(); pintarBoton(); };
+  } else {
+    e.textContent = estado.firma ? "El supervisor ya firmó. Falta que confirme con su PIN." : "Falta la firma del supervisor (recuadro de abajo) y su PIN.";
+    b.hidden = false; p.hidden = false; b.disabled = !estado.firma;
+  }
+}
+function abrirValidarSup(){
+  if(!estado.firma){ avisar("Falta la firma", "Primero el supervisor debe leer el reporte y firmar en el recuadro.", "alerta"); return; }
+  cmOpts = { validar:true }; const c = cmHoy();
+  $("#cmEtiqueta").textContent = "Validación del supervisor";
+  if(c.valId && (Date.now() - c.valTs) < 60*60000) cmMostrarPin(); else cmPedirVal();
+  $("#modalComida").hidden = false;
+}
+async function cmPedirVal(){
+  cmOcupado = true; cmMsg("Enviando la solicitud a los supervisores…"); $("#modalComida").hidden = false;
+  const o = estado.orden || {};
+  let r = null;
+  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_solicitar", accion:"validar_reporte", casilla:("Validar el reporte del servicio " + (o.folio || "") + " en " + (o.titulo || o.cliente || "")).slice(0,500), horaCelular: ahora() });
+  cmOcupado = false;
+  if(!r || r.red){ cmCerrar(); marcarPendValidar(true); return; }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ cmCerrar(); sesionVencidaEn(""); return; }
+    cmCerrar(); avisar("No se pudo solicitar", String(r.error || "El servidor no aceptó la solicitud."), "error"); return;
+  }
+  const c = cmHoy(); c.valId = r.id; c.valTs = Date.now(); cmGuardar();
+  cmMostrarPin();
+}
+function marcarPendValidar(sinSenal){
+  estado.valSup = { pend:true, sinSenal:!!sinSenal, hora: ahora(), ts: Date.now() };
+  persistir(); try{ pintarValSup(); pintarBoton(); }catch(e){}
+  avisar("Pendiente de validar", sinSenal ? "No hubo señal para pedir el PIN. Puede registrar su salida; el reporte queda PENDIENTE DE VALIDAR y se avisa a los supervisores." : "Puede registrar su salida; el reporte queda PENDIENTE DE VALIDAR y se avisa a los supervisores.", "alerta");
+}
+function cmAutorizarVal(aut){
+  const c = cmHoy(); c.valId = ""; c.valTs = 0; cmGuardar();
+  estado.valSup = { ok:true, aut:String(aut || "un supervisor"), hora: ahora(), ts: Date.now() };
+  persistir(); cmOpts = {}; cmCerrar();
+  try{ pintarValSup(); pintarBoton(); }catch(e){}
+  avisar("Reporte validado", "Validado por " + String(aut || "un supervisor") + " con su PIN. Ya puede registrar su salida.", "ok");
+}
 const firmaTecnico = montarFirma({
   canvas:"firmaTec", pista:"firmaTecPista", limpiar:"btnLimpiarFirmaTec", sellar:true,
   guardar: d => { estado.firmaTec = d; }
@@ -4340,7 +4407,7 @@ function limpiarServicio(){
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
   estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
-  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.sinRefacPorAct = {}; estado.motivoPorAct = {}; estado.incompleta = null; estado.comentarioCliente = "";
+  estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.sinRefacPorAct = {}; estado.motivoPorAct = {}; estado.valSup = null; estado.incompleta = null; estado.comentarioCliente = "";
   act.fotosAct = {}; borrarFotosAct();
   estado.enviados = 0;
   if(firmaCliente) firmaCliente.reiniciar();
@@ -4997,7 +5064,9 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     detalle: "",
     refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente),
     motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
-    firma: estado.incluirFirma && estado.firma ? estado.firma : "",
+    firma: (!esInterno() && estado.incluirFirma && estado.firma) ? estado.firma : "",
+    firmaSupervisor: (esInterno() && estado.valSup && estado.valSup.ok && estado.firma) ? estado.firma : "",
+    validacion: esInterno() ? (estado.valSup && estado.valSup.ok ? { tipo:"supervisor", supervisor:estado.valSup.aut||"", hora:estado.valSup.hora||"" } : { tipo:"pendiente", sinSenal:!!(estado.valSup && estado.valSup.sinSenal), hora:(estado.valSup && estado.valSup.hora)||"" }) : null,
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
       ? "Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí."
@@ -6425,6 +6494,14 @@ function cmMostrarForm(tipo){
 }
 function cmMostrarPin(){
   const c = cmHoy();
+  if(cmOpts.validar){
+    cmTipoForm = "validar";
+    $("#cmTitulo").textContent = "PIN del supervisor";
+    $("#cmTexto").textContent = "El supervisor que leyó el reporte debe abrir la app en su teléfono, entrar a «Autorizar comida», oprimir Generar PIN en esta solicitud y escribir aquí el PIN de 6 dígitos. Sirve una sola vez y por 15 minutos. No puede validar quien hizo el trabajo.";
+    $("#cmPinIn").value = ""; cmMsg(""); cmVista("pin");
+    setTimeout(()=>{ try{ $("#cmPinIn").focus(); }catch(e){} }, 80);
+    return;
+  }
   if(cmOpts.incompleta){
     cmTipoForm = "incompleta";
     $("#cmTitulo").textContent = "Pida su PIN";
@@ -6505,6 +6582,11 @@ async function cmPedirInc(){
   cmMostrarPin();
 }
 $("#btnIncompleta").addEventListener("click", abrirIncompleta);
+$("#btnValSup").addEventListener("click", abrirValidarSup);
+$("#btnValPend").addEventListener("click", async ()=>{
+  if(!await confirmar("¿Dejar pendiente de validar?", "Podrá registrar su salida sin la firma del supervisor. El reporte quedará marcado PENDIENTE DE VALIDAR y se avisará a los supervisores y a la dirección.", "Dejar pendiente")) return;
+  marcarPendValidar(false);
+});
 async function cmPedir(){
   if(cmOcupado) return;
   const tipo = cmTipoForm;
@@ -6534,11 +6616,21 @@ async function cmValidar(){
   if(cmOcupado) return;
   const pin = $("#cmPinIn").value.replace(/\D/g, "");
   if(pin.length !== 6){ cmMsg("El PIN tiene 6 dígitos.", "error"); return; }
-  const c = cmHoy(), esInc = !!cmOpts.incompleta;
+  const c = cmHoy(), esInc = !!cmOpts.incompleta, esVal = !!cmOpts.validar;
   cmOcupado = true; $("#cmValidar").disabled = true; cmMsg("Validando el PIN…");
   let r = null;
-  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_pin_validar", id:(esInc ? c.incId : c.reqId), pin });
+  if(navigator.onLine) r = await cmLlamar({ tipo:"comida_pin_validar", id:(esVal ? c.valId : (esInc ? c.incId : c.reqId)), pin });
   cmOcupado = false; $("#cmValidar").disabled = false;
+  if(esVal){
+    if(!r || r.red){ cmCerrar(); marcarPendValidar(true); return; }
+    if(r.ok === false){
+      if(esErrorSesion(r.error)){ cmCerrar(); sesionVencidaEn(""); return; }
+      const e = String(r.error || "PIN no válido.");
+      if(r.final){ c.valId = ""; c.valTs = 0; cmGuardar(); cmCerrar(); avisar("PIN no válido", e + " Vuelva a oprimir «Validar con PIN del supervisor» para hacer una solicitud nueva.", "alerta"); return; }
+      cmMsg(e, "error"); return;
+    }
+    cmAutorizarVal(r.autorizo); return;
+  }
   if(!r || r.red){
     if(esInc){ cmIncSinSenal(c.incMotivo || "", c.incFalta || cmOpts.falta || "", "Se perdió la señal (o el servidor no respondió) cuando el técnico validó el PIN"); return; }
     cmSinSenal(c.reqTipo, c.reqHora, "Se perdió la señal (o el servidor no respondió) cuando el colaborador validó el PIN"); return;
@@ -6571,7 +6663,7 @@ $("#cmNo").addEventListener("click", ()=> cmMostrarForm("nocomo"));
 $("#cmPedir").addEventListener("click", cmPedir);
 $("#cmValidar").addEventListener("click", cmValidar);
 $("#cmCerrar").addEventListener("click", cmCerrar);
-$("#cmAtras").addEventListener("click", ()=>{ if(cmOpts.gate || cmOpts.incompleta) cmCerrar(); else cmMostrarMenu(); });
+$("#cmAtras").addEventListener("click", ()=>{ if(cmOpts.gate || cmOpts.incompleta || cmOpts.validar) cmCerrar(); else cmMostrarMenu(); });
 
 /* Cierre sin comida (v75) ahora exige autorización. */
 async function cmIrCierreDirecto(){
@@ -6593,6 +6685,7 @@ function pintarBotonComida(){
 }
 function cmQue(x){
   if(x.accion === "salida_incompleta") return "SALIDA INCOMPLETA (refacciones)";
+  if(x.accion === "validar_reporte") return "VALIDAR REPORTE DE SERVICIO (el supervisor firma y da su PIN)";
   return x.accion === "no_comere" ? "NO COMERÁ HOY" : "Comerá más tarde, a las " + esc(x.horaNueva);
 }
 function pintarSupComida(){
@@ -6618,7 +6711,7 @@ function pintarSupComida(){
   if(cmSup.resueltas.length){
     h += `<span class="etiqueta" style="margin-top:18px;display:block">Resueltas hoy</span>`;
     cmSup.resueltas.forEach(x=>{
-      h += `<div class="cm-card cm-res"><b>${esc(x.nombre)}</b><p>${esc(x.estatus)} · ${x.accion === "salida_incompleta" ? "salida incompleta" : (x.accion === "no_comere" ? "no comerá" : "comerá a las " + esc(x.horaNueva))}${x.autorizo ? " · autorizó " + esc(x.autorizo) : ""}</p></div>`;
+      h += `<div class="cm-card cm-res"><b>${esc(x.nombre)}</b><p>${esc(x.estatus)} · ${x.accion === "validar_reporte" ? "validación de reporte" : x.accion === "salida_incompleta" ? "salida incompleta" : (x.accion === "no_comere" ? "no comerá" : "comerá a las " + esc(x.horaNueva))}${x.autorizo ? " · autorizó " + esc(x.autorizo) : ""}</p></div>`;
     });
   }
   cont.innerHTML = h;
@@ -6636,7 +6729,7 @@ async function cmSupCargar(silencioso){
   cmSup.lista = r.pendientes || []; cmSup.resueltas = r.resueltas || []; cmSup.ts = Date.now();
   const nuevas = cmSup.lista.filter(x=> !x.propia && !cmSup.vistos.has(x.id));
   cmSup.lista.forEach(x=> cmSup.vistos.add(x.id));
-  if(nuevas.length) avisar("Solicitud de comida", nuevas.map(x=> x.nombre + (x.accion === "salida_incompleta" ? " pide autorizar una salida incompleta" : (x.accion === "no_comere" ? " no comerá hoy" : " comerá a las " + x.horaNueva))).join(" · ") + ". Entre a «Autorizar comida» para darle el PIN.", "alerta");
+  if(nuevas.length) avisar("Solicitud de comida", nuevas.map(x=> x.nombre + (x.accion === "validar_reporte" ? " pide que valide su reporte de servicio" : x.accion === "salida_incompleta" ? " pide autorizar una salida incompleta" : (x.accion === "no_comere" ? " no comerá hoy" : " comerá a las " + x.horaNueva))).join(" · ") + ". Entre a «Autorizar comida» para darle el PIN.", "alerta");
   pintarSupComida(); pintarBotonComida();
 }
 function abrirComidaSup(){

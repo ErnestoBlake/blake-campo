@@ -475,6 +475,10 @@ body{
 .act-marca[data-m="TERMINADA"]{color:var(--verde)}.act-marca[data-m="PENDIENTE"]{color:var(--ambar)}.act-marca[data-m="CANCELADA"]{color:var(--rojo)}
 .act-cuerpo{margin-top:10px;border-top:1px dashed var(--linea);padding-top:10px}
 .act-plegada > .act-cuerpo{display:none}
+.term-dev{margin-top:10px;padding:10px;border:1px solid var(--rojo);border-radius:3px;color:var(--rojo);font-size:14px}
+.term-chip{margin-top:10px;padding:10px;border:1px solid var(--linea);border-radius:3px;font-size:14px}
+.term-chip[data-e="VALIDADO"]{border-color:var(--verde);color:var(--verde)}
+.term-chip[data-e="POR VALIDAR"],.term-chip[data-e="SIN ENVIAR"]{border-color:var(--ambar);color:var(--ambar)}
 .act-item[data-marca="TERMINADA"]{border-color:var(--verde)}
 .act-item[data-marca="PENDIENTE"]{border-color:var(--ambar)}
 .act-item[data-marca="CANCELADA"]{border-color:var(--rojo)}
@@ -832,7 +836,7 @@ select.refac-org{width:100%;margin-top:8px}
   </section>
 
   <!-- 16-sep: lo que el técnico tiene que hacer con este cliente, visible desde que lo elige -->
-  <section class="trabajo-asig" id="trabajoAsig" data-acc="Trabajo asignado para este cliente" hidden>
+  <section class="trabajo-asig" id="trabajoAsig" data-acc="Mis actividades de este servicio" data-acc-abierto="1" hidden>
     <span class="etiqueta act-bloque">Trabajo asignado para este cliente</span>
     <p class="pista" id="trabajoAsigAyuda">—</p>
     <div id="trabajoAsigLista"></div>
@@ -1419,6 +1423,25 @@ select.refac-org{width:100%;margin-top:8px}
 </div>
 
 <!-- v56: pedir reasignación de una actividad (la autoriza un administrador) -->
+<!-- v96: terminar una actividad desde la llegada -->
+<div class="portada" id="modalTerm" hidden role="dialog" aria-modal="true" aria-labelledby="mtTitulo">
+  <div class="portada-caja">
+    <span class="etiqueta">Terminar actividad</span>
+    <h2 id="mtTitulo">—</h2>
+    <p class="pista confirmar-texto" id="mtDetalle">—</p>
+    <div id="mtExterno" hidden>
+      <label class="adm-campo" for="mtCliente">Nombre de quien recibe por el cliente</label>
+      <input id="mtCliente" type="text" maxlength="80" autocapitalize="words" placeholder="Nombre y apellido">
+      <label class="adm-campo">Firma del cliente</label>
+      <div class="firma-caja"><canvas class="firma-canvas" id="firmaAct"></canvas><span class="firma-pista" id="firmaActPista">Firme aquí con el dedo</span></div>
+      <button class="btn btn-sec" id="btnLimpiarFirmaAct" type="button">Borrar firma</button>
+    </div>
+    <p class="pista" id="mtAviso">—</p>
+    <button class="btn" id="mtEnviar" type="button">Enviar a validación</button>
+    <button class="btn btn-sec" id="mtNo" type="button">Cancelar</button>
+  </div>
+</div>
+
 <div class="portada" id="modalReasig" hidden role="dialog" aria-modal="true" aria-labelledby="mrTitulo">
   <div class="portada-caja">
     <span class="etiqueta">Reasignar actividad</span>
@@ -1876,7 +1899,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v95";
+const APP_VER = "v96";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -2429,7 +2452,7 @@ function pintarTrabajoAsig(){
   const sec = $("#trabajoAsig");
   /* Al llegar al cierre (regreso registrado) la lista ya aparece ahí para marcarse:
      se oculta arriba para no mostrar las actividades dos veces. */
-  if(true || !o || estado.eventos.salida || enCierre()){ sec.hidden = true; return; }   /* v84: la lista asignada se ve en el cierre */
+  if(!o || estado.eventos.salida || enSalida()){ sec.hidden = true; return; }   /* v96: desde la llegada se pueden terminar actividades; en el cierre se ve la lista completa */
   sec.hidden = false;
   if(trabajoAsigFolio !== o.folio){
     trabajoAsigFolio = o.folio;
@@ -2997,7 +3020,7 @@ function hayAsignadasCliente(){
 function actividadesDetCierre(){
   const asig = idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").map(id=>{
     const a = act.lista.find(x=>String(x.id)===id);
-    return { titulo: limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle: limpiaTxt(act.notas[id]), autorizo: limpiaTxt((a && a.autorizo) || ""), asignada: true };
+    return { titulo: limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle: limpiaTxt(act.notas[id]), autorizo: limpiaTxt((a && a.autorizo) || ""), asignada: true, ...detTerm(id) };
   });
   const adic = estado.renglones.map(normRenglon).filter(renglonLleno)
     .map(r=>({ titulo: limpiaTxt(r.titulo), detalle: limpiaTxt(r.detalle), adicional: true }));
@@ -4523,7 +4546,7 @@ const hoyISO = () => {
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 };
 
-const act = { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, cargando:false };
+const act = { lista:[], actualizado:null, marcas:{}, notas:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, term:{}, cargando:false };
 
 function claveAct(){ return LS_ACT + "." + (estado.usuario || "").toLowerCase(); }
 function claveFotosAct(){ return LS_ACT + ".fotos." + (estado.usuario || "").toLowerCase(); }
@@ -4541,15 +4564,15 @@ function guardarAct(){
   try{
     localStorage.setItem(claveAct(), JSON.stringify({
       lista:act.lista, actualizado:act.actualizado, marcas:act.marcas,
-      notas:act.notas, adicionales:act.adicionales, detalle:act.detalle, tipos:act.tipos
+      notas:act.notas, adicionales:act.adicionales, detalle:act.detalle, tipos:act.tipos, term:act.term
     }));
   }catch(e){ /* almacenamiento lleno: el borrador sigue en memoria */ }
 }
 function cargarAct(){
-  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, tipos:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, cargando:false });
+  Object.assign(act, { lista:[], actualizado:null, marcas:{}, notas:{}, tipos:{}, adicionales:[], detalle:"", fotos:[], fotosAct:{}, term:{}, cargando:false });
   try{
     const g = JSON.parse(localStorage.getItem(claveAct()) || "null");
-    if(g) Object.assign(act, g, { fotos:[], fotosAct:{}, cargando:false });
+    if(g) Object.assign(act, g, { fotos:[], fotosAct:{}, term:(g.term||{}), cargando:false });
   }catch(e){}
   try{
     const f = JSON.parse(localStorage.getItem(claveFotosAct()) || "null");
@@ -4699,7 +4722,7 @@ async function refrescarActividades(){
   act.lista = Array.isArray(resp.actividades) ? resp.actividades : [];
   act.actualizado = new Date().toISOString();
   const vigentes = new Set(act.lista.map(a=>String(a.id)));
-  Object.keys(act.marcas).forEach(id=>{ if(!vigentes.has(id)){ delete act.marcas[id]; delete act.notas[id]; } });
+  Object.keys(act.marcas).forEach(id=>{ if(!vigentes.has(id)){ delete act.marcas[id]; delete act.notas[id]; delete act.term[id]; } });
   guardarAct(); pintarActividades();
 }
 $("#btnActRefrescar").addEventListener("click", refrescarActividades);
@@ -4981,7 +5004,7 @@ $("#camaraPorAct").addEventListener("change", async e=>{
 function htmlActItem(a){
   const id = String(a.id), f = etiquetaAct(a), m = act.marcas[id] || "";
   const ops = [["TERMINADA","Terminada"],["PENDIENTE","Pendiente"],["CANCELADA","Cancelada"]]
-    .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}">${t}</button>`).join("");
+    .map(([v,t])=>`<button type="button" class="act-op" data-id="${esc(id)}" data-v="${v}" aria-pressed="${m===v}"${termBloq(id) ? " disabled" : ""}>${t}</button>`).join("");
   const pideNota = m==="PENDIENTE" || m==="CANCELADA" || m==="TERMINADA";
   const origen = a.origen && a.origen!=="Asignada" ? `<span class="act-fecha">${esc(a.origen)}</span>` : "";
   const ab = actAbierta(id, m);
@@ -4992,10 +5015,11 @@ function htmlActItem(a){
     ${htmlReasig(a)}
     <div class="act-ops">${ops}</div>
     ${(m==="TERMINADA" && formServicioActivo()) ? htmlFormTipo(id, m) : (pideNota ? `<label class="act-nota-lbl">${m==="TERMINADA" ? "Detalla qué hiciste (mínimo " + MIN_DETALLE + " caracteres)" : (m==="PENDIENTE" ? "¿Por qué quedó pendiente?" : "¿Por qué se cancela?")}</label>
-    <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
+    <textarea class="act-nota" data-id="${esc(id)}" data-marca="${m}" spellcheck="true" lang="es" autocapitalize="sentences" ${termBloq(id) ? " readonly" : ""} placeholder="${m==="TERMINADA" ? "Ej.: Calibré la báscula con pesas patrón de 20 kg; quedó con error de ±0.2 % y se probó con una carga real." : (m==="PENDIENTE" ? "¿Qué falta para terminarla?" : "¿Por qué se cancela esta actividad?")}">${esc(act.notas[id] || "")}</textarea>
     ${m==="TERMINADA" ? `<div class="act-nota-cont" data-id="${esc(id)}"></div>` : ""}` : "")}
     ${m ? htmlFotosAct(id, m==="TERMINADA") : ""}
     ${m ? htmlRefacAct(id) : ""}
+    ${htmlTermBloque(id, m)}
     </div>
   </div>`;
 }
@@ -5084,7 +5108,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
     firma: (!esInterno() && estado.incluirFirma && estado.firma) ? estado.firma : "",
     firmaSupervisor: "",
-    validacion: esInterno() ? { tipo:"pendiente", remota:true, hora: ahora() } : null,   /* v94: se valida a distancia desde «Por validar» */
+    validacion: esInterno() ? validacionCierre(snap) : null,   /* v94/v96: se valida a distancia; si cada actividad ya se validó al terminarla, el cierre es directo */
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
       ? "Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí."
@@ -5135,7 +5159,7 @@ function encolarReporteAct(o){
     const a = act.lista.find(x=>String(x.id)===id), nota = (act.notas[id] || "").trim();
     if(a && act.marcas[id]==="PENDIENTE" && nota) a.nota = (a.nota ? a.nota + "\n" : "") + `[${sello}] ${nota}`;
   });
-  act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
+  act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; }); limpiarTerm();
   act.marcas = {}; act.notas = {}; act.tipos = {}; act.adicionales = [];
   guardarAct();
 }
@@ -5290,7 +5314,7 @@ async function enviarActividades(){
     const a = act.lista.find(x=>String(x.id)===id), nota = (act.notas[id] || "").trim();
     if(a && act.marcas[id]==="PENDIENTE" && nota) a.nota = (a.nota ? a.nota + "\n" : "") + `[${sello}] ${nota}`;
   });
-  act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; });
+  act.lista = act.lista.filter(a=>{ const m = act.marcas[String(a.id)]; return m!=="TERMINADA" && m!=="CANCELADA"; }); limpiarTerm();
   act.marcas = {}; act.notas = {}; act.tipos = {}; act.adicionales = []; act.detalle = ""; act.fotos = [];
   $("#actDetalle").value = "";
   guardarAct(); guardarFotosAct();
@@ -6782,6 +6806,116 @@ document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cmTick(
 
 
 
+
+/* ---------- v96: terminar una actividad desde la llegada ----------
+   Después de registrar la llegada el colaborador puede dar por concluida una actividad en cuanto la termina. Se envía a validación
+   en ese momento: interno → un supervisor la valida a distancia; cliente → firma el cliente en el teléfono Y la revisa un supervisor.
+   Si el supervisor la devuelve, vuelve a pendiente con el motivo. Al cerrar el servicio ya no se pide nada de lo ya validado.
+   REQUIERE el conector v85. act.term[id] = { estado: SIN ENVIAR | POR VALIDAR | VALIDADO | DEVUELTO, valId, intento, firma, clienteNombre, valido, por, nota } */
+function limpiarTerm(){
+  const vivos = new Set(act.lista.map(a=>String(a.id)));
+  Object.keys(act.term).forEach(id=>{ if(!vivos.has(id)) delete act.term[id]; });
+  guardarAct();
+}
+function termBloq(id){ const t = act.term[id]; return !!t && t.estado !== "DEVUELTO"; }
+function puedeTerminarAhora(){ return !!(estado.eventos && estado.eventos.llegada && !estado.eventos.salida); }
+function htmlTermBloque(id, m){
+  const t = act.term[id]; let h = "";
+  if(t && t.estado === "DEVUELTO") h += `<div class="term-dev">⚠ Devuelta por ${esc(t.por || "el supervisor")}: ${esc(t.nota || "")}<br>Corrígela y vuelve a terminarla.</div>`;
+  if(m !== "TERMINADA") return h;
+  if(t && t.estado !== "DEVUELTO"){
+    const txt = t.estado === "VALIDADO" ? "✓ Validada por " + esc(t.valido || "un supervisor") + ". Ya no se pide nada más de esta actividad."
+              : t.estado === "SIN ENVIAR" ? "⏳ Sin señal: se enviará sola a validación en cuanto haya conexión."
+              : "⏳ En validación del supervisor. Puede seguir trabajando.";
+    return h + `<div class="term-chip" data-e="${esc(t.estado)}">${txt}</div>`;
+  }
+  if(!puedeTerminarAhora()) return h;
+  return h + `<button type="button" class="btn term-btn" data-term="${esc(id)}">Terminar y enviar a validación</button>`;
+}
+function detTerm(id){
+  const t = act.term[id]; if(!t || t.estado === "DEVUELTO") return {};
+  return { valId: t.valId, valEstado: t.estado, firma: t.firma || "", clienteNombre: t.clienteNombre || "" };
+}
+function validacionCierre(snap){
+  const det = (snap && snap.actividadesDet) || [];
+  const todo = det.length > 0 && det.every(x=> x.valId && !x.adicional);
+  return { tipo: todo ? "porActividad" : "pendiente", remota:true, hora: ahora() };
+}
+let _termId = "", _termFirma = null;
+const firmaAct = montarFirma({ canvas:"firmaAct", pista:"firmaActPista", limpiar:"btnLimpiarFirmaAct", sellar:false, guardar: d=>{ _termFirma = d; } });
+function abrirTerm(id){
+  const a = act.lista.find(x=> String(x.id) === String(id)); if(!a) return;
+  const nota = limpiaTxt(act.notas[id]);
+  if(nota.length < MIN_DETALLE){ avisar("Falta el detalle", "Primero escriba qué hizo (mínimo " + MIN_DETALLE + " caracteres). Lleva " + nota.length + ".", "alerta"); return; }
+  _termId = String(id); _termFirma = null;
+  $("#mtTitulo").textContent = limpiaTxt(a.titulo || a.texto || "");
+  $("#mtDetalle").textContent = nota;
+  const ext = !esInterno();
+  $("#mtExterno").hidden = !ext; $("#mtCliente").value = "";
+  $("#mtAviso").textContent = ext
+    ? "El cliente firma aquí y además un supervisor Blake revisa la actividad desde su teléfono. Después de enviarla ya no se puede editar."
+    : "Un supervisor la revisará desde su teléfono; usted no tiene que esperar. Después de enviarla ya no se puede editar.";
+  $("#modalTerm").hidden = false;
+  if(ext && firmaAct){ firmaAct.reiniciar(); firmaAct.preparar(); firmaAct.limpiar(); }
+}
+$("#mtNo").addEventListener("click", ()=>{ $("#modalTerm").hidden = true; _termId = ""; });
+$("#mtEnviar").addEventListener("click", ()=>{
+  const id = _termId; if(!id) return;
+  const ext = !esInterno(), nombre = limpiaTxt($("#mtCliente").value);
+  if(ext){
+    if(nombre.length < 3){ avisar("Falta el nombre", "Escriba el nombre de quien recibe por el cliente.", "alerta"); return; }
+    if(!_termFirma){ avisar("Falta la firma", "El cliente debe firmar en el recuadro.", "alerta"); return; }
+  }
+  const prev = act.term[id];
+  const intento = prev && prev.intento ? prev.intento : 1;
+  const folio = (estado.orden && estado.orden.folio) || "";
+  act.term[id] = { estado:"SIN ENVIAR", valId: "ACT-" + id + "-" + folio + (intento > 1 ? "-" + intento : ""), intento, firma: ext ? _termFirma : "", clienteNombre: ext ? nombre : "", ts: Date.now() };
+  guardarAct(); $("#modalTerm").hidden = true; _termId = "";
+  repintarAct(); termEnviar(id);
+});
+document.addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest("[data-term]");
+  if(b) abrirTerm(b.dataset.term);
+});
+let _termOcupado = false;
+async function termEnviar(id){
+  const t = act.term[id]; if(!t || t.estado !== "SIN ENVIAR" || !navigator.onLine || !estado.token) return;
+  const a = act.lista.find(x=> String(x.id) === String(id)); const o = estado.orden || {};
+  const r = await cmLlamar({ tipo:"act_terminar", valId:t.valId, actId:String(id), folio:o.folio || "", cliente:o.titulo || o.cliente || "", sitio:o.sitio || "",
+    tecnico:estado.tecnico || "", usuario:estado.usuario || "", titulo:limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle:limpiaTxt(act.notas[id]),
+    externo: !esInterno(), clienteNombre:t.clienteNombre || "", firmo: !!t.firma });
+  if(r.red) return;
+  if(r.ok === false){ if(esErrorSesion(r.error)) sesionVencidaEn("actividades"); return; }
+  t.estado = "POR VALIDAR"; guardarAct(); repintarAct();
+  avisar("Actividad enviada", "Quedó en validación del supervisor.", "ok");
+}
+async function termSondeo(){
+  if(_termOcupado || !navigator.onLine || !estado.token || !estado.orden) return;
+  const ids = Object.keys(act.term);
+  if(!ids.length) return;
+  _termOcupado = true;
+  try{
+    ids.filter(id=> act.term[id] && act.term[id].estado === "SIN ENVIAR").forEach(id=> termEnviar(id));
+    if(!ids.some(id=> act.term[id] && act.term[id].estado === "POR VALIDAR")) return;
+    const r = await cmLlamar({ tipo:"act_estado", folio:(estado.orden.folio || "") });
+    if(r.red || r.ok === false || !Array.isArray(r.items)) return;
+    let cambio = false;
+    ids.forEach(id=>{
+      const t = act.term[id]; if(!t || t.estado !== "POR VALIDAR") return;
+      const it = r.items.find(x=> x.valId === t.valId); if(!it) return;
+      if(it.estatus === "VALIDADO"){ t.estado = "VALIDADO"; t.valido = it.valido || ""; cambio = true; }
+      else if(it.estatus === "DEVUELTO"){
+        act.term[id] = { estado:"DEVUELTO", por:it.valido || "", nota:it.nota || "", intento:(t.intento || 1) + 1 };
+        delete act.marcas[id]; cambio = true;
+        avisar("Actividad devuelta", (it.valido || "El supervisor") + ": " + (it.nota || ""), "alerta");
+      }
+    });
+    if(cambio){ guardarAct(); repintarAct(); }
+  } finally { _termOcupado = false; }
+}
+setInterval(termSondeo, 30000);
+window.addEventListener("online", ()=> termSondeo());
+
 /* ---------- v94: validación a distancia del supervisor ----------
    El colaborador cierra sin esperar a nadie; el reporte queda «POR VALIDAR» en el conector. El supervisor (Daniel, Brandon, Jorge,
    el Señor Ernesto; nunca quien hizo el trabajo) lo lee en «Por validar» y lo aprueba con su contraseña de la app, o lo devuelve con
@@ -6821,7 +6955,7 @@ function pintarValSupLista(){
         <div class="val-texto">${esc(x.resumen || "(sin detalle)")}</div>
         <label class="chk-linea"><input type="checkbox" class="val-chk"> Leí el reporte y verifiqué que las actividades se realizaron.</label>
         <input type="password" class="val-clave" placeholder="Su contraseña de la app (confirma que es usted)" autocomplete="current-password">
-        <button class="btn val-ok" type="button" data-vok="${esc(x.id)}">Validar reporte</button>
+        <button class="btn val-ok" type="button" data-vok="${esc(x.id)}">${String(x.id).indexOf("ACT-") === 0 ? "Validar actividad" : "Validar reporte"}</button>
         <p class="pista" style="margin-top:12px">Si NO está de acuerdo con lo reportado, no lo valide: devuélvalo con una nota. El colaborador la recibirá como aclaración y la dirección será avisada.</p>
         <textarea class="val-nota" rows="3" maxlength="400" placeholder="Qué falta o qué no coincide (mínimo 10 caracteres)"></textarea>
         <button class="btn btn-sec val-dev" type="button" data-vdev="${esc(x.id)}">Devolver con nota</button>

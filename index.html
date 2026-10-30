@@ -1899,7 +1899,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v96";
+const APP_VER = "v97";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -3084,7 +3084,7 @@ const TIPOS_TRABAJO = {
     ["que","Describe el trabajo realizado: qué se hizo, en qué equipo o lugar y con qué resultado (mínimo 100 caracteres)","Descripción"] ]}
 };
 function formServicioActivo(){
-  return PILOTO_FORM.indexOf(String(estado.usuario||"").toLowerCase()) >= 0 && !esInterno();
+  return false;   /* v97: el formulario por tipo de trabajo se retira para todos; el detalle vuelve a ser texto libre (mínimo 100 caracteres) */
 }
 function tipoDe(id){ const T = act.tipos && act.tipos[id]; return (T && TIPOS_TRABAJO[T.k]) ? T : null; }
 function camposFaltantes(id){
@@ -3438,7 +3438,7 @@ function medirActividades(){
   if(conCamposFaltantes) faltan.push(`contestar el formulario de ${conCamposFaltantes} actividad(es) terminada(s) (o marcar «No lo sé»)`);
   if(sinMotivo) faltan.push(`explicar ${sinMotivo} actividad(es) pendiente(s) o cancelada(s)`);
   if(renglonesIncompletos) faltan.push(`completar ${renglonesIncompletos} actividad(es) ${conAsig ? "adicional(es)" : ""} (título y detalle de mínimo ${MIN_DETALLE} caracteres)`.replace("  "," "));
-  { const nf = faltanFotosActs(); if(nf) faltan.push(`tomar las 3 fotos de ${nf} actividad(es) (van dentro de cada actividad)`); }
+  { const nf = faltanFotosActs(); if(nf) faltan.push(`tomar ${maxFotosAct() === 1 ? "la foto" : "las " + maxFotosAct() + " fotos"} de ${nf} actividad(es) (van dentro de cada actividad)`); }
   if(ninguna) faltan.push(conAsig ? "marcar al menos una actividad asignada o agregar una adicional" : "describir la Actividad 1 (título y detalle)");
   return { ok: faltan.length === 0, faltan };
 }
@@ -3493,8 +3493,8 @@ function pintarFotosRenglones(){
 function faltanFotosActs(){
   const fa = act.fotosAct || {};
   let n = 0;
-  idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").forEach(id=>{ if(((fa[id]||[]).length) < MAX_FOTOS_ACT) n++; });
-  (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{ if(renglonLleno(r) && ((fa["R"+i]||[]).length) < MAX_FOTOS_ACT) n++; });
+  idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").forEach(id=>{ if(((fa[id]||[]).length) < maxFotosAct()) n++; });
+  (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{ if(renglonLleno(r) && ((fa["R"+i]||[]).length) < maxFotosAct()) n++; });
   return n;
 }
 function pintarContadoresRenglon(){
@@ -4969,13 +4969,14 @@ function htmlActConsulta(a){
 }
 
 /* ---------- v75: fotos OPCIONALES por actividad (de 1 a 4; no bloquean el cierre) ---------- */
-const MAX_FOTOS_ACT = 3;
+/* v97: los administradores de la app (Daniel, Brandon, Jorge, Antonio, el Señor Ernesto) solo declaran 1 foto por actividad; los demás, 3. */
+function maxFotosAct(){ return esAdminApp() ? 1 : 3; }
 function htmlFotosAct(id, oblig){
   const fs = (act.fotosAct && act.fotosAct[id]) || [];
   const celdas = fs.map((f,i)=>`<div class="celda"><img src="${f.url}" alt="Foto ${i+1} de la actividad"><button type="button" class="quitar-foto fa-quitar" data-id="${esc(id)}" data-i="${i}" aria-label="Quitar foto">✕</button></div>`).join("");
-  const add = fs.length < MAX_FOTOS_ACT ? `<button class="celda add fa-add" type="button" data-id="${esc(id)}" aria-label="Agregar foto de esta actividad"><span>+</span></button>` : "";
-  const lbl = oblig ? `Fotos de esta actividad (obligatorio · ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}${fs.length>=MAX_FOTOS_ACT ? " ✓" : ""}` : `Fotos de esta actividad (opcional · hasta ${MAX_FOTOS_ACT}) · ${fs.length} / ${MAX_FOTOS_ACT}`;
-  return `<label class="act-nota-lbl fa-lbl" data-falta="${(oblig && fs.length<MAX_FOTOS_ACT) ? 1 : 0}">${lbl}</label><div class="rejilla fa-rejilla">${celdas}${add}</div>`;
+  const add = fs.length < maxFotosAct() ? `<button class="celda add fa-add" type="button" data-id="${esc(id)}" aria-label="Agregar foto de esta actividad"><span>+</span></button>` : "";
+  const lbl = oblig ? `Fotos de esta actividad (obligatorio · ${maxFotosAct()}) · ${fs.length} / ${maxFotosAct()}${fs.length>=maxFotosAct() ? " ✓" : ""}` : `Fotos de esta actividad (opcional · hasta ${maxFotosAct()}) · ${fs.length} / ${maxFotosAct()}`;
+  return `<label class="act-nota-lbl fa-lbl" data-falta="${(oblig && fs.length<maxFotosAct()) ? 1 : 0}">${lbl}</label><div class="rejilla fa-rejilla">${celdas}${add}</div>`;
 }
 let _fotoActId = "";
 document.addEventListener("click", e=>{
@@ -4989,7 +4990,7 @@ $("#camaraPorAct").addEventListener("change", async e=>{
   const id = _fotoActId; if(!id || !archivos.length) return;
   act.fotosAct = act.fotosAct || {};
   const lista = act.fotosAct[id] = act.fotosAct[id] || [];
-  const tomar = archivos.slice(0, Math.max(0, MAX_FOTOS_ACT - lista.length));
+  const tomar = archivos.slice(0, Math.max(0, maxFotosAct() - lista.length));
   let n = 0, galeria = 0, fallidas = 0;
   for(const archivo of tomar){
     const r = await comprimirImagenP(archivo);

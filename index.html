@@ -777,6 +777,9 @@ body.conBannerComida{padding-top:76px}
 .cm-card b{font-family:var(--display);font-size:22px;letter-spacing:.05em;text-transform:uppercase}
 .cm-card p{font-size:14px;line-height:1.5;margin:6px 0}
 .cm-card .pista{font-size:12px}
+.val-texto{white-space:pre-wrap;font-size:14px;line-height:1.5;max-height:340px;overflow:auto;border:1px solid var(--linea);background:var(--acero-900,#0c1118);padding:10px;margin:6px 0 12px;border-radius:3px}
+.val-detalle input.val-clave,.val-detalle textarea.val-nota{width:100%;box-sizing:border-box;margin:8px 0;min-height:50px;padding:10px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
+.val-detalle .btn{margin-top:8px}
 .cm-pin{font-family:var(--dato);font-size:44px;letter-spacing:.18em;text-align:center;color:var(--naranja-glow);margin:10px 0 2px}
 .cm-res{opacity:.75;border-left-color:var(--verde)}
 .refac-fila{display:flex;gap:8px;margin-bottom:8px}
@@ -927,11 +930,11 @@ select.refac-org{width:100%;margin-top:8px}
     <button class="firma-limpiar" id="btnLimpiarFirmaTec" type="button">Limpiar firma del técnico</button>
 
     <div id="bloqueValSup" hidden>
-      <label class="campo-lbl">Validación del supervisor <b>(obligatoria)</b></label>
-      <p class="renglon-ayuda">Servicio interno: un supervisor (Daniel, Brandon, Jorge o el Señor Ernesto, que no sea quien hizo el trabajo) debe <b>leer este reporte y validar que las actividades se realizaron</b>. Entréguele el teléfono: que lo lea, <b>firme abajo</b> y confirme con su PIN.</p>
+      <label class="campo-lbl">Validación del supervisor</label>
+      <p class="renglon-ayuda">Servicio interno: al enviar su reporte, <b>un supervisor lo leerá y lo validará desde su propio teléfono</b>. Usted no necesita esperar a nadie ni pedir ningún PIN.</p>
       <div class="renglon-ayuda" id="valSupEstado"></div>
-      <button class="btn" id="btnValSup" type="button">Validar con PIN del supervisor</button>
-      <button class="btn btn-sec" id="btnValPend" type="button">Supervisor no disponible: dejar pendiente de validar</button>
+      <button class="btn" id="btnValSup" type="button" hidden>Validar con PIN del supervisor</button>
+      <button class="btn btn-sec" id="btnValPend" type="button" hidden>Supervisor no disponible: dejar pendiente de validar</button>
     </div>
     <label class="campo-lbl" id="lblFirmaSup" hidden>Firma del supervisor</label>
     <label class="chk-linea" id="lineaFirmaCli" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
@@ -1091,6 +1094,10 @@ select.refac-org{width:100%;margin-top:8px}
       <b>Autorizar cambio de actividades</b>
       <span id="inicioSolDet">Administrador: revisa las solicitudes de reasignación de los colaboradores.</span>
     </button>
+    <button class="menu-op menu-op--acl" id="btnIrVal" type="button" hidden>
+      <b>Por validar</b>
+      <span id="inicioValDet">Supervisor: lee y valida los reportes de servicio interno de los colaboradores.</span>
+    </button>
     <button class="menu-op menu-op--acl" id="btnIrComida" type="button" hidden>
       <b>Autorizar comida</b>
       <span id="inicioComidaDet">Supervisor: da el PIN a quien pide no comer o comer más tarde.</span>
@@ -1212,6 +1219,20 @@ select.refac-org{width:100%;margin-top:8px}
   </div>
 </div>
 <!-- v77: Pantalla del supervisor: autorizar comida con PIN -->
+<div class="pantalla" id="valPantalla" hidden>
+  <div class="pantalla-caja">
+    <div class="pantalla-cab">
+      <button class="link-volver" id="btnValMenu" type="button">← Menú</button>
+      <button class="link-volver" id="btnValRefrescar" type="button">↻ Actualizar</button>
+    </div>
+    <div class="act-cab">
+      <span class="etiqueta">Por validar</span>
+      <h2>Reportes de servicio interno</h2>
+      <p class="pista" id="valSync">—</p>
+    </div>
+    <div id="valLista"></div>
+  </div>
+</div>
 <div class="pantalla" id="comidaPantalla" hidden>
   <div class="pantalla-caja">
     <div class="pantalla-cab">
@@ -1855,7 +1876,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v93";
+const APP_VER = "v95";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -2382,14 +2403,15 @@ function pintarCierreForm(){
   if(mostrar && esInterno()){
     /* v92: servicio interno → la firma del cuadro es la del SUPERVISOR que valida el reporte (con su PIN). */
     estado.incluirFirma = false;
-    $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = false; $("#btnLimpiarFirma").hidden = false;
-    $("#bloqueValSup").hidden = false; $("#lblFirmaSup").hidden = false;
-    prepararFirma(); pintarValSup();
+    $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true;
+    $("#bloqueValSup").hidden = false; $("#lblFirmaSup").hidden = true;
+    pintarValSup();
   } else if(mostrar){ $("#lineaFirmaCli").hidden = false; $("#bloqueValSup").hidden = true; $("#lblFirmaSup").hidden = true; }
   if(mostrar){
     pintarRenglones();
     if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
     if(!esInterno()){ $("#firmaCaja").hidden = !estado.incluirFirma; $("#btnLimpiarFirma").hidden = !estado.incluirFirma; }
+    else { $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true; }
     if(estado.incluirFirma && !esInterno()) prepararFirma();
     prepararFirmaTec();
     prepararCierreAct();
@@ -2975,10 +2997,10 @@ function hayAsignadasCliente(){
 function actividadesDetCierre(){
   const asig = idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA").map(id=>{
     const a = act.lista.find(x=>String(x.id)===id);
-    return { titulo: limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle: limpiaTxt(act.notas[id]) };
+    return { titulo: limpiaTxt((a && (a.titulo || a.texto)) || ""), detalle: limpiaTxt(act.notas[id]), autorizo: limpiaTxt((a && a.autorizo) || ""), asignada: true };
   });
   const adic = estado.renglones.map(normRenglon).filter(renglonLleno)
-    .map(r=>({ titulo: limpiaTxt(r.titulo), detalle: limpiaTxt(r.detalle) }));
+    .map(r=>({ titulo: limpiaTxt(r.titulo), detalle: limpiaTxt(r.detalle), adicional: true }));
   return asig.concat(adic).filter(x=>x.titulo || x.detalle);
 }
 /* v61: actividades que quedaron PENDIENTES o CANCELADAS, con la justificación escrita (va al PDF/correo). */
@@ -3660,25 +3682,11 @@ const firmaCliente = montarFirma({
   guardar: d => { estado.firma = d; try{ pintarValSup(); pintarBoton(); }catch(e){} }
 });
 /* v92: validación del supervisor en servicios internos (Blake Inc, Tezoyuca 1 y 2). */
-function valSupOk(){
-  const v = estado.valSup; if(!v) return false;
-  if(v.pend) return true;
-  return !!(v.ok && estado.firma);
-}
+function valSupOk(){ return true; }   /* v94: el colaborador ya no espera a un supervisor; el reporte queda «por validar» y se valida a distancia */
 function pintarValSup(){
   const e = $("#valSupEstado"); if(!e) return;
-  const v = estado.valSup, b = $("#btnValSup"), p = $("#btnValPend");
-  if(v && v.ok){
-    e.innerHTML = estado.firma ? `✓ <b>Validado por ${esc(v.aut || "un supervisor")}</b> a las ${esc(v.hora || "")}.` : `PIN aceptado (${esc(v.aut || "supervisor")}), pero falta la <b>firma del supervisor</b> en el recuadro de abajo.`;
-    b.hidden = true; p.hidden = true;
-  } else if(v && v.pend){
-    e.innerHTML = `⏳ <b>Pendiente de validar</b>${v.sinSenal ? " (sin señal)" : ""}: se reportará a los supervisores y a la dirección. <a href="#" id="valSupDeshacer">Intentar validar ahora</a>`;
-    b.hidden = true; p.hidden = true;
-    const d = $("#valSupDeshacer"); if(d) d.onclick = ev=>{ ev.preventDefault(); estado.valSup = null; persistir(); pintarValSup(); pintarBoton(); };
-  } else {
-    e.textContent = estado.firma ? "El supervisor ya firmó. Falta que confirme con su PIN." : "Falta la firma del supervisor (recuadro de abajo) y su PIN.";
-    b.hidden = false; p.hidden = false; b.disabled = !estado.firma;
-  }
+  e.innerHTML = "✓ Al enviar, su reporte pasa a validación de un supervisor.";
+  const b = $("#btnValSup"), p = $("#btnValPend"); if(b) b.hidden = true; if(p) p.hidden = true;
 }
 function abrirValidarSup(){
   if(!estado.firma){ avisar("Falta la firma", "Primero el supervisor debe leer el reporte y firmar en el recuadro.", "alerta"); return; }
@@ -3751,14 +3759,15 @@ const PANTALLAS_RETORNO = {
   admin:        "#adminPantalla",
   equipo:       "#equipoPantalla",
   sol:          "#solPantalla",
-  comida:       "#comidaPantalla"
+  comida:       "#comidaPantalla",
+  val:          "#valPantalla"
 };
 function sesionVencidaEn(pantalla){
   _volverA = pantalla || "";
   estado.sesionVencida = true;
   Object.values(PANTALLAS_RETORNO).forEach(sel=>{ const p = $(sel); if(p) p.hidden = true; });
   $("#inicio").hidden = true;
-  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo", sol:"Autorizar cambio de actividades", comida:"Autorizar comida" }[_volverA] || "donde estaba";
+  const nombre = { aclaraciones:"Aclaraciones", actividades:"Mis actividades", admin:"el panel de administrador", equipo:"Actividades del equipo", sol:"Autorizar cambio de actividades", comida:"Autorizar comida", val:"Por validar" }[_volverA] || "donde estaba";
   avisar("Entre de nuevo, con señal",
     `El servidor ya no reconoce la sesión de este teléfono. Escriba su correo y contraseña: al entrar regresará a ${nombre}. No se perdió nada.`, "error");
   pedirLogin();
@@ -3771,6 +3780,7 @@ function volverTrasLogin(){
   if(destino === "equipo" && esAdminApp()){ $("#inicio").hidden = true; abrirEquipo(); return true; }
   if(destino === "sol" && esAdminApp()){ $("#inicio").hidden = true; abrirSol(); return true; }
   if(destino === "comida" && esAdminApp()){ $("#inicio").hidden = true; abrirComidaSup(); return true; }
+  if(destino === "val" && esAdminApp()){ $("#inicio").hidden = true; abrirValSup(); return true; }
   return false;
 }
 function pedirLogin(){
@@ -4594,11 +4604,13 @@ function mostrarInicio(){
   $("#equipoPantalla").hidden = true;
   $("#solPantalla").hidden = true;
   $("#comidaPantalla").hidden = true;
+  $("#valPantalla").hidden = true;
   $("#clientePantalla").hidden = true;
   $("#aclaracionesPantalla").hidden = true;
   $("#portadaClave").hidden = true;
   pintarBotonSol();
   try{ pintarBotonComida(); if(esAdminApp()) cmSupCargar(true); cmRevisar(); }catch(e){}
+  try{ pintarBotonVal(); if(esAdminApp()) vsCargar(true); }catch(e){}
   if(esAdminApp() && navigator.onLine && !adm.cargando) refrescarEquipo();   /* v57: contador de solicitudes */
   pintarBotonAclaraciones();
   pintarBotonBio();   /* v48 */
@@ -5071,8 +5083,8 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente),
     motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
     firma: (!esInterno() && estado.incluirFirma && estado.firma) ? estado.firma : "",
-    firmaSupervisor: (esInterno() && estado.valSup && estado.valSup.ok && estado.firma) ? estado.firma : "",
-    validacion: esInterno() ? (estado.valSup && estado.valSup.ok ? { tipo:"supervisor", supervisor:estado.valSup.aut||"", hora:estado.valSup.hora||"" } : { tipo:"pendiente", sinSenal:!!(estado.valSup && estado.valSup.sinSenal), hora:(estado.valSup && estado.valSup.hora)||"" }) : null,
+    firmaSupervisor: "",
+    validacion: esInterno() ? { tipo:"pendiente", remota:true, hora: ahora() } : null,   /* v94: se valida a distancia desde «Por validar» */
     firmaTecnico: estado.firmaTec || "",
     leyendaTecnico: estado.firmaTec
       ? "Declaro que las actividades, los tiempos y la evidencia de este reporte son verdaderos y fueron realizados por mí."
@@ -6768,6 +6780,123 @@ function cmTick(){ try{ cmRevisar(); cmSupSondeo(); }catch(e){} }
 setInterval(cmTick, 20000);
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cmTick(); });
 
+
+
+/* ---------- v94: validación a distancia del supervisor ----------
+   El colaborador cierra sin esperar a nadie; el reporte queda «POR VALIDAR» en el conector. El supervisor (Daniel, Brandon, Jorge,
+   el Señor Ernesto; nunca quien hizo el trabajo) lo lee en «Por validar» y lo aprueba con su contraseña de la app, o lo devuelve con
+   una nota (el colaborador la recibe como aclaración). REQUIERE el conector v83. */
+const vs = { lista:[], resueltas:[], cargando:false, ts:0, abierto:"", vistos:new Set(), error:"" };
+function pintarBotonVal(){
+  const b = $("#btnIrVal"); if(!b) return;
+  b.hidden = !esAdminApp(); if(b.hidden) return;
+  const n = vs.lista.filter(x=> !x.propia).length;
+  $("#inicioValDet").textContent = n ? "⚠ " + n + " reporte" + (n === 1 ? "" : "s") + " por validar."
+                                     : "Supervisor: lee y valida los reportes de servicio interno de los colaboradores.";
+}
+function vsHace(x){
+  const h = Number(x.horas);
+  if(!isFinite(h)) return "";
+  if(h < 1) return "hace " + Math.max(1, Math.round(h*60)) + " min";
+  if(h < 48) return "hace " + Math.round(h) + " h";
+  return "hace " + Math.round(h/24) + " días";
+}
+function pintarValSupLista(){
+  const cont = $("#valLista"); if(!cont) return;
+  const hora = vs.ts ? new Date(vs.ts).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false}) : "";
+  $("#valSync").textContent = (vs.cargando ? "Actualizando…" : (hora ? "Actualizado " + hora : "Sin descargar")) + (navigator.onLine ? "" : " · sin conexión");
+  let h = "";
+  if(vs.error) h += `<p class="pista" style="color:var(--rojo,#ff6b6b)">${esc(vs.error)}</p>`;
+  if(!vs.lista.length && !vs.error) h += `<p class="pista">No hay reportes por validar.</p>`;
+  vs.lista.forEach(x=>{
+    const abierto = vs.abierto === x.id;
+    h += `<div class="cm-card" data-vid="${esc(x.id)}"><b>${esc(x.colaborador)}</b> <span class="pista">· ${esc(x.cliente)}${x.sitio ? " · " + esc(x.sitio) : ""}</span>
+      <p class="pista">Folio ${esc(x.folio || "—")} · ${esc(x.fecha || "")} ${esc(x.hora || "")} · ${esc(vsHace(x))}</p>`;
+    if(x.propia){
+      h += `<p class="pista">Es su propio reporte: otro supervisor debe validarlo.</p></div>`; return;
+    }
+    h += `<button class="btn ${abierto ? "btn-sec" : ""}" type="button" data-vabrir="${esc(x.id)}">${abierto ? "Cerrar" : "Leer y validar"}</button>`;
+    if(abierto){
+      h += `<div class="val-detalle"><p class="pista">Lo que reportó ${esc(x.colaborador)}:</p>
+        <div class="val-texto">${esc(x.resumen || "(sin detalle)")}</div>
+        <label class="chk-linea"><input type="checkbox" class="val-chk"> Leí el reporte y verifiqué que las actividades se realizaron.</label>
+        <input type="password" class="val-clave" placeholder="Su contraseña de la app (confirma que es usted)" autocomplete="current-password">
+        <button class="btn val-ok" type="button" data-vok="${esc(x.id)}">Validar reporte</button>
+        <p class="pista" style="margin-top:12px">Si NO está de acuerdo con lo reportado, no lo valide: devuélvalo con una nota. El colaborador la recibirá como aclaración y la dirección será avisada.</p>
+        <textarea class="val-nota" rows="3" maxlength="400" placeholder="Qué falta o qué no coincide (mínimo 10 caracteres)"></textarea>
+        <button class="btn btn-sec val-dev" type="button" data-vdev="${esc(x.id)}">Devolver con nota</button>
+        <p class="pista val-msg" aria-live="polite"></p></div>`;
+    }
+    h += `</div>`;
+  });
+  if(vs.resueltas.length){
+    h += `<span class="etiqueta" style="margin-top:18px;display:block">Resueltos recientes</span>`;
+    vs.resueltas.forEach(x=>{
+      h += `<div class="cm-card cm-res"><b>${esc(x.colaborador)}</b><p>${esc(x.estatus)} · ${esc(x.cliente)} · folio ${esc(x.folio || "—")}${x.valido ? " · " + esc(x.valido) : ""}</p>${x.nota ? `<p class="pista">Nota: ${esc(x.nota)}</p>` : ""}</div>`;
+    });
+  }
+  cont.innerHTML = h;
+}
+async function vsCargar(silencioso){
+  if(!esAdminApp() || !estado.token || !navigator.onLine || vs.cargando) return;
+  vs.cargando = true; if(!silencioso) pintarValSupLista();
+  const r = await cmLlamar({ tipo:"val_lista" });
+  vs.cargando = false;
+  if(r.red){ if(!silencioso){ vs.error = "Sin respuesta del servidor. Intente de nuevo."; } pintarValSupLista(); return; }
+  if(r.ok === false){
+    if(!silencioso && esErrorSesion(r.error)){ sesionVencidaEn("val"); return; }
+    vs.error = silencioso ? vs.error : String(r.error || "Error del servidor"); pintarValSupLista(); return;
+  }
+  vs.error = ""; vs.ts = Date.now();
+  vs.lista = Array.isArray(r.pendientes) ? r.pendientes : []; vs.resueltas = Array.isArray(r.resueltas) ? r.resueltas : [];
+  const nuevas = vs.lista.filter(x=> !x.propia && !vs.vistos.has(x.id)); nuevas.forEach(x=> vs.vistos.add(x.id));
+  if(silencioso && nuevas.length && vs.vistos.size > nuevas.length) avisar("Reporte por validar", nuevas.map(x=> x.colaborador).join(" · ") + (nuevas.length === 1 ? " cerró un servicio interno" : " cerraron servicios internos") + ". Entre a «Por validar».", "alerta");
+  pintarValSupLista(); pintarBotonVal();
+}
+function abrirValSup(){
+  const p = $("#valPantalla"); p.hidden = false; p.scrollTop = 0; vs.abierto = "";
+  pintarValSupLista(); vsCargar(false);
+}
+$("#btnIrVal").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirValSup(); });
+$("#btnValMenu").addEventListener("click", ()=>{ $("#valPantalla").hidden = true; mostrarInicio(); });
+$("#btnValRefrescar").addEventListener("click", ()=> vsCargar(false));
+$("#valLista").addEventListener("click", async ev=>{
+  const ab = ev.target.closest("[data-vabrir]");
+  if(ab){ const id = ab.getAttribute("data-vabrir"); vs.abierto = (vs.abierto === id ? "" : id); pintarValSupLista(); return; }
+  const ok = ev.target.closest("[data-vok]"), dev = ev.target.closest("[data-vdev]");
+  const btn = ok || dev; if(!btn || btn.disabled) return;
+  const card = btn.closest(".cm-card"), msg = card.querySelector(".val-msg");
+  const id = btn.getAttribute(ok ? "data-vok" : "data-vdev");
+  const say = t => { msg.textContent = t; msg.style.color = t ? "var(--ambar)" : ""; };
+  let cuerpo;
+  if(ok){
+    if(!card.querySelector(".val-chk").checked){ say("Marque la casilla: confirma que leyó el reporte."); return; }
+    const clave = card.querySelector(".val-clave").value;
+    if(!clave){ say("Escriba su contraseña de la app para confirmar que es usted."); return; }
+    cuerpo = { tipo:"val_aprobar", id, clave };
+  } else {
+    const nota = limpiaTxt(card.querySelector(".val-nota").value);
+    if(nota.length < 10){ say("Escriba la nota (mínimo 10 caracteres). Lleva " + nota.length + "."); return; }
+    cuerpo = { tipo:"val_devolver", id, nota };
+  }
+  say("Enviando…"); btn.disabled = true;
+  const r = await cmLlamar(cuerpo);
+  btn.disabled = false;
+  if(r.red){ say("Sin respuesta (sin señal). No se guardó nada: intente de nuevo."); return; }
+  if(r.ok === false){
+    if(esErrorSesion(r.error)){ sesionVencidaEn("val"); return; }
+    say(String(r.error || "El servidor no aceptó la operación.")); return;
+  }
+  vs.abierto = "";
+  avisar(ok ? "Reporte validado" : "Reporte devuelto", ok ? "Quedó registrada su validación." : "Se avisó al colaborador y a la dirección.", "ok");
+  vsCargar(false);
+});
+function vsTick(){
+  if(!esAdminApp() || document.hidden || !navigator.onLine || !estado.token) return;
+  if($("#inicio").hidden && $("#valPantalla").hidden) return;
+  if(Date.now() - vs.ts > 60000) vsCargar(true);
+}
+setInterval(vsTick, 30000);
 
 /* ---------- v78: llegada olvidada ---------- */
 function llMsg(t){ const e = $("#llMsg"); e.textContent = t || ""; e.dataset.t = t ? "error" : ""; }

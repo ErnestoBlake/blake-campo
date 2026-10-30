@@ -812,6 +812,28 @@ select.refac-org{width:100%;margin-top:8px}
 .acc > .acc-cuerpo > .etiqueta:first-child{display:none}
 .escalera.acc,.trabajo-asig.acc,.evidencia.acc{padding-top:8px;padding-bottom:6px}
 .portada textarea{width:100%;padding:12px 16px;margin-bottom:14px;background:var(--acero-800);border:1px solid var(--linea);border-radius:3px;color:var(--plata-alta);font-family:var(--texto);font-size:16px}
+
+/* ---------- v100: tamaños, refacciones con más vida ---------- */
+.logo-mark{height:42px}
+@media (min-width:900px){ .logo-mark{height:60px} .app{max-width:860px} .pantalla-caja{max-width:860px} }
+textarea.act-nota{width:100% !important;box-sizing:border-box;min-height:160px !important;font-size:17px;line-height:1.5;padding:12px 14px}
+.renglon textarea,.renglon input[type=text]{font-size:17px}
+.renglon textarea{min-height:140px}
+.cierre-form textarea{font-size:17px}
+@media (min-width:900px){ textarea.act-nota{min-height:210px !important;font-size:18px} .renglon textarea{min-height:180px;font-size:18px} }
+.cierre-form .campo-lbl[hidden],.campo-lbl[hidden]{display:none !important}
+.ra-item,.renglon:has(.refac-desc){background:linear-gradient(135deg,#17324a 0%,#0f1c29 100%);border:1px solid #2f5878;border-left:5px solid var(--naranja);border-radius:4px;padding:14px}
+.ra-num{color:var(--naranja)}
+.ra-lbl{display:block;margin:12px 0 5px;font-family:var(--dato);font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7fc8ff}
+.refac-desc,.refac-cant{display:block;width:100%;box-sizing:border-box;min-height:58px;margin:0;padding:0 14px;background:#0a131c;border:1px solid #3b6a8c;border-radius:4px;color:#fff;font-family:var(--texto);font-size:18px}
+.refac-desc::placeholder,.refac-cant::placeholder{color:#6f8aa0}
+.refac-desc:focus,.refac-cant:focus,select.refac-uni:focus,select.refac-org:focus{outline:2px solid var(--naranja);border-color:var(--naranja)}
+.refac-fila{display:flex;gap:10px;margin:0}
+.refac-fila .refac-cant{flex:0 0 34%;width:auto;text-align:center;font-weight:700}
+select.refac-uni{flex:1 1 0;width:auto;min-height:58px;font-size:18px;background:#0a131c;border-color:#3b6a8c}
+select.refac-org{width:100%;margin-top:0;min-height:58px;font-size:17px;background:#0a131c;border-color:#3b6a8c}
+.ra-bloque .ra-add{border-color:var(--naranja);color:var(--naranja);font-weight:700}
+.ra-bloque .ra-add:hover{background:rgba(242,148,0,.12)}
 </style>
 </head>
 <body>
@@ -943,6 +965,7 @@ select.refac-org{width:100%;margin-top:8px}
     </div>
     <label class="campo-lbl" id="lblFirmaSup" hidden>Firma del supervisor</label>
     <label class="chk-linea" id="lineaFirmaCli" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
+    <p class="renglon-ayuda" id="notaFirmaCub" hidden>✓ El cliente ya firmó cada actividad terminada: no se pide otra firma al cerrar el servicio.</p>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
       <span class="firma-pista" id="firmaPista">Firme aquí con el dedo</span>
@@ -1900,7 +1923,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v99";
+const APP_VER = "v100";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -2421,6 +2444,13 @@ function esInterno(){
   return c.indexOf("blakeinc") === 0 || t.indexOf("blakeinc") === 0 || si.indexOf("tezoyuca") >= 0
       || (si.indexOf("ecatepec") >= 0 && (c.indexOf("blake") >= 0 || t.indexOf("blake") >= 0));   /* Blake Inc (Ecatepec, Casa…) y Tezoyuca 1 y 2 */
 }
+/* v100: si el cliente ya firmó CADA actividad terminada (y no hay actividades adicionales sin firma), no se le pide otra firma al cerrar. */
+function firmaClienteCubierta(){
+  if(!estado.orden || esInterno()) return false;
+  const ids = idsMarcadosCliente().filter(id=>act.marcas[id]==="TERMINADA");
+  const adic = (estado.renglones||[]).map(normRenglon).filter(renglonLleno).length;
+  return ids.length > 0 && adic === 0 && ids.every(id=>{ const t = act.term[id]; return t && t.firma && t.estado !== "DEVUELTO"; });
+}
 function pintarCierreForm(){
   const mostrar = enCierre() && enSalida();
   $("#cierreForm").hidden = !mostrar;
@@ -2436,6 +2466,11 @@ function pintarCierreForm(){
     if($("#chkFirma").checked !== estado.incluirFirma) $("#chkFirma").checked = estado.incluirFirma;
     if(!esInterno()){ $("#firmaCaja").hidden = !estado.incluirFirma; $("#btnLimpiarFirma").hidden = !estado.incluirFirma; }
     else { $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true; }
+    if(!esInterno()){
+      const cub = firmaClienteCubierta();
+      $("#notaFirmaCub").hidden = !cub;
+      if(cub){ estado.incluirFirma = false; estado.firma = null; $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true; if($("#chkFirma").checked) $("#chkFirma").checked = false; }
+    } else $("#notaFirmaCub").hidden = true;
     if(estado.incluirFirma && !esInterno()) prepararFirma();
     prepararFirmaTec();
     prepararCierreAct();
@@ -2511,7 +2546,7 @@ function pintarBoton(){
   { const bi = $("#btnIncompleta"); if(bi) bi.hidden = !(esSalida && !validaRefacBase().ok && !(estado.incompleta && estado.incompleta.ok)); }
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
-  const faltanFirma = esSalida && !esInterno() && !estado.firma;
+  const faltanFirma = esSalida && !esInterno() && !estado.firma && !firmaClienteCubierta();
   const faltanValSup = esSalida && esInterno() && !valSupOk();
   const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
@@ -3286,12 +3321,14 @@ function htmlRefacAct(key){
   const items = sin ? "" : lst.map(([r,i],n)=>`
     <div class="ra-item">
       <div class="ra-cab"><span class="ra-num">Refacción ${n+1}</span><button type="button" class="ra-quitar" data-i="${i}">Quitar</button></div>
-      <input type="text" class="refac-desc ra-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <span class="ra-lbl">¿Qué pieza o material?</span>
+      <input type="text" class="refac-desc ra-desc" data-i="${i}" maxlength="120" placeholder="Ej.: celda de carga, contactor, manguera" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <span class="ra-lbl">¿Cuántas?</span>
       <div class="refac-fila">
-        <input type="text" class="refac-cant ra-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="Cantidad (ej.: 2)" value="${esc(r.cant||"")}" autocomplete="off">
+        <input type="text" class="refac-cant ra-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="2" value="${esc(r.cant||"")}" autocomplete="off">
         <select class="refac-uni ra-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
       </div>
-      <input type="text" class="refac-cod ra-cod" data-i="${i}" maxlength="40" placeholder="Código o número de parte (si lo tiene)" value="${esc(r.cod||"")}" autocomplete="off">
+      <span class="ra-lbl">¿De dónde salió?</span>
       <select class="refac-org ra-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
       ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec ra-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
     </div>`).join("");
@@ -3369,12 +3406,14 @@ function pintarRefac(){
   cont.innerHTML = estado.refacciones.map((r,i)=> (r.ak||"") !== "" ? "" : `
     <div class="renglon" data-i="${i}">
       <div class="renglon-cab"><span class="renglon-num">Refacción ${++nGen}</span><button type="button" class="renglon-quitar refac-quitar" data-i="${i}">Quitar</button></div>
-      <input type="text" class="refac-desc" data-i="${i}" maxlength="120" placeholder="Pieza o material" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <span class="ra-lbl">¿Qué pieza o material?</span>
+      <input type="text" class="refac-desc" data-i="${i}" maxlength="120" placeholder="Ej.: celda de carga, contactor, manguera" value="${esc(r.desc||"")}" autocomplete="off" spellcheck="true" lang="es">
+      <span class="ra-lbl">¿Cuántas?</span>
       <div class="refac-fila">
-        <input type="text" class="refac-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="Cantidad (ej.: 2)" value="${esc(r.cant||"")}" autocomplete="off">
+        <input type="text" class="refac-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="2" value="${esc(r.cant||"")}" autocomplete="off">
         <select class="refac-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
       </div>
-      <input type="text" class="refac-cod" data-i="${i}" maxlength="40" placeholder="Código o número de parte (si lo tiene)" value="${esc(r.cod||"")}" autocomplete="off">
+      <span class="ra-lbl">¿De dónde salió?</span>
       <select class="refac-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
       ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec refac-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
     </div>`).join("");

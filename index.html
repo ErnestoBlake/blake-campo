@@ -236,11 +236,12 @@ body{
 }
 .cierre-form textarea:focus{outline:2px solid var(--naranja-glow);outline-offset:2px;border-color:var(--naranja)}
 .chk-linea{
-  display:flex;align-items:center;gap:9px;margin:14px 0 10px;
-  font-family:var(--texto);font-size:14.5px;color:var(--plata-alta);
+  display:flex;align-items:center;gap:14px;margin:14px 0 10px;padding:12px 14px;min-height:56px;cursor:pointer;
+  border:1px solid var(--linea);border-radius:3px;background:var(--acero-800);
+  font-family:var(--texto);font-size:15.5px;line-height:1.35;color:var(--plata-alta);
 }
 .chk-linea[hidden]{display:none !important}
-.chk-linea input{width:19px;height:19px;accent-color:var(--naranja);flex:0 0 auto}
+.chk-linea input{width:30px !important;height:30px !important;min-width:30px;min-height:30px !important;margin:0;accent-color:var(--naranja);flex:0 0 auto}   /* v99: casillas grandes, toda la línea es zona de toque */
 .leyenda-firma{
   margin:10px 0 8px;padding:11px 13px;border:1px solid var(--linea);
   border-left:3px solid var(--naranja);background:var(--acero-800);
@@ -1899,7 +1900,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v97";
+const APP_VER = "v99";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -4442,6 +4443,7 @@ async function reiniciarServicio(){
   limpiarServicio();
 }
 function limpiarServicio(){
+  const _folioPrev = (estado.orden && estado.orden.folio) || "";
   borrarFotosServicio();
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
@@ -4465,6 +4467,7 @@ function limpiarServicio(){
   pedirOrden();
   pintar();
   avisar("Nuevo servicio","Elige el cliente para el siguiente servicio.","ok");
+  try{ syncCerrado(_folioPrev); }catch(e){}
 }
 $("#btnNuevo").addEventListener("click", reiniciarServicio);
 
@@ -6887,6 +6890,7 @@ async function termEnviar(id){
     externo: !esInterno(), clienteNombre:t.clienteNombre || "", firmo: !!t.firma });
   if(r.red) return;
   if(r.ok === false){ if(esErrorSesion(r.error)) sesionVencidaEn("actividades"); return; }
+  if(r.autovalidado){ t.estado = "VALIDADO"; t.valido = r.valido || "Dirección"; guardarAct(); repintarAct(); avisar("Actividad validada", "La dirección valida sus propias actividades: quedó registrada.", "ok"); return; }
   t.estado = "POR VALIDAR"; guardarAct(); repintarAct();
   avisar("Actividad enviada", "Quedó en validación del supervisor.", "ok");
 }
@@ -6916,6 +6920,134 @@ async function termSondeo(){
 }
 setInterval(termSondeo, 30000);
 window.addEventListener("online", ()=> termSondeo());
+
+
+/* ---------- v98: sincronía entre dispositivos ----------
+   El servicio abierto y su borrador (llegada y demás registros, actividades marcadas, detalles, adicionales, refacciones declaradas,
+   comentario, estatus de validación) se guardan también en el servidor (hoja «Borrador», una fila por colaborador). Cualquier otro
+   dispositivo donde entre el mismo usuario lo recibe al abrir y cada 30 s. Las actividades se fusionan una por una (gana la edición
+   más reciente de CADA actividad), así dos dispositivos con actividades distintas se juntan sin pisarse. Las FOTOS no se sincronizan
+   (se quedan en el dispositivo donde se tomaron). REQUIERE el conector v86. */
+const SYNC = { dev:"", mtEst:0, mt:{}, sigEst:"", sigIds:{}, sucio:false, ocupado:false, ultimo:0, ready:false, aviso:"" };
+try{ let d = localStorage.getItem("blake.dev"); if(!d){ d = "D" + Math.random().toString(36).slice(2,8); localStorage.setItem("blake.dev", d); } SYNC.dev = d; }catch(e){ SYNC.dev = "D" + Math.random().toString(36).slice(2,8); }
+function syncClave(){ return "blake.sync." + String(estado.usuario || "").toLowerCase(); }
+function syncGuardarMeta(){ try{ localStorage.setItem(syncClave(), JSON.stringify({ mtEst:SYNC.mtEst, mt:SYNC.mt, sigEst:SYNC.sigEst, sigIds:SYNC.sigIds })); }catch(e){} }
+function syncGrupoEstado(){
+  return { orden:estado.orden || null, eventos:estado.eventos || {}, renglones:estado.renglones || [], incluirFirma:!!estado.incluirFirma, sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
+    refacciones:(estado.refacciones || []).map(r=> Object.assign({}, r, { ticket: (r && r.ticket) ? "1" : "" })),
+    sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac || "", sinRefacPorAct:estado.sinRefacPorAct || {}, motivoPorAct:estado.motivoPorAct || {},
+    comentarioCliente:estado.comentarioCliente || "", adicionales:act.adicionales || [], detalle:act.detalle || "" };
+}
+function syncItemSig(id){ return JSON.stringify([act.marcas[id] || "", act.notas[id] || "", act.term[id] || null]); }
+function syncIdsLocales(){ return new Set(Object.keys(act.marcas).concat(Object.keys(act.notas), Object.keys(act.term), Object.keys(SYNC.sigIds))); }
+function syncIniciar(){
+  if(!act.actualizado && !act.lista.length) cargarAct();
+  let tenia = false;
+  try{ const g = JSON.parse(localStorage.getItem(syncClave()) || "null"); if(g){ Object.assign(SYNC, { mtEst:g.mtEst || 0, mt:g.mt || {}, sigEst:g.sigEst || "", sigIds:g.sigIds || {} }); tenia = true; } }catch(e){}
+  if(!tenia){
+    SYNC.sigEst = JSON.stringify(syncGrupoEstado()); SYNC.mtEst = estado.orden ? 1 : 0;   /* 1: si el servidor ya tiene algo más reciente, gana el servidor */
+    syncIdsLocales().forEach(id=>{ SYNC.sigIds[id] = syncItemSig(id); SYNC.mt[id] = 1; });
+    if(estado.orden) SYNC.sucio = true;
+    syncGuardarMeta();
+  }
+  SYNC.ready = true;
+}
+function syncDetectar(){
+  let cambio = false;
+  const sE = JSON.stringify(syncGrupoEstado());
+  if(sE !== SYNC.sigEst){ SYNC.sigEst = sE; SYNC.mtEst = Date.now(); cambio = true; }
+  syncIdsLocales().forEach(id=>{ const sg = syncItemSig(id); if(SYNC.sigIds[id] !== sg){ SYNC.sigIds[id] = sg; SYNC.mt[id] = Date.now(); cambio = true; } });
+  if(cambio){ SYNC.sucio = true; syncGuardarMeta(); }
+}
+function syncDoc(extra){
+  const items = {};
+  syncIdsLocales().forEach(id=>{ items[id] = { m:act.marcas[id] || "", n:act.notas[id] || "", t:act.term[id] || null, mt:SYNC.mt[id] || 0 }; });
+  return Object.assign({ v:1, dev:SYNC.dev, ts:Date.now(), mtEst:SYNC.mtEst, est:syncGrupoEstado(), items }, extra || {});
+}
+async function syncEnviar(doc){
+  const r = await cmLlamar({ tipo:"bor_guardar", data: JSON.stringify(doc) });
+  if(r.red) return false;
+  if(r.ok === false){ if(esErrorSesion(r.error)) sesionVencidaEn("actividades"); return false; }
+  return true;
+}
+async function syncPush(){
+  if(!SYNC.sucio || !navigator.onLine || !estado.token || !estado.orden) return;
+  await syncPull();                       /* primero se recibe lo que haya hecho el otro dispositivo, para no pisarlo */
+  if(!SYNC.sucio || !estado.orden) return;
+  const antes = SYNC.mtEst, antesIds = JSON.stringify(SYNC.mt);
+  if(await syncEnviar(syncDoc()) && SYNC.mtEst === antes && JSON.stringify(SYNC.mt) === antesIds) SYNC.sucio = false;
+}
+function syncCerrado(folio){
+  if(!folio || !navigator.onLine || !estado.token) return;
+  SYNC.mtEst = Date.now(); SYNC.sigEst = ""; SYNC.sucio = false; SYNC.mt = {}; SYNC.sigIds = {}; syncGuardarMeta();
+  syncEnviar({ v:1, dev:SYNC.dev, ts:Date.now(), mtEst:SYNC.mtEst, cerrado:true, folio, items:{}, est:{} });
+}
+function syncEscribiendo(){ const f = document.activeElement; return !!(f && /^(TEXTAREA|INPUT)$/.test(f.tagName) && f.type !== "checkbox"); }
+function syncAplicar(doc){
+  if(syncEscribiendo()) return;
+  const est = doc.est || {};
+  if(doc.cerrado){
+    if(estado.orden && estado.orden.folio === doc.folio){ avisar("Servicio cerrado en otro dispositivo", "El servicio " + doc.folio + " ya se cerró en otro dispositivo. Elija el siguiente.", "info"); limpiarServicio(); }
+    return;
+  }
+  let cambio = false;
+  if((doc.mtEst || 0) > SYNC.mtEst && est.orden){
+    const otroServicio = estado.orden && estado.orden.folio !== est.orden.folio;
+    if(otroServicio && estado.eventos && estado.eventos.llegada){
+      if(SYNC.aviso !== est.orden.folio){ SYNC.aviso = est.orden.folio; avisar("Otro servicio abierto", "En otro dispositivo hay abierto el servicio " + est.orden.folio + ". Se conserva el de este dispositivo (" + estado.orden.folio + "); termine uno antes de abrir el otro.", "alerta"); }
+      SYNC.mtEst = Date.now(); SYNC.sucio = true;
+    } else {
+      const tick = (estado.refacciones || []);
+      estado.orden = est.orden;
+      estado.eventos = Object.assign({}, est.eventos || {}, otroServicio ? {} : (estado.eventos || {}));
+      estado.renglones = Array.isArray(est.renglones) ? est.renglones : [];
+      estado.incluirFirma = !!est.incluirFirma; estado.sabado = !!est.sabado; estado.cierreDirecto = !!est.cierreDirecto;
+      estado.refacciones = (est.refacciones || []).map((r,i)=> Object.assign({}, r, { ticket: (tick[i] && tick[i].ticket) || "" }));
+      estado.sinRefacciones = !!est.sinRefacciones; estado.motivoNoRefac = est.motivoNoRefac || ""; estado.sinRefacPorAct = est.sinRefacPorAct || {}; estado.motivoPorAct = est.motivoPorAct || {};
+      estado.comentarioCliente = est.comentarioCliente || "";
+      act.adicionales = Array.isArray(est.adicionales) ? est.adicionales : []; act.detalle = est.detalle || "";
+      SYNC.mtEst = doc.mtEst; cambio = true;
+      if(JSON.stringify(syncGrupoEstado()) !== JSON.stringify(est)){ SYNC.mtEst = Date.now(); SYNC.sucio = true; }
+      SYNC.sigEst = JSON.stringify(syncGrupoEstado());
+    }
+  }
+  Object.keys(doc.items || {}).forEach(id=>{
+    const it = doc.items[id]; if(!it) return;
+    if((it.mt || 0) > (SYNC.mt[id] || 0)){
+      if(it.m) act.marcas[id] = it.m; else delete act.marcas[id];
+      if(it.n) act.notas[id] = it.n; else delete act.notas[id];
+      if(it.t) act.term[id] = it.t; else delete act.term[id];
+      SYNC.mt[id] = it.mt; SYNC.sigIds[id] = syncItemSig(id); cambio = true;
+    }
+  });
+  if(cambio){
+    persistir(); guardarAct(); syncGuardarMeta();
+    try{ pintar(); renglonModo = null; repintarAct(); }catch(e){}
+  }
+}
+async function syncPull(){
+  if(!navigator.onLine || !estado.token) return;
+  SYNC.ultimo = Date.now();
+  const r = await cmLlamar({ tipo:"bor_leer" });
+  if(r.red || r.ok === false || !r.data) return;
+  let doc = null; try{ doc = JSON.parse(r.data); }catch(e){ return; }
+  if(doc && doc.dev !== SYNC.dev) syncAplicar(doc);
+}
+async function syncTick(){
+  if(SYNC.ocupado) return;
+  SYNC.ocupado = true;
+  try{
+    if(!estado.token || !estado.usuario) return;
+    if(!SYNC.ready) syncIniciar();
+    syncDetectar();
+    if(!document.hidden && Date.now() - SYNC.ultimo > 30000) await syncPull();
+    if(SYNC.sucio) await syncPush();
+  }catch(e){}
+  finally{ SYNC.ocupado = false; }
+}
+setInterval(syncTick, 6000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ SYNC.ultimo = 0; syncTick(); } });
+window.addEventListener("online", ()=>{ SYNC.ultimo = 0; syncTick(); });
 
 /* ---------- v94: validación a distancia del supervisor ----------
    El colaborador cierra sin esperar a nadie; el reporte queda «POR VALIDAR» en el conector. El supervisor (Daniel, Brandon, Jorge,

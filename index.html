@@ -479,6 +479,9 @@ body{
 .term-dev{margin-top:10px;padding:10px;border:1px solid var(--rojo);border-radius:3px;color:var(--rojo);font-size:14px}
 .term-chip{margin-top:10px;padding:10px;border:1px solid var(--linea);border-radius:3px;font-size:14px}
 .term-chip[data-e="VALIDADO"]{border-color:var(--verde);color:var(--verde)}
+details.val-res>summary{margin-top:18px;cursor:pointer;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--tenue,#8a96a3);padding:10px 0;list-style:none}
+details.val-res>summary::before{content:"▸ ";color:var(--ambar)}
+details.val-res[open]>summary::before{content:"▾ "}
 .term-chip[data-e="POR VALIDAR"],.term-chip[data-e="SIN ENVIAR"]{border-color:var(--ambar);color:var(--ambar)}
 .act-item[data-marca="TERMINADA"]{border-color:var(--verde)}
 .act-item[data-marca="PENDIENTE"]{border-color:var(--ambar)}
@@ -1923,32 +1926,53 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v102";
-/* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
-let _avisoVersion = false;
+const APP_VER = "v104";
+/* v91/v104: versión nueva. La app revisa al abrir, al volver a primer plano y cada 10 min. Desde la v104 se actualiza SOLA cuando es seguro
+   (sin captura en curso: ningún campo activo, ninguna ventana abierta y 45 s sin tocar la pantalla); si no es seguro, muestra el botón. Nada se pierde:
+   todo lo capturado ya está guardado en el teléfono. */
+let _avisoVersion = false, _ultimoToque = Date.now();
+["pointerdown","keydown","input","touchstart"].forEach(ev=> addEventListener(ev, ()=>{ _ultimoToque = Date.now(); }, { passive:true, capture:true }));
+function _esSeguroActualizar(){
+  try{
+    if(document.visibilityState !== "visible") return false;
+    if(Date.now() - _ultimoToque < 45000) return false;
+    const f = document.activeElement; if(f && /^(INPUT|TEXTAREA)$/.test(f.tagName) && String(f.value || "").length) return false;   /* campo con texto sin terminar: no se interrumpe */
+    if(document.querySelector('[id^="modal"]:not([hidden])')) return false;
+    return true;
+  }catch(e){ return false; }
+}
+async function _aplicarVersion(ver){
+  try{ persistir(); }catch(e){}
+  try{ sessionStorage.setItem("blake.autoVer", ver + "|" + Date.now()); }catch(e){}
+  try{ const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }catch(e){}
+  try{ const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(x=>x.update().catch(()=>{}))); }catch(e){}
+  location.replace("./?v=" + String(ver).slice(1) + "&t=" + Date.now());
+}
 async function revisarVersion(){
   try{
-    if(_avisoVersion || !navigator.onLine) return;
+    if(!navigator.onLine) return;
     const r = await fetch("./index.html?chk=" + Date.now(), { cache:"no-store" });
     if(!r.ok) return;
     const t = await r.text();
     const m = /APP_VER = "(v\d+)"/.exec(t);
     if(!m || m[1] === APP_VER) return;
+    /* evita un ciclo si la versión publicada todavía no llega al teléfono: un intento automático por versión cada 3 min */
+    let intentoReciente = false;
+    try{ const a = (sessionStorage.getItem("blake.autoVer") || "").split("|"); intentoReciente = a[0] === m[1] && (Date.now() - Number(a[1] || 0)) < 180000; }catch(e){}
+    if(!intentoReciente && _esSeguroActualizar()){ _aplicarVersion(m[1]); return; }
+    if(_avisoVersion) return;
     _avisoVersion = true;
     const d = document.createElement("div");
     d.id = "avisoVersion";
     d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#FF7A1A;color:#000;padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between;font:600 15px/1.3 system-ui,sans-serif;box-shadow:0 -2px 10px rgba(0,0,0,.5)";
     d.innerHTML = '<span>Hay una versión nueva (' + m[1] + '). Usted tiene la ' + APP_VER + '.</span><button type="button" style="background:#000;color:#fff;border:0;border-radius:3px;padding:10px 14px;font:700 15px system-ui,sans-serif">Actualizar ahora</button>';
-    d.querySelector("button").onclick = async ()=>{
-      try{ persistir(); }catch(e){}
-      try{ const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }catch(e){}
-      try{ const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(x=>x.update().catch(()=>{}))); }catch(e){}
-      location.replace("./?v=" + m[1].slice(1) + "&t=" + Date.now());
-    };
+    d.querySelector("button").onclick = ()=> _aplicarVersion(m[1]);
     document.body.appendChild(d);
   }catch(e){}
 }
 setTimeout(revisarVersion, 4000);
+setInterval(revisarVersion, 600000);
+setInterval(()=>{ if(_avisoVersion && _esSeguroActualizar()){ const v = (document.querySelector("#avisoVersion span")||{}).textContent || ""; const m = /\((v\d+)\)/.exec(v); if(m) _aplicarVersion(m[1]); } }, 20000);
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible") setTimeout(revisarVersion, 1500); });
 try{ const _vEl = document.getElementById("inicioVersion"); if(_vEl) _vEl.textContent = "Versión de la app: " + APP_VER.replace(/^v/, ""); }catch(e){}
 async function enviarUno(sobre){
@@ -7118,6 +7142,30 @@ function pintarBotonVal(){
   $("#inicioValDet").textContent = n ? "⚠ " + n + " reporte" + (n === 1 ? "" : "s") + " por validar."
                                      : "Supervisor: lee y valida los reportes de servicio interno de los colaboradores.";
 }
+/* v103: la hoja devuelve fecha y hora como fechas completas (2026-10-31T06:00:00.000Z y 1899-12-30T19:51:36.000Z); se muestran legibles. */
+function vsFecha(v){
+  const t = String(v == null ? "" : v);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(t);
+  if(!m) return t;
+  if(m[1] === "1899-12-30") return "";
+  try{ const d = new Date(t); if(!isNaN(d)) return d.toLocaleDateString("en-CA", { timeZone:"America/Mexico_City" }); }catch(e){}
+  return m[1];
+}
+function vsHora(v){
+  const t = String(v == null ? "" : v);
+  if(/^\d{1,2}:\d{2}$/.test(t)) return t;
+  const m = /^(\d{4})-\d{2}-\d{2}T(\d{2}):(\d{2}):(\d{2})/.exec(t);
+  if(!m) return t;
+  if(m[1] === "1899"){   /* hora sola de Sheets: desfase histórico de la Ciudad de México (-6:36:36) */
+    let sec = (+m[2]) * 3600 + (+m[3]) * 60 + (+m[4]) - (6 * 3600 + 36 * 60 + 36);
+    sec = ((sec % 86400) + 86400) % 86400;
+    const hh = Math.floor(sec / 3600), mm = Math.round((sec % 3600) / 60);
+    return String(mm === 60 ? (hh + 1) % 24 : hh).padStart(2, "0") + ":" + String(mm === 60 ? 0 : mm).padStart(2, "0");
+  }
+  try{ const d = new Date(t); if(!isNaN(d)) return d.toLocaleTimeString("es-MX", { timeZone:"America/Mexico_City", hour:"2-digit", minute:"2-digit", hour12:false }); }catch(e){}
+  return "";
+}
 function vsHace(x){
   const h = Number(x.horas);
   if(!isFinite(h)) return "";
@@ -7135,7 +7183,7 @@ function pintarValSupLista(){
   vs.lista.forEach(x=>{
     const abierto = vs.abierto === x.id;
     h += `<div class="cm-card" data-vid="${esc(x.id)}"><b>${esc(x.colaborador)}</b> <span class="pista">· ${esc(x.cliente)}${x.sitio ? " · " + esc(x.sitio) : ""}</span>
-      <p class="pista">Folio ${esc(x.folio || "—")} · ${esc(x.fecha || "")} ${esc(x.hora || "")} · ${esc(vsHace(x))}</p>`;
+      <p class="pista">Folio ${esc(x.folio || "—")} · ${esc(vsFecha(x.fecha))} ${esc(vsHora(x.hora))} · ${esc(vsHace(x))}</p>`;
     if(x.propia){
       h += `<p class="pista">Es su propio reporte: otro supervisor debe validarlo.</p></div>`; return;
     }
@@ -7154,12 +7202,20 @@ function pintarValSupLista(){
     h += `</div>`;
   });
   if(vs.resueltas.length){
-    h += `<span class="etiqueta" style="margin-top:18px;display:block">Resueltos recientes</span>`;
+    /* v103: los resueltos ya no ocupan la pantalla: van plegados, y varias actividades del mismo folio salen en una sola línea. */
+    const grp = [], idx = {};
     vs.resueltas.forEach(x=>{
-      h += `<div class="cm-card cm-res"><b>${esc(x.colaborador)}</b><p>${esc(x.estatus)} · ${esc(x.cliente)} · folio ${esc(x.folio || "—")}${x.valido ? " · " + esc(x.valido) : ""}</p>${x.nota ? `<p class="pista">Nota: ${esc(x.nota)}</p>` : ""}</div>`;
+      const k = [x.colaborador, x.folio, x.estatus, x.valido].join("|");
+      if(k in idx){ grp[idx[k]].n++; if(x.nota && !grp[idx[k]].x.nota) grp[idx[k]].x = x; } else { idx[k] = grp.length; grp.push({ x, n:1 }); }
     });
+    h += `<details class="val-res"${vs.resAbierto ? " open" : ""}><summary>Resueltos recientes (${grp.length})</summary>`;
+    grp.forEach(({x,n})=>{
+      h += `<div class="cm-card cm-res"><b>${esc(x.colaborador)}</b><p>${esc(x.estatus)} · ${esc(x.cliente)} · folio ${esc(x.folio || "—")}${n > 1 ? " · " + n + " actividades" : ""}${x.valido ? " · " + esc(x.valido) : ""}</p>${x.nota ? `<p class="pista">Nota: ${esc(x.nota)}</p>` : ""}</div>`;
+    });
+    h += `</details>`;
   }
   cont.innerHTML = h;
+  const dr = cont.querySelector("details.val-res"); if(dr) dr.addEventListener("toggle", ()=>{ vs.resAbierto = dr.open; });
 }
 async function vsCargar(silencioso){
   if(!esAdminApp() || !estado.token || !navigator.onLine || vs.cargando) return;

@@ -1923,7 +1923,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v100";
+const APP_VER = "v101";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -3748,7 +3748,16 @@ const firmaCliente = montarFirma({
 function valSupOk(){ return true; }   /* v94: el colaborador ya no espera a un supervisor; el reporte queda «por validar» y se valida a distancia */
 function pintarValSup(){
   const e = $("#valSupEstado"); if(!e) return;
-  e.innerHTML = "✓ Al enviar, su reporte pasa a validación de un supervisor.";
+  const bl = $("#bloqueValSup"), pa = bl && bl.querySelector("p.renglon-ayuda"), lb = bl && bl.querySelector("label.campo-lbl");
+  if(esDireccion()){
+    if(lb) lb.textContent = "Validación";
+    if(pa) pa.innerHTML = "Como <b>Dirección</b>, su reporte se valida solo: <b>nadie tiene que validarlo</b>.";
+    e.innerHTML = "✓ Al enviar, su reporte queda validado por la Dirección.";
+  } else {
+    if(lb) lb.textContent = "Validación del supervisor";
+    if(pa) pa.innerHTML = "Servicio interno: al enviar su reporte, <b>un supervisor lo leerá y lo validará desde su propio teléfono</b>. Usted no necesita esperar a nadie ni pedir ningún PIN.";
+    e.innerHTML = "✓ Al enviar, su reporte pasa a validación de un supervisor.";
+  }
   const b = $("#btnValSup"), p = $("#btnValPend"); if(b) b.hidden = true; if(p) p.hidden = true;
 }
 function abrirValidarSup(){
@@ -6860,6 +6869,8 @@ function limpiarTerm(){
   Object.keys(act.term).forEach(id=>{ if(!vivos.has(id)) delete act.term[id]; });
   guardarAct();
 }
+const DIRECCION_USR = "ernesto@blakeinc.com.mx";
+function esDireccion(){ return String(estado.usuario || "").toLowerCase() === DIRECCION_USR; }   /* v101: la dirección valida sus propias actividades y reportes; nadie más */
 function termBloq(id){ const t = act.term[id]; return !!t && t.estado !== "DEVUELTO"; }
 function puedeTerminarAhora(){ return !!(estado.eventos && estado.eventos.llegada && !estado.eventos.salida); }
 function htmlTermBloque(id, m){
@@ -6867,13 +6878,15 @@ function htmlTermBloque(id, m){
   if(t && t.estado === "DEVUELTO") h += `<div class="term-dev">⚠ Devuelta por ${esc(t.por || "el supervisor")}: ${esc(t.nota || "")}<br>Corrígela y vuelve a terminarla.</div>`;
   if(m !== "TERMINADA") return h;
   if(t && t.estado !== "DEVUELTO"){
-    const txt = t.estado === "VALIDADO" ? "✓ Validada por " + esc(t.valido || "un supervisor") + ". Ya no se pide nada más de esta actividad."
-              : t.estado === "SIN ENVIAR" ? "⏳ Sin señal: se enviará sola a validación en cuanto haya conexión."
+    const dir = esDireccion();
+    const est = dir ? "VALIDADO" : t.estado;
+    const txt = est === "VALIDADO" ? (dir ? "✓ Validada por la Dirección. No requiere validación de nadie más." : "✓ Validada por " + esc(t.valido || "un supervisor") + ". Ya no se pide nada más de esta actividad.")
+              : est === "SIN ENVIAR" ? "⏳ Sin señal: se enviará sola a validación en cuanto haya conexión."
               : "⏳ En validación del supervisor. Puede seguir trabajando.";
-    return h + `<div class="term-chip" data-e="${esc(t.estado)}">${txt}</div>`;
+    return h + `<div class="term-chip" data-e="${esc(est)}">${txt}</div>`;
   }
   if(!puedeTerminarAhora()) return h;
-  return h + `<button type="button" class="btn term-btn" data-term="${esc(id)}">Terminar y enviar a validación</button>`;
+  return h + `<button type="button" class="btn term-btn" data-term="${esc(id)}">${esDireccion() ? "Terminar actividad" : "Terminar y enviar a validación"}</button>`;
 }
 function detTerm(id){
   const t = act.term[id]; if(!t || t.estado === "DEVUELTO") return {};
@@ -6895,7 +6908,12 @@ function abrirTerm(id){
   $("#mtDetalle").textContent = nota;
   const ext = !esInterno();
   $("#mtExterno").hidden = !ext; $("#mtCliente").value = "";
-  $("#mtAviso").textContent = ext
+  const dirT = esDireccion();
+  $("#mtEnviar").textContent = dirT ? "Terminar actividad" : "Enviar a validación";
+  $("#mtAviso").textContent = dirT
+    ? (ext ? "El cliente firma aquí. Como Dirección, la actividad queda validada y nadie más tiene que validarla. Después de enviarla ya no se puede editar."
+           : "Como Dirección, la actividad queda validada y nadie más tiene que validarla. Después de enviarla ya no se puede editar.")
+    : ext
     ? "El cliente firma aquí y además un supervisor Blake revisa la actividad desde su teléfono. Después de enviarla ya no se puede editar."
     : "Un supervisor la revisará desde su teléfono; usted no tiene que esperar. Después de enviarla ya no se puede editar.";
   $("#modalTerm").hidden = false;
@@ -6929,7 +6947,7 @@ async function termEnviar(id){
     externo: !esInterno(), clienteNombre:t.clienteNombre || "", firmo: !!t.firma });
   if(r.red) return;
   if(r.ok === false){ if(esErrorSesion(r.error)) sesionVencidaEn("actividades"); return; }
-  if(r.autovalidado){ t.estado = "VALIDADO"; t.valido = r.valido || "Dirección"; guardarAct(); repintarAct(); avisar("Actividad validada", "La dirección valida sus propias actividades: quedó registrada.", "ok"); return; }
+  if(r.autovalidado || esDireccion()){ t.estado = "VALIDADO"; t.valido = r.valido || "Dirección"; guardarAct(); repintarAct(); avisar("Actividad terminada", "Validada por la Dirección: quedó registrada.", "ok"); return; }
   t.estado = "POR VALIDAR"; guardarAct(); repintarAct();
   avisar("Actividad enviada", "Quedó en validación del supervisor.", "ok");
 }

@@ -1923,7 +1923,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v101";
+const APP_VER = "v102";
 /* v91: aviso de versión nueva. Al abrir la app y cada vez que regresa a primer plano revisa si hay una versión publicada distinta; si sí, muestra un botón para actualizar (no se pierde nada de lo capturado). */
 let _avisoVersion = false;
 async function revisarVersion(){
@@ -3208,12 +3208,12 @@ function refacClaves(){
   try{ idsMarcadosCliente().forEach(id=>{
     const a = act.lista.find(x=>String(x.id)===id);
     const t = limpiaTxt((a && (a.titulo || a.texto)) || "") || "Actividad asignada";
-    out.push({ key:id, titulo:t, texto:t + ": " + limpiaTxt(act.notas[id]) });
+    out.push({ key:id, titulo:t, texto:limpiaTxt(act.notas[id]) });   /* v102: el detector de «posible refacción» solo lee lo que escribió el colaborador, no el título asignado por la oficina */
   }); }catch(e){}
   (estado.renglones||[]).map(normRenglon).forEach((r,i)=>{
     if(!renglonLleno(r)) return;
     const t = limpiaTxt(r.titulo) || ("Actividad adicional " + (i+1));
-    out.push({ key:"R"+i, titulo:t, texto:t + ": " + limpiaTxt(r.detalle) });
+    out.push({ key:"R"+i, titulo:t, texto:limpiaTxt(r.detalle) });
   });
   return out;
 }

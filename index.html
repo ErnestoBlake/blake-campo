@@ -1247,6 +1247,12 @@ select.refac-org{width:100%;margin-top:0;min-height:58px;font-size:17px;backgrou
       <p class="pista" id="solSync">—</p>
     </div>
     <div id="admSolicitudes"></div>
+    <div class="act-cab" style="margin-top:22px">
+      <span class="etiqueta">Cambio de sede</span>
+      <h2>Solicitudes de cambio de sede</h2>
+      <p class="pista">El colaborador pide hacer la actividad en otro cliente o sitio. Al autorizar, la actividad cambia de sede y sigue a su nombre.</p>
+    </div>
+    <div id="admSedes"></div>
   </div>
 </div>
 <!-- v77: Pantalla del supervisor: autorizar comida con PIN -->
@@ -1466,6 +1472,22 @@ select.refac-org{width:100%;margin-top:0;min-height:58px;font-size:17px;backgrou
     <p class="pista" id="mtAviso">—</p>
     <button class="btn" id="mtEnviar" type="button">Enviar a validación</button>
     <button class="btn btn-sec" id="mtNo" type="button">Cancelar</button>
+  </div>
+</div>
+
+<div class="portada" id="modalSede" hidden role="dialog" aria-modal="true" aria-labelledby="msTitulo">
+  <div class="portada-caja">
+    <span class="etiqueta">Cambio de sede</span>
+    <h2 id="msTitulo">Pedir cambio de sede</h2>
+    <p class="pista confirmar-texto" id="msAct">—</p>
+    <p class="pista" id="msActual">—</p>
+    <p class="pista">La actividad sigue en su sede actual y a su nombre hasta que un administrador autorice el cambio. Cuando lo autorice, aparecerá en el cliente y sitio que elija. Su solicitud queda registrada con fecha y hora.</p>
+    <label class="adm-campo" for="msDestino">1. ¿En qué cliente y sitio realizará la actividad?</label>
+    <select id="msDestino"></select>
+    <label class="adm-campo" for="msMotivo">2. Motivo</label>
+    <textarea id="msMotivo" maxlength="500" placeholder="Ejemplo: estoy en Tezoyuca y puedo hacerla aquí; en Ecatepec no hay quien la haga"></textarea>
+    <button class="btn" id="msEnviar" type="button">Enviar solicitud</button>
+    <button class="btn btn-sec" id="msNo" type="button">Cancelar</button>
   </div>
 </div>
 
@@ -1926,7 +1948,7 @@ function encolar(sobre){
    LLEGADA OLVIDADA: «Olvidé registrar mi llegada» guarda la hora real declarada + motivo junto a la hora del teléfono (queda marcada
    LLEGADA DECLARADA en la columna Actividades del renglón de Llegada). REQUIERE el bloque V79 del conector para la pestaña Refacciones
    y el correo de cobranza a Esther y Yuzzeth. */
-const APP_VER = "v104";
+const APP_VER = "v105";
 /* v91/v104: versión nueva. La app revisa al abrir, al volver a primer plano y cada 10 min. Desde la v104 se actualiza SOLA cuando es seguro
    (sin captura en curso: ningún campo activo, ninguna ventana abierta y 45 s sin tocar la pantalla); si no es seguro, muestra el botón. Nada se pierde:
    todo lo capturado ya está guardado en el teléfono. */
@@ -2018,7 +2040,8 @@ function descripcionAdmin(s){
   const a = String((s && s.accion) || "");
   const n = { editar:"Edición de actividad", prioridad:"Cambio de prioridad", reasignar:"Reasignación de actividad",
               fecha:"Cambio de fecha", cancelar:"Cancelación de actividad", pedir_reasignacion:"Solicitud de reasignación",
-              autorizar_reasignacion:"Autorización de reasignación", rechazar_reasignacion:"Rechazo de reasignación" };
+              autorizar_reasignacion:"Autorización de reasignación", rechazar_reasignacion:"Rechazo de reasignación",
+              pedir_cambio_sede:"Solicitud de cambio de sede", autorizar_cambio_sede:"Autorización de cambio de sede", rechazar_cambio_sede:"Rechazo de cambio de sede" };
   if(n[a]) return n[a];
   const k = Array.isArray(s && s.textos) ? s.textos.length : 0;
   return "Asignación de actividades" + (k ? " (" + k + ")" : "");
@@ -3242,10 +3265,28 @@ function refacClaves(){
   return out;
 }
 const sinDe = k => !!(estado.sinRefacPorAct && estado.sinRefacPorAct[k]);
+/* v105: planta donde se utilizó cada refacción (obligatoria). Lista: sitios del cliente del servicio + «Otra planta». */
+const PLANTA_OTRA = "__otra__";
+function plantasServicio(){
+  const o = estado.orden || {}, cn = normCliente(o.titulo || o.cliente || "");
+  const set = [];
+  const add = x => { x = limpiaTxt(x); if(x && !set.includes(x)) set.push(x); };
+  add(o.sitio);
+  ORDENES.forEach(x=>{ if(normCliente(x.titulo || x.cliente || "") === cn) add(x.sitio); });
+  return set;
+}
+function plantaFinal(r){ return r && r.planta === PLANTA_OTRA ? limpiaTxt(r.plantaOtra) : limpiaTxt(r && r.planta); }
+function htmlPlanta(r, i, p){
+  const lst = plantasServicio(), cur = (r && r.planta) || "";
+  const extra = (cur && cur !== PLANTA_OTRA && !lst.includes(cur)) ? [cur] : [];
+  return `<span class="ra-lbl">¿En qué planta se utilizó? <b>(obligatorio)</b></span>
+      <select class="${p}-planta" data-i="${i}" aria-label="Planta donde se utilizó"><option value="">Elija la planta…</option>${lst.concat(extra).map(x=>`<option value="${esc(x)}"${cur===x?" selected":""}>${esc(x)}</option>`).join("")}<option value="${PLANTA_OTRA}"${cur===PLANTA_OTRA?" selected":""}>Otra planta (escribir)</option></select>
+      ${cur===PLANTA_OTRA ? `<input type="text" class="${p}-planta-otra" data-i="${i}" maxlength="80" placeholder="Nombre de la planta (cliente y lugar)" value="${esc((r && r.plantaOtra)||"")}" autocomplete="off" spellcheck="true" lang="es">` : ""}`;
+}
 function refaccionesLimpias(){
   const ks = {}; refacClaves().forEach(k=>{ ks[k.key] = k.titulo; });
   return (estado.refacciones||[]).filter(r=>{ const k = (r && r.ak) || ""; return k==="" || (k in ks); })
-    .map(r=>{ const k = (r && r.ak) || ""; return { desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant), uni:limpiaTxt(r && r.uni) || "pza", cod:limpiaTxt(r && r.cod), org:limpiaTxt(r && r.org), ticket:limpiaTxt(r && r.ticket), ak:k, actividad: k ? ks[k] : "" }; })
+    .map(r=>{ const k = (r && r.ak) || ""; return { desc:limpiaTxt(r && r.desc), cant:limpiaTxt(r && r.cant), uni:limpiaTxt(r && r.uni) || "pza", cod:limpiaTxt(r && r.cod), org:limpiaTxt(r && r.org), ticket:limpiaTxt(r && r.ticket), planta:plantaFinal(r), ak:k, actividad: k ? ks[k] : "" }; })
     .filter(r=>r.desc || r.cant);
 }
 /* true cuando TODAS las actividades declaradas dijeron «no se utilizaron refacciones» y no hay ninguna capturada. */
@@ -3283,6 +3324,7 @@ function validaItemsRefac(rf, etiqueta){
     if(!r.desc) return { ok:false, msg:"describir la refacción " + n + e };
     const c = parseFloat(String(r.cant).replace(",", "."));
     if(!(c > 0)) return { ok:false, msg:"indicar la cantidad de la refacción " + n + e };
+    if(!r.planta) return { ok:false, msg:"indicar la planta donde se utilizó la refacción " + n + e };
     if(!r.org) return { ok:false, msg:"indicar el origen de la refacción " + n + e };
     if(r.org === "Comprada en campo" && !r.ticket) return { ok:false, msg:"tomar la foto del ticket o factura de la refacción " + n + e };
   }
@@ -3313,7 +3355,7 @@ function textoExtraCierre(){
   const rf = refaccionesLimpias();
   const ks = refacClaves();
   let t = "\n\n";
-  const linea = (r,n)=>`${n}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant + " " + r.uni : ""}${r.cod ? " — código: " + r.cod : ""}${r.org ? " — origen: " + r.org : ""}${r.ticket ? " — ticket: foto adjunta (" + r.ticket + ")" : ""}`;
+  const linea = (r,n)=>`${n}. ${r.desc || "(sin descripción)"}${r.cant ? " — cantidad: " + r.cant + " " + r.uni : ""}${r.planta ? " — planta: " + r.planta : ""}${r.cod ? " — código: " + r.cod : ""}${r.org ? " — origen: " + r.org : ""}${r.ticket ? " — ticket: foto adjunta (" + r.ticket + ")" : ""}`;
   if(ks.length){
     t += "REFACCIONES UTILIZADAS POR ACTIVIDAD:";
     let n = 0;
@@ -3352,6 +3394,7 @@ function htmlRefacAct(key){
         <input type="text" class="refac-cant ra-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="2" value="${esc(r.cant||"")}" autocomplete="off">
         <select class="refac-uni ra-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
       </div>
+      ${htmlPlanta(r, i, "ra")}
       <span class="ra-lbl">¿De dónde salió?</span>
       <select class="refac-org ra-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
       ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec ra-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
@@ -3373,7 +3416,7 @@ document.addEventListener("click", e=>{
   if(add){
     const k = add.dataset.k;
     if((estado.refacciones||[]).filter(r=>r && (r.ak||"")===k).length >= MAX_REFAC) return;
-    estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", ak:k });
+    estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", planta:"", plantaOtra:"", ak:k });
     repintarRefacTodo();
     const l = document.querySelectorAll('.ra-bloque[data-k="' + CSS.escape(k) + '"] .ra-desc'); if(l.length) try{ l[l.length-1].focus(); }catch(_){}
     return;
@@ -3389,11 +3432,13 @@ document.addEventListener("input", e=>{
   if(t.classList.contains("ra-desc")){ campo("desc"); pintarBoton(); }
   else if(t.classList.contains("ra-cant")){ campo("cant"); pintarBoton(); }
   else if(t.classList.contains("ra-cod")){ campo("cod"); }
+  else if(t.classList.contains("ra-planta-otra")){ campo("plantaOtra"); pintarBoton(); }
   else if(t.classList.contains("ra-motivo")){ estado.motivoPorAct = estado.motivoPorAct || {}; estado.motivoPorAct[t.dataset.k] = t.value.slice(0,300); persistir(); pintarBoton(); }
 });
 document.addEventListener("change", e=>{
   const t = e.target; if(!t || !t.classList) return;
   if(t.classList.contains("ra-uni")){ const r = estado.refacciones[+t.dataset.i]; if(r){ r.uni = t.value; persistir(); } }
+  else if(t.classList.contains("ra-planta")){ const r = estado.refacciones[+t.dataset.i]; if(r){ r.planta = t.value; if(t.value !== PLANTA_OTRA) r.plantaOtra = ""; repintarRefacTodo(); } }
   else if(t.classList.contains("ra-org")){ const r = estado.refacciones[+t.dataset.i]; if(r){ r.org = t.value; repintarRefacTodo(); } }
   else if(t.classList.contains("ra-sin")){
     const k = t.dataset.k; estado.sinRefacPorAct = estado.sinRefacPorAct || {};
@@ -3437,6 +3482,7 @@ function pintarRefac(){
         <input type="text" class="refac-cant" data-i="${i}" maxlength="30" inputmode="decimal" placeholder="2" value="${esc(r.cant||"")}" autocomplete="off">
         <select class="refac-uni" data-i="${i}" aria-label="Unidad">${["pza","m","kg","lt","juego","caja","otro"].map(u=>`<option value="${u}"${(r.uni||"pza")===u?" selected":""}>${u}</option>`).join("")}</select>
       </div>
+      ${htmlPlanta(r, i, "refac")}
       <span class="ra-lbl">¿De dónde salió?</span>
       <select class="refac-org" data-i="${i}" aria-label="Origen"><option value="">Origen de la refacción…</option><option value="Almacén Blake"${r.org==="Almacén Blake"?" selected":""}>Salió del almacén de Blake</option><option value="Comprada en campo"${r.org==="Comprada en campo"?" selected":""}>Se compró en campo</option></select>
       ${r.org==="Comprada en campo" ? `<div class="refac-ticket"><button type="button" class="btn btn-sec refac-foto" data-i="${i}">${r.ticket ? "Volver a tomar la foto del ticket" : "Foto del ticket o factura (cámara o galería · obligatoria)"}</button><span class="refac-ticket-est ${r.ticket ? "ok" : "falta"}">${r.ticket ? "✓ Foto del ticket guardada" : "Falta la foto del ticket o factura"}</span></div>` : ""}
@@ -3445,6 +3491,8 @@ function pintarRefac(){
   cont.querySelectorAll(".refac-cant").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cant = i.value; persistir(); pintarBoton(); });
   cont.querySelectorAll(".refac-uni").forEach(i=> i.onchange = ()=>{ estado.refacciones[+i.dataset.i].uni = i.value; persistir(); });
   cont.querySelectorAll(".refac-cod").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].cod = i.value; persistir(); });
+  cont.querySelectorAll(".refac-planta").forEach(i=> i.onchange = ()=>{ const r = estado.refacciones[+i.dataset.i]; r.planta = i.value; if(i.value !== PLANTA_OTRA) r.plantaOtra = ""; persistir(); cont.dataset.n = "x"; pintarRefac(); pintarBoton(); });
+  cont.querySelectorAll(".refac-planta-otra").forEach(i=> i.oninput = ()=>{ estado.refacciones[+i.dataset.i].plantaOtra = i.value; persistir(); pintarBoton(); });
   cont.querySelectorAll(".refac-org").forEach(i=> i.onchange = ()=>{ estado.refacciones[+i.dataset.i].org = i.value; persistir(); cont.dataset.n = "x"; pintarRefac(); pintarBoton(); });
   cont.querySelectorAll(".refac-foto").forEach(b=> b.onclick = ()=>{ ticketIdx = +b.dataset.i; $("#camaraTicket").click(); });
   cont.querySelectorAll(".refac-quitar").forEach(b=> b.onclick = ()=>{ estado.refacciones.splice(+b.dataset.i,1); persistir(); cont.dataset.n = "x"; pintarRefac(); pintarBoton(); });
@@ -3453,7 +3501,7 @@ function pintarRefac(){
 }
 $("#btnRefacAgregar").addEventListener("click", ()=>{
   if(estado.refacciones.filter(r=>r && !(r.ak||"")).length >= MAX_REFAC) return;
-  estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", ak:"" }); persistir(); pintarRefac(); pintarBoton();
+  estado.refacciones.push({ desc:"", cant:"", uni:"pza", cod:"", org:"", ticket:"", planta:"", plantaOtra:"", ak:"" }); persistir(); pintarRefac(); pintarBoton();
   const l = document.querySelectorAll("#refacLista .refac-desc"); if(l.length) l[l.length-1].focus();
 });
 $("#chkSinRefac").addEventListener("change", e=>{
@@ -3548,7 +3596,7 @@ function pintarFotosRenglones(){
     const key = "R"+i;
     const lleno = renglonLleno(normRenglon(estado.renglones[i] || {}));
     const its = (estado.refacciones||[]).filter(r=>r && r.ak===key);
-    const sig = [lleno?1:0, sinDe(key)?1:0, its.length, its.map(r=>(r.org||"-")+(r.ticket?"t":"")).join(","), (estado.motivoPorAct||{})[key]?1:0, validaRefacActividad({key, titulo:"x", texto:""}, refaccionesLimpias()).ok?1:0].join("|");
+    const sig = [lleno?1:0, sinDe(key)?1:0, its.length, its.map(r=>(r.org||"-")+(r.ticket?"t":"")+(r.planta?"p":"")).join(","), (estado.motivoPorAct||{})[key]?1:0, validaRefacActividad({key, titulo:"x", texto:""}, refaccionesLimpias()).ok?1:0].join("|");
     if(c.dataset.sig === sig) return;
     c.dataset.sig = sig;
     c.innerHTML = lleno ? htmlRefacAct(key) : "";
@@ -4718,7 +4766,7 @@ async function cerrarSesion(){
   if(!await confirmar("¿Cerrar sesión?", "Tendrás que iniciar sesión de nuevo con tu correo y contraseña.", "Cerrar sesión")) return;
   estado.tecnico = ""; estado.usuario = ""; estado.token = ""; estado.rol = ""; persistir();
   _claveDeEntrada = ""; _volverA = ""; $("#portadaClave").hidden = true;
-  adm.usuarios = []; adm.solicitudes = []; adm.actualizado = null; $("#solPantalla").hidden = true; $("#comidaPantalla").hidden = true;
+  adm.usuarios = []; adm.solicitudes = []; adm.sedes = []; adm.actualizado = null; $("#solPantalla").hidden = true; $("#comidaPantalla").hidden = true;
   try{ cmSup.lista = []; cmSup.resueltas = []; cmSup.ts = 0; cmBanner(null); }catch(e){}
   $("#inicio").hidden = true; $("#actividadesPantalla").hidden = true; $("#ordenes").hidden = true;
   $("#adminPantalla").hidden = true; $("#clientePantalla").hidden = true;
@@ -4971,7 +5019,57 @@ function reasigPendiente(a){
   return a.reasig === "PENDIENTE" ||
     estado.cola.some(x=> x.tipo==="asignar" && x.accion==="pedir_reasignacion" && String(x.id)===String(a.id));
 }
-function htmlReasig(a){
+/* v105: el colaborador pide que su actividad cambie de sede (cliente + sitio); la autoriza un administrador. */
+function sedePendiente(a){
+  return a.sede === "PENDIENTE" ||
+    estado.cola.some(x=> x.tipo==="asignar" && x.accion==="pedir_cambio_sede" && String(x.id)===String(a.id));
+}
+function htmlSede(a){
+  if(esAclaracion(a)) return "";
+  if(sedePendiente(a)){
+    const q = estado.cola.find(x=> x.tipo==="asignar" && x.accion==="pedir_cambio_sede" && String(x.id)===String(a.id));
+    const dest = a.sedeSol || (q ? [q.cliente, q.sitio].filter(Boolean).join(" · ") : "");
+    return `<div class="act-nota-previa">⏳ Cambio de sede solicitado${dest ? " a: " + esc(dest) : ""} · espera la autorización de un administrador</div>`;
+  }
+  return `<button type="button" class="link-volver sede-btn" data-sede="${esc(String(a.id))}">Estoy en otra sede · pedir cambio de sede</button>`;
+}
+let _sedeId = "", _sedeOpc = [];
+function abrirSede(id){
+  const a = act.lista.find(x=> String(x.id) === String(id)); if(!a) return;
+  _sedeId = String(id);
+  $("#msAct").textContent = a.titulo || a.texto || "";
+  $("#msActual").textContent = "Sede actual: " + (a.cliente ? a.cliente + (a.sitio ? " · " + a.sitio : "") : "sin cliente asignado");
+  const vistos = {};
+  _sedeOpc = clientesParaAsignar().filter(o=>{
+    const k = normCliente(o.cliente) + "|" + normCliente(o.sitio);
+    if(vistos[k] || (normCliente(a.cliente) === normCliente(o.cliente) && normCliente(a.sitio) === normCliente(o.sitio))) return false;
+    vistos[k] = 1; return true;
+  }).sort((x,y)=> (x.cliente + x.sitio).localeCompare(y.cliente + y.sitio, "es"));
+  $("#msDestino").innerHTML = `<option value="">— Elija cliente y sitio —</option>` + _sedeOpc.map((o,i)=>`<option value="${i}">${esc(o.cliente)}${o.sitio ? " · " + esc(o.sitio) : ""}</option>`).join("");
+  $("#msMotivo").value = "";
+  $("#modalSede").hidden = false;
+}
+document.addEventListener("click", e=>{
+  const b = e.target.closest && e.target.closest("[data-sede]");
+  if(b) abrirSede(b.dataset.sede);
+});
+$("#msNo").addEventListener("click", ()=>{ $("#modalSede").hidden = true; _sedeId = ""; });
+$("#msEnviar").addEventListener("click", ()=>{
+  if(!_sedeId) return;
+  const o = _sedeOpc[parseInt($("#msDestino").value, 10)];
+  if(!o){ avisar("Falta la sede", "Elija el cliente y sitio donde realizará la actividad.", "alerta"); return; }
+  const motivo = $("#msMotivo").value.trim();
+  if(motivo.length < 10){ avisar("Falta el motivo", "Explique por qué pide el cambio (mínimo 10 caracteres).", "alerta"); return; }
+  encolar({ tipo:"asignar", token:estado.token, accion:"pedir_cambio_sede", id:_sedeId, cliente:o.cliente, sitio:o.sitio || "", motivo });
+  const a = act.lista.find(x=> String(x.id) === _sedeId); if(a){ a.sede = "PENDIENTE"; a.sedeSol = o.cliente + (o.sitio ? " · " + o.sitio : ""); }
+  $("#modalSede").hidden = true; _sedeId = "";
+  avisar("Solicitud enviada", navigator.onLine
+    ? "Un administrador la revisará. La actividad sigue en su sede actual mientras tanto."
+    : "Sin señal: quedó guardada en el teléfono y se enviará sola al recuperar la conexión.", "ok");
+  pintarActividades();
+});
+function htmlReasig(a){ return htmlReasigBase(a) + htmlSede(a); }
+function htmlReasigBase(a){
   if(esAclaracion(a)) return "";
   return reasigPendiente(a)
     ? `<div class="act-nota-previa">⏳ Reasignación solicitada · espera la autorización de un administrador</div>`
@@ -5408,7 +5506,7 @@ $("#btnEnviarAct").addEventListener("click", enviarActividades);
    reprogramar cada uno. El conector valida el rol otra vez del lado
    del servidor: esconder el botón no es la seguridad, solo la comodidad.
    ============================================================ */
-const adm = { caps:[], usuarios:[], solicitudes:[], actualizado:null, cargando:false, editando:null };
+const adm = { caps:[], usuarios:[], solicitudes:[], sedes:[], actualizado:null, cargando:false, editando:null };
 const esAdminApp = () => normCliente(estado.rol) === "administrador";
 
 function abrirAdmin(){
@@ -5435,6 +5533,7 @@ async function refrescarEquipo(){
   }
   adm.usuarios = Array.isArray(resp.usuarios) ? resp.usuarios : [];
   adm.solicitudes = Array.isArray(resp.solicitudes) ? resp.solicitudes : [];   /* v56 */
+  adm.sedes = Array.isArray(resp.sedes) ? resp.sedes : [];                     /* v105 */
   adm.caps = Array.isArray(resp.caps) ? resp.caps : [];                        /* v63 */
   adm.actualizado = new Date().toISOString();
   pintarAdmin(); pintarVerEquipo();
@@ -5485,7 +5584,7 @@ async function procesarSolicitud(sobre, titulo, exito){
     }else{
       for(let i = 0; i < 60 && adm.cargando; i++) await new Promise(r=> setTimeout(r, 300));
       await refrescarEquipo();
-      const aunHay = (adm.solicitudes || []).some(s=> String(s.id) === String(idSol));
+      const aunHay = (adm.solicitudes || []).concat(adm.sedes || []).some(s=> String(s.id) === String(idSol));
       if(aunHay) procMostrar("error", "Revise", "No se pudo confirmar", "El servidor recibió el cambio pero la solicitud sigue en la lista. Presione ↻ Actualizar y revise.", true);
       else procMostrar("ok", "Listo", exito, "El cambio quedó registrado en el servidor.", true);
     }
@@ -5500,7 +5599,7 @@ function pintarBotonSol(){
   /* v70: las solicitudes cuya actividad ya se cerró no esperan autorización: se cuentan aparte. */
   const L = adm.solicitudes || [];
   const sin = L.filter(s=> estadoSolicitud(s) !== "ok").length;
-  const n = L.length - sin;
+  const n = L.length - sin + (adm.sedes || []).length;
   $("#inicioSolDet").textContent = n
     ? `⚠ ${n} solicitud${n === 1 ? "" : "es"} esperando su autorización.` + (sin ? ` (${sin} más sin objeto: actividad ya cerrada.)` : "")
     : (sin ? `${sin} solicitud${sin === 1 ? "" : "es"} sin objeto (la actividad ya se cerró): ciérrela${sin === 1 ? "" : "s"} desde esta pantalla.`
@@ -5510,7 +5609,7 @@ function pintarBotonSol(){
 }
 function abrirSol(){
   const p = $("#solPantalla"); p.hidden = false; p.scrollTop = 0;
-  pintarSolicitudes(); pintarBotonSol();
+  pintarSolicitudes(); try{ pintarSedes(); }catch(e){} pintarBotonSol();
   refrescarEquipo();
 }
 $("#btnIrSol").addEventListener("click", ()=>{ $("#inicio").hidden = true; abrirSol(); });
@@ -5550,6 +5649,7 @@ function pintarAdmin(){
   $("#admPrioBox").hidden = !capOk("prioridad");
   pintarEquipo();
   pintarSolicitudes();
+  try{ pintarSedes(); }catch(e){}
   pintarBotonSol();
   pintarBotonAsignar();
 }
@@ -5653,6 +5753,36 @@ function pintarSolicitudes(){
       procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"rechazar_reasignacion", solicitud:id, nota },
         sinObjeto ? "Cerrando la solicitud…" : "Rechazando la solicitud…", sinObjeto ? "Solicitud cerrada" : "Solicitud rechazada");
     };
+  });
+}
+
+/* v105: solicitudes de cambio de sede pendientes (solo administrador). */
+function pintarSedes(){
+  const cont = $("#admSedes"); if(!cont) return;
+  if(cont.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  const L = adm.sedes || [];
+  if(!L.length){ cont.innerHTML = `<p class="pista act-vacio">Sin solicitudes de cambio de sede.</p>`; return; }
+  const sd = (c, si) => esc(c || "—") + (si ? " · " + esc(si) : "");
+  cont.innerHTML = L.map(s=>`<div class="adm-persona" data-sede-sol="${esc(s.id)}">
+      <b>${esc(s.nombre)}</b><span class="adm-puesto">${esc(s.fecha)}</span>
+      <div class="adm-tarea">
+        <div>${esc(s.actividad)}</div>
+        <div class="adm-meta">De: ${sd(s.clienteActual, s.sitioActual)}</div>
+        <div class="adm-meta"><b>A: ${sd(s.clienteNuevo, s.sitioNuevo)}</b></div>
+        ${s.motivo ? `<div class="adm-meta">Motivo: ${esc(s.motivo)}</div>` : ""}
+        <input type="text" class="sol-nota" maxlength="200" placeholder="Nota (opcional)">
+        <div class="adm-acciones">
+          <button type="button" class="sede-ok">Autorizar cambio</button>
+          <button type="button" class="sede-no" data-peligro="1">Rechazar</button>
+        </div>
+      </div>
+    </div>`).join("");
+  cont.querySelectorAll(".adm-persona").forEach(caja=>{
+    const id = caja.dataset.sedeSol, nota = ()=> caja.querySelector(".sol-nota").value.trim();
+    caja.querySelector(".sede-ok").onclick = ()=> procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"autorizar_cambio_sede", solicitud:id, nota:nota() },
+      "Autorizando el cambio de sede…", "Cambio de sede autorizado");
+    caja.querySelector(".sede-no").onclick = ()=> procesarSolicitud({ tipo:"asignar", token:estado.token, accion:"rechazar_cambio_sede", solicitud:id, nota:nota() },
+      "Rechazando la solicitud…", "Solicitud rechazada");
   });
 }
 

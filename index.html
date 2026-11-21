@@ -968,6 +968,8 @@ select.refac-org{width:100%;margin-top:0;min-height:58px;font-size:17px;backgrou
     </div>
     <label class="campo-lbl" id="lblFirmaSup" hidden>Firma del supervisor</label>
     <label class="chk-linea" id="lineaFirmaCli" for="chkFirma"><input type="checkbox" id="chkFirma"> Habilitar firma del cliente <b>(obligatoria)</b></label>
+    <label class="chk-linea" id="lineaSinFirma" for="chkSinFirma"><input type="checkbox" id="chkSinFirma"> El cliente no pudo firmar</label>
+    <textarea id="motivoSinFirma" rows="2" maxlength="200" placeholder="Motivo por el que no firmó (mínimo 10 caracteres)" hidden></textarea>
     <p class="renglon-ayuda" id="notaFirmaCub" hidden>✓ El cliente ya firmó cada actividad terminada: no se pide otra firma al cerrar el servicio.</p>
     <div class="firma-caja" id="firmaCaja" hidden>
       <canvas class="firma-canvas" id="firma"></canvas>
@@ -1703,7 +1705,7 @@ const pasoPendiente = () => {
 const enSalida = () => { const p = pasoPendiente(); return !!(p && p.id === "salida"); };
 const enCierre = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida);
 /* ¿Puede cerrar sin comida? Solo entre semana, ya con llegada y sin haber salido a comer. */
-const puedeCierreDirecto = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida && !estado.sabado && !estado.cierreDirecto && !estado.eventos.comida);
+const puedeCierreDirecto = () => !!(estado.orden && estado.eventos.llegada && !estado.eventos.salida && !estado.sabado && !estado.cierreDirecto && !estado.eventos.regreso);
 const hoy   = () => new Date().toLocaleDateString("es-MX");
 const ahora = () => new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false});
 
@@ -1739,7 +1741,7 @@ function persistir(){
     };
     localStorage.setItem(LS.estado, JSON.stringify({
       orden:estado.orden, eventos:estado.eventos, fotos:fotosMeta, actividades:estado.actividades, renglones:estado.renglones,
-      incluirFirma:estado.incluirFirma,
+      incluirFirma:estado.incluirFirma, firma:estado.firma || null, firmaTec:estado.firmaTec || null, sinFirmaCli:!!estado.sinFirmaCli, motivoSinFirma:estado.motivoSinFirma || "",
       sabado:!!estado.sabado, cierreDirecto:!!estado.cierreDirecto,
       refacciones:estado.refacciones, sinRefacciones:!!estado.sinRefacciones, motivoNoRefac:estado.motivoNoRefac||"", sinRefacPorAct:estado.sinRefacPorAct||{}, motivoPorAct:estado.motivoPorAct||{}, valSup:estado.valSup||null, incompleta:estado.incompleta||null, comentarioCliente:estado.comentarioCliente
     }));
@@ -1765,7 +1767,7 @@ function restaurar(){
       estado.actividades = g.actividades || "";
       estado.renglones = Array.isArray(g.renglones) ? g.renglones.map(r=> (r && typeof r==="object") ? r : {titulo:"", detalle:String(r||"")})
         .filter(r=> String(r.titulo||"").trim() || String(r.detalle||"").trim()) : [];
-      estado.incluirFirma = !!g.incluirFirma;
+      estado.incluirFirma = !!g.incluirFirma; estado.firma = g.firma || null; estado.firmaTec = g.firmaTec || null; estado.sinFirmaCli = !!g.sinFirmaCli; estado.motivoSinFirma = String(g.motivoSinFirma || "");
       estado.sabado = !!g.sabado; estado.cierreDirecto = !!g.cierreDirecto;
       estado.refacciones = Array.isArray(g.refacciones) ? g.refacciones : [];
       estado.sinRefacciones = !!g.sinRefacciones; estado.motivoNoRefac = String(g.motivoNoRefac||""); estado.sinRefacPorAct = (g.sinRefacPorAct && typeof g.sinRefacPorAct==="object") ? g.sinRefacPorAct : {}; estado.motivoPorAct = (g.motivoPorAct && typeof g.motivoPorAct==="object") ? g.motivoPorAct : {}; estado.valSup = (g.valSup && typeof g.valSup==="object") ? g.valSup : null; estado.incompleta = (g.incompleta && g.incompleta.ok) ? g.incompleta : null; estado.comentarioCliente = String(g.comentarioCliente||"");
@@ -2518,6 +2520,13 @@ function pintarCierreForm(){
       $("#notaFirmaCub").hidden = !cub;
       if(cub){ estado.incluirFirma = false; estado.firma = null; $("#lineaFirmaCli").hidden = true; $("#firmaCaja").hidden = true; $("#btnLimpiarFirma").hidden = true; if($("#chkFirma").checked) $("#chkFirma").checked = false; }
     } else $("#notaFirmaCub").hidden = true;
+    { const vis = !esInterno() && !firmaClienteCubierta(); $("#lineaSinFirma").hidden = !vis;
+      if($("#chkSinFirma").checked !== !!estado.sinFirmaCli) $("#chkSinFirma").checked = !!estado.sinFirmaCli;
+      $("#motivoSinFirma").hidden = !(vis && estado.sinFirmaCli);
+      if($("#motivoSinFirma").value !== (estado.motivoSinFirma || "")) $("#motivoSinFirma").value = estado.motivoSinFirma || ""; }
+    try{ const pf = $("#firmaPista"), pt = $("#firmaTecPista");
+      if(pf && estado.firma && !(firmaCliente && firmaCliente.trazo)) pf.textContent = "✓ Firma guardada. Para firmar de nuevo, toque «Limpiar firma».";
+      if(pt && estado.firmaTec && !(firmaTecnico && firmaTecnico.trazo)) pt.textContent = "✓ Firma guardada. Para firmar de nuevo, toque «Limpiar firma del técnico»."; }catch(e){}
     if(estado.incluirFirma && !esInterno()) prepararFirma();
     prepararFirmaTec();
     prepararCierreAct();
@@ -2593,7 +2602,8 @@ function pintarBoton(){
   { const bi = $("#btnIncompleta"); if(bi) bi.hidden = !(esSalida && !validaRefacBase().ok && !(estado.incompleta && estado.incompleta.ok)); }
   /* La firma del cliente es obligatoria para cerrar. La casilla solo habilita el
      recuadro, para que no se raye por accidente antes de tiempo. */
-  const faltanFirma = esSalida && !esInterno() && !estado.firma && !firmaClienteCubierta();
+  const sinFirmaOk = !!estado.sinFirmaCli && String(estado.motivoSinFirma || "").trim().length >= 10;
+  const faltanFirma = esSalida && !esInterno() && !estado.firma && !firmaClienteCubierta() && !sinFirmaOk;
   const faltanValSup = esSalida && esInterno() && !valSupOk();
   const faltanFirmaTec = esSalida && !estado.firmaTec;
   const sinNota = 0; // v30: los motivos y detalles se validan en medirActividades()
@@ -2609,7 +2619,7 @@ function pintarBoton(){
     if(faltanRefac) faltan.push(vr.msg);
     if(faltanFirmaTec) faltan.push("su firma como técnico");
     if(faltanValSup) faltan.push("la validación del supervisor (firma y PIN) o marcar «supervisor no disponible»");
-    if(faltanFirma) faltan.push(estado.incluirFirma ? "la firma del cliente" : "habilitar y capturar la firma del cliente");
+    if(faltanFirma) faltan.push(estado.sinFirmaCli ? "el motivo por el que el cliente no firmó (mínimo 10 caracteres)" : (estado.incluirFirma ? "la firma del cliente (o marque «El cliente no pudo firmar»)" : "habilitar y capturar la firma del cliente (o marque «El cliente no pudo firmar»)"));
     nota.textContent = "Para registrar la salida falta: " + faltan.join(", ") + ". Toque aquí para abrir lo que falta.";
   } else if(p.id==="llegada"){
     nota.textContent="Se capturará su hora y ubicación al presionar.";
@@ -3714,11 +3724,13 @@ $("#btnRenglonAgregar").addEventListener("click", ()=>{
   persistir(); pintarBoton();
 });
 
+/* v106: «El cliente no pudo firmar» con motivo (así el técnico no tiene que firmar por el cliente). */
+$("#chkSinFirma").addEventListener("change", e=>{ estado.sinFirmaCli = e.target.checked; persistir(); pintarCierreForm(); pintarBoton(); });
+$("#motivoSinFirma").addEventListener("input", e=>{ estado.motivoSinFirma = e.target.value; persistir(); pintarBoton(); });
 /* ---------- Casilla: habilitar el recuadro de firma (la firma es obligatoria) ---------- */
 $("#chkFirma").addEventListener("change", e=>{
   estado.incluirFirma = e.target.checked;
-  if(!estado.incluirFirma) estado.firma = null;
-  persistir(); pintarCierreForm(); pintarBoton();
+  persistir(); pintarCierreForm(); pintarBoton();   /* v106: desmarcar ya no borra la firma capturada */
 });
 
 /* ---------- Firmas (dibujo en canvas) ----------
@@ -4567,7 +4579,7 @@ function limpiarServicio(){
   borrarFotosServicio();
   estado.eventos = {};
   estado.fotos = { antes:[], despues:[] };
-  estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.orden = null;
+  estado.actividades = ""; estado.renglones = []; estado.firma = null; estado.firmaTec = null; estado.incluirFirma = false; estado.sinFirmaCli = false; estado.motivoSinFirma = ""; estado.orden = null;
   estado.sabado = false; estado.cierreDirecto = false; estado.refacciones = []; estado.sinRefacciones = false; estado.motivoNoRefac = ""; estado.sinRefacPorAct = {}; estado.motivoPorAct = {}; estado.valSup = null; estado.incompleta = null; estado.comentarioCliente = "";
   act.fotosAct = {}; borrarFotosAct();
   estado.enviados = 0;
@@ -4647,8 +4659,8 @@ $("#btnPaso").addEventListener("click", onClickPaso);
 $("#btnCierreDirecto").addEventListener("click", ()=>{
   if(!puedeCierreDirecto()) return;
   /* v77: sin comida solo con autorización de un supervisor (PIN) y la casilla de decisión propia. */
-  if(cmAutorizadoNoComer()) cmIrCierreDirecto();
-  else abrirComida({ gate:true, despues: cmIrCierreDirecto });
+  /* v106: ya no se exige PIN ni marcar comida/regreso para enviar el reporte (decisión de la Dirección, 20-nov-2026). */
+  cmIrCierreDirecto();
 });
 $("#btnRegresarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; });
 $("#btnConfirmarCierre").addEventListener("click", ()=>{ $("#modalCierre").hidden = true; registrar(); });
@@ -5278,7 +5290,7 @@ function encolarHojaCliente(o, reporteId, ids, snap){
     actividadesDet: snap.actividadesDet,   /* v43: título y descripción por separado */
     noConcluidas: snap.noConcluidas || [],   /* v61: pendientes/canceladas con su justificación */
     detalle: "",
-    refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente),
+    refacciones: refaccionesLimpias(), sinRefacciones: sinRefacTodo(), comentarioCliente: limpiaTxt(estado.comentarioCliente) + ((estado.sinFirmaCli && !estado.firma) ? ((limpiaTxt(estado.comentarioCliente) ? " · " : "") + "El cliente no firmó. Motivo: " + limpiaTxt(estado.motivoSinFirma)) : ""),
     motivoNoRefac: (motivoNoRefacVigente() || {}).motivo || "", pistaNoRefac: (motivoNoRefacVigente() || {}).pista || "", salidaIncompleta: incompletaVigente(),
     firma: (!esInterno() && estado.incluirFirma && estado.firma) ? estado.firma : "",
     firmaSupervisor: "",
